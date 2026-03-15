@@ -2,7 +2,14 @@ const { invoke } = window.__TAURI__.core;
 
 let currentEmails = [];
 
-function renderOnboarding(message, showConnect = true) {
+function renderOnboarding(message, options = {}) {
+    const {
+        showButton = true,
+        buttonText = "Connect Gmail",
+        buttonAction = "connect",
+        title = "Connect Your Gmail Account",
+    } = options;
+
         const list = document.querySelector(".email-list");
         if (!list) return;
 
@@ -13,24 +20,31 @@ function renderOnboarding(message, showConnect = true) {
                         <span class="email-sender">Verdant Setup</span>
                         <span class="email-time">Now</span>
                     </div>
-                    <div class="email-subject">Connect Gmail To Get Started</div>
+          <div class="email-subject">${escapeHtml(title)}</div>
                     <div class="email-preview">${escapeHtml(message)}</div>
-                    ${showConnect ? '<button id="connect-gmail-btn" class="send-btn" style="margin-top: 12px; width: auto;">Connect Gmail</button>' : ''}
+          ${showButton ? `<button id="connect-gmail-btn" class="send-btn" data-action="${escapeHtml(buttonAction)}" style="margin-top: 12px; width: auto;">${escapeHtml(buttonText)}</button>` : ''}
                 </div>
             </div>
         `;
 
-        if (showConnect) {
+    if (showButton) {
                 const button = document.getElementById("connect-gmail-btn");
                 if (button) {
                         button.addEventListener("click", async () => {
                                 button.disabled = true;
-                                button.textContent = "Connecting...";
+                button.textContent = button.dataset.action === "retry" ? "Retrying..." : "Connecting...";
                                 try {
-                                        await invoke("sync_emails");
+                    if (button.dataset.action === "connect") {
+                        await invoke("connect_gmail");
+                    }
                                         await refreshInbox();
                                 } catch (error) {
-                                        renderOnboarding(String(error), true);
+                    renderOnboarding(String(error), {
+                        showButton: true,
+                        buttonText: "Retry Sync",
+                        buttonAction: "retry",
+                        title: "Sync Failed",
+                    });
                                 }
                         });
                 }
@@ -107,7 +121,10 @@ async function refreshInbox() {
     await invoke("sync_emails");
     currentEmails = await invoke("get_emails");
     if (!currentEmails || currentEmails.length === 0) {
-        renderOnboarding("Connected successfully, but your inbox returned no messages yet.", false);
+        renderOnboarding("Connected successfully, but your inbox returned no messages yet.", {
+            showButton: false,
+            title: "Inbox Is Empty",
+        });
         return;
     }
     renderEmailList(currentEmails);
@@ -162,27 +179,45 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (list) list.innerHTML = "";
 
     try {
+        const status = await invoke("auth_status");
+
+        if (!status.has_client_id) {
+            renderOnboarding("Missing GOOGLE_CLIENT_ID in .env. Add credentials, restart app, then connect.", {
+                showButton: false,
+                title: "Configuration Required",
+            });
+            return;
+        }
+
+        if (!status.connected) {
+            renderOnboarding("Connect your Gmail account to start syncing real mail.", {
+                showButton: true,
+                buttonText: "Connect Gmail",
+                buttonAction: "connect",
+                title: "Connect Your Gmail Account",
+            });
+            return;
+        }
+
         await loadCachedInbox();
-        await refreshInbox();
-    } catch (error) {
-        console.error("Failed to load emails:", error);
+
         try {
-            const status = await invoke("auth_status");
-            if (!status.has_client_id) {
-                renderOnboarding("Missing GOOGLE_CLIENT_ID in .env. Add credentials, restart app, then connect.", false);
-                return;
-            }
-
-            if (!status.connected) {
-                renderOnboarding("Sign in with Gmail to sync your inbox.", true);
-                return;
-            }
-        } catch (statusError) {
-            console.error("Failed to read auth status:", statusError);
+            await refreshInbox();
+        } catch (syncError) {
+            renderOnboarding(String(syncError), {
+                showButton: true,
+                buttonText: "Retry Sync",
+                buttonAction: "retry",
+                title: "Sync Failed",
+            });
         }
-
-        if (!currentEmails || currentEmails.length === 0) {
-            renderOnboarding(String(error), true);
-        }
+    } catch (error) {
+        console.error("Failed to initialize app:", error);
+        renderOnboarding(String(error), {
+            showButton: true,
+            buttonText: "Retry Sync",
+            buttonAction: "retry",
+            title: "Initialization Failed",
+        });
     }
 });

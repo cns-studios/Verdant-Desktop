@@ -309,6 +309,13 @@ async fn send_email(state: State<'_, DbState>, to: String, subject: String, body
 }
 
 #[tauri::command]
+async fn connect_gmail(state: State<'_, DbState>) -> Result<(), String> {
+    let fresh = auth::login_interactive().await?;
+    let _ = persist_token(&state, fresh).await?;
+    Ok(())
+}
+
+#[tauri::command]
 async fn auth_status(state: State<'_, DbState>) -> Result<AuthStatus, String> {
     let has_client_id = std::env::var("GOOGLE_CLIENT_ID")
         .map(|v| !v.trim().is_empty())
@@ -349,7 +356,7 @@ pub fn run() {
             }
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![sync_emails, get_emails, send_email, auth_status])
+        .invoke_handler(tauri::generate_handler![sync_emails, get_emails, send_email, auth_status, connect_gmail])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

@@ -48,6 +48,22 @@ pub fn init_db(conn: &Connection) -> Result<()> {
         [],
     )?;
 
+    // Cleanup for legacy mock data inserted by earlier prototype builds.
+    let _ = conn.execute(
+        "DELETE FROM emails
+         WHERE id = '1'
+           AND thread_id = 't1'
+           AND sender = 'foo@example.com'",
+        [],
+    );
+
+    let _ = conn.execute(
+        "DELETE FROM emails
+         WHERE subject = 'Welcome to Verdant'
+           AND sender = 'foo@example.com'",
+        [],
+    );
+
     Ok(())
 }
 
