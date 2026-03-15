@@ -1,59 +1,146 @@
 use oauth2::{
-    basic::BasicClient, AuthUrl, ClientId, CsrfToken, PkceCodeChallenge, RedirectUrl, Scope, TokenUrl, TokenResponse, reqwest::async_http_client
+    basic::BasicClient,
+    reqwest::async_http_client,
+    AuthUrl,
+    ClientId,
+    ClientSecret,
+    CsrfToken,
+    PkceCodeChallenge,
+    PkceCodeVerifier,
+    RedirectUrl,
+    RefreshToken,
+    Scope,
+    TokenResponse,
+    TokenUrl,
 };
-use tiny_http::{Response, Server, StatusCode};
+use tiny_http::{Response, Server};
 use url::Url;
 use std::collections::HashMap;
+use std::time::{SystemTime, UNIX_EPOCH};
 
-const CLIENT_ID: &str = "962153545199-31u8bepm21g2h2o1c2q2mdd4b2aee0ss.apps.googleusercontent.com";
+use crate::db::StoredToken;
+
 const AUTH_URL: &str = "https://accounts.google.com/o/oauth2/v2/auth";
 const TOKEN_URL: &str = "https://oauth2.googleapis.com/token";
+const REDIRECT_PORT: u16 = 8765;
 
-pub async fn run_auth_flow() -> Result<String, String> {
-    let client_id = ClientId::new(CLIENT_ID.to_string());
-    let auth_url = AuthUrl::new(AUTH_URL.to_string()).unwrap();
-    let token_url = TokenUrl::new(TOKEN_URL.to_string()).unwrap();
+fn now_epoch() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0)
+}
 
-    let client = BasicClient::new(client_id, None, auth_url, Some(token_url))
-        .set_redirect_uri(RedirectUrl::new("http://localhost:8080".to_string()).unwrap());
+fn google_client() -> Result<BasicClient, String> {
+    let client_id = std::env::var("GOOGLE_CLIENT_ID")
+        .map_err(|_| "Missing GOOGLE_CLIENT_ID env var".to_string())?;
 
+    let client_secret = std::env::var("GOOGLE_CLIENT_SECRET").ok();
+
+    let auth_url = AuthUrl::new(AUTH_URL.to_string()).map_err(|e| e.to_string())?;
+    let token_url = TokenUrl::new(TOKEN_URL.to_string()).map_err(|e| e.to_string())?;
+    let redirect = RedirectUrl::new(format!("http://127.0.0.1:{}/callback", REDIRECT_PORT))
+        .map_err(|e| e.to_string())?;
+
+    Ok(BasicClient::new(
+        ClientId::new(client_id),
+        client_secret.map(ClientSecret::new),
+        auth_url,
+        Some(token_url),
+    )
+    .set_redirect_uri(redirect))
+}
+
+fn wait_for_auth_code(port: u16, expected_state: String) -> Result<String, String> {
+    let server = Server::http(("127.0.0.1", port)).map_err(|e| e.to_string())?;
+    let request = server.recv().map_err(|e| e.to_string())?;
+
+    let url = Url::parse(&format!("http://127.0.0.1:{}{}", port, request.url()))
+        .map_err(|e| e.to_string())?;
+    let query: HashMap<_, _> = url.query_pairs().into_owned().collect();
+
+    let code = query
+        .get("code")
+        .cloned()
+        .ok_or_else(|| "Authorization code missing in callback".to_string())?;
+
+    let state = query
+        .get("state")
+        .cloned()
+        .ok_or_else(|| "OAuth state missing in callback".to_string())?;
+
+    if state != expected_state {
+        let _ = request.respond(
+            Response::from_string("State mismatch. You can close this window.")
+                .with_status_code(400),
+        );
+        return Err("OAuth state mismatch".to_string());
+    }
+
+    let _ = request.respond(Response::from_string(
+        "<html><body><h2>Verdant connected successfully.</h2><p>You can close this window.</p></body></html>",
+    ));
+
+    Ok(code)
+}
+
+pub async fn login_interactive() -> Result<StoredToken, String> {
+    let client = google_client()?;
     let (pkce_challenge, pkce_verifier) = PkceCodeChallenge::new_random_sha256();
 
-    let (auth_url, _csrf_token) = client
+    let (auth_url, csrf_token) = client
         .authorize_url(CsrfToken::new_random)
         .add_scope(Scope::new("https://mail.google.com/".to_string()))
+        .add_extra_param("access_type", "offline")
+        .add_extra_param("prompt", "consent")
         .set_pkce_challenge(pkce_challenge)
         .url();
 
-    let _ = open::that(auth_url.to_string());
+    open::that(auth_url.as_str()).map_err(|e| e.to_string())?;
 
-    let server = Server::http("127.0.0.1:8080").map_err(|e| e.to_string())?;
-    
-    for request in server.incoming_requests() {
-        let url = Url::parse(&format!("http://localhost{}", request.url())).unwrap();
-        let hash_query: HashMap<_, _> = url.query_pairs().into_owned().collect();
+    let state = csrf_token.secret().to_string();
+    let code = tokio::task::spawn_blocking(move || wait_for_auth_code(REDIRECT_PORT, state))
+        .await
+        .map_err(|e| e.to_string())??;
 
-        if let Some(code) = hash_query.get("code") {
-            let auth_code = oauth2::AuthorizationCode::new(code.to_string());
-            
-            let token_result = client
-                .exchange_code(auth_code)
-                .set_pkce_verifier(pkce_verifier)
-                .request_async(async_http_client)
-                .await
-                .map_err(|e| e.to_string())?;
+    let token_result = client
+        .exchange_code(oauth2::AuthorizationCode::new(code))
+        .set_pkce_verifier(PkceCodeVerifier::new(pkce_verifier.secret().to_string()))
+        .request_async(async_http_client)
+        .await
+        .map_err(|e| e.to_string())?;
 
-            let html = "<html><body><h1>Verification Successful!</h1><p>You can close this window now.</p></body></html>";
-            let response = Response::from_string(html).with_status_code(200);
-            let _ = request.respond(response);
+    let expires = token_result
+        .expires_in()
+        .map(|d| now_epoch() + d.as_secs() as i64);
 
-            return Ok(token_result.access_token().secret().to_string());
-        } else {
-            let response = Response::from_string("Error: No code found").with_status_code(400);
-            let _ = request.respond(response);
-            return Err("Authorization failed".to_string());
-        }
-    }
-    
-    Err("Server shut down without authorization".to_string())
+    Ok(StoredToken {
+        access_token: token_result.access_token().secret().to_string(),
+        refresh_token: token_result
+            .refresh_token()
+            .map(|t| t.secret().to_string()),
+        expires_at_epoch: expires,
+    })
+}
+
+pub async fn refresh_access_token(refresh_token: &str) -> Result<StoredToken, String> {
+    let client = google_client()?;
+    let token_result = client
+        .exchange_refresh_token(&RefreshToken::new(refresh_token.to_string()))
+        .request_async(async_http_client)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let expires = token_result
+        .expires_in()
+        .map(|d| now_epoch() + d.as_secs() as i64);
+
+    Ok(StoredToken {
+        access_token: token_result.access_token().secret().to_string(),
+        refresh_token: token_result
+            .refresh_token()
+            .map(|t| t.secret().to_string())
+            .or(Some(refresh_token.to_string())),
+        expires_at_epoch: expires,
+    })
 }
