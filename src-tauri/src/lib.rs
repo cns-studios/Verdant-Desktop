@@ -6,12 +6,19 @@ use rusqlite::Connection;
 use tokio::sync::Mutex;
 use tauri::State;
 use serde_json::Value;
+use serde::Serialize;
 use std::time::{SystemTime, UNIX_EPOCH};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 
 struct DbState {
     conn: Mutex<Connection>,
     token: Mutex<Option<StoredToken>>,
+}
+
+#[derive(Serialize)]
+struct AuthStatus {
+    has_client_id: bool,
+    connected: bool,
 }
 
 fn now_epoch() -> i64 {
@@ -301,6 +308,27 @@ async fn send_email(state: State<'_, DbState>, to: String, subject: String, body
     }
 }
 
+#[tauri::command]
+async fn auth_status(state: State<'_, DbState>) -> Result<AuthStatus, String> {
+    let has_client_id = std::env::var("GOOGLE_CLIENT_ID")
+        .map(|v| !v.trim().is_empty())
+        .unwrap_or(false);
+
+    let connected = {
+        if state.token.lock().await.is_some() {
+            true
+        } else {
+            let conn = state.conn.lock().await;
+            get_token(&conn).map_err(|e| e.to_string())?.is_some()
+        }
+    };
+
+    Ok(AuthStatus {
+        has_client_id,
+        connected,
+    })
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Try root-level .env first (npm run tauri dev from workspace root), then local src-tauri/.env.
@@ -321,7 +349,7 @@ pub fn run() {
             }
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![sync_emails, get_emails, send_email])
+        .invoke_handler(tauri::generate_handler![sync_emails, get_emails, send_email, auth_status])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

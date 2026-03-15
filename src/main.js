@@ -2,6 +2,41 @@ const { invoke } = window.__TAURI__.core;
 
 let currentEmails = [];
 
+function renderOnboarding(message, showConnect = true) {
+        const list = document.querySelector(".email-list");
+        if (!list) return;
+
+        list.innerHTML = `
+            <div class="email-item active" style="cursor: default;">
+                <div class="email-item-inner" style="padding: 16px;">
+                    <div class="email-top">
+                        <span class="email-sender">Verdant Setup</span>
+                        <span class="email-time">Now</span>
+                    </div>
+                    <div class="email-subject">Connect Gmail To Get Started</div>
+                    <div class="email-preview">${escapeHtml(message)}</div>
+                    ${showConnect ? '<button id="connect-gmail-btn" class="send-btn" style="margin-top: 12px; width: auto;">Connect Gmail</button>' : ''}
+                </div>
+            </div>
+        `;
+
+        if (showConnect) {
+                const button = document.getElementById("connect-gmail-btn");
+                if (button) {
+                        button.addEventListener("click", async () => {
+                                button.disabled = true;
+                                button.textContent = "Connecting...";
+                                try {
+                                        await invoke("sync_emails");
+                                        await refreshInbox();
+                                } catch (error) {
+                                        renderOnboarding(String(error), true);
+                                }
+                        });
+                }
+        }
+}
+
 function escapeHtml(input) {
     if (!input) return "";
     return input
@@ -71,7 +106,20 @@ function renderEmailList(emails) {
 async function refreshInbox() {
     await invoke("sync_emails");
     currentEmails = await invoke("get_emails");
-    renderEmailList(currentEmails || []);
+    if (!currentEmails || currentEmails.length === 0) {
+        renderOnboarding("Connected successfully, but your inbox returned no messages yet.", false);
+        return;
+    }
+    renderEmailList(currentEmails);
+}
+
+async function loadCachedInbox() {
+    currentEmails = await invoke("get_emails");
+    if (currentEmails && currentEmails.length > 0) {
+        renderEmailList(currentEmails);
+        return true;
+    }
+    return false;
 }
 
 function bindSendButton() {
@@ -108,9 +156,33 @@ function bindSendButton() {
 
 document.addEventListener("DOMContentLoaded", async () => {
     bindSendButton();
+
+    // Always clear hardcoded mock items immediately so failures never show fake mail.
+    const list = document.querySelector(".email-list");
+    if (list) list.innerHTML = "";
+
     try {
+        await loadCachedInbox();
         await refreshInbox();
     } catch (error) {
         console.error("Failed to load emails:", error);
+        try {
+            const status = await invoke("auth_status");
+            if (!status.has_client_id) {
+                renderOnboarding("Missing GOOGLE_CLIENT_ID in .env. Add credentials, restart app, then connect.", false);
+                return;
+            }
+
+            if (!status.connected) {
+                renderOnboarding("Sign in with Gmail to sync your inbox.", true);
+                return;
+            }
+        } catch (statusError) {
+            console.error("Failed to read auth status:", statusError);
+        }
+
+        if (!currentEmails || currentEmails.length === 0) {
+            renderOnboarding(String(error), true);
+        }
     }
 });
