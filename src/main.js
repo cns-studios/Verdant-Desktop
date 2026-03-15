@@ -5,11 +5,11 @@ const SYNC_INTERVAL_MS = 45000;
 const RESYNC_COOLDOWN_MS = 5 * 60 * 1000;
 
 let currentMailbox = "INBOX";
-let currentLabel = "";
 let currentEmails = [];
 let selectedEmail = null;
 let currentPage = 1;
 let activeFilter = "Important";
+let searchQuery = "";
 let syncTimer = null;
 let knownInboxIds = new Set();
 let lastSynced = new Map();
@@ -23,21 +23,20 @@ const defaultHotkeys = {
   close: "escape",
 };
 
+let hotkeys = loadHotkeys();
+
 function loadHotkeys() {
   try {
     const raw = localStorage.getItem("verdant.hotkeys");
-    if (!raw) return { ...defaultHotkeys };
-    return { ...defaultHotkeys, ...JSON.parse(raw) };
+    return raw ? { ...defaultHotkeys, ...JSON.parse(raw) } : { ...defaultHotkeys };
   } catch {
     return { ...defaultHotkeys };
   }
 }
 
-function saveHotkeys(hotkeys) {
-  localStorage.setItem("verdant.hotkeys", JSON.stringify(hotkeys));
+function saveHotkeys(next) {
+  localStorage.setItem("verdant.hotkeys", JSON.stringify(next));
 }
-
-let hotkeys = loadHotkeys();
 
 function normalizeCombo(input) {
   return (input || "")
@@ -75,17 +74,29 @@ function sanitizeUnicodeNoise(input) {
     .trim();
 }
 
-function shortDate(raw) {
+function formatListDate(raw) {
   const d = new Date(raw);
   if (Number.isNaN(d.getTime())) return raw || "";
-  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+  const now = new Date();
+  const dayNow = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const dayMail = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const diff = Math.round((dayNow - dayMail) / 86400000);
+
+  if (diff === 0) {
+    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  }
+  if (diff === 1) {
+    return "Yesterday";
+  }
+  return d.toLocaleDateString();
 }
 
 function mailboxTitle(mailbox) {
   switch (mailbox) {
     case "INBOX": return "Inbox";
     case "STARRED": return "Starred";
-    case "SNOOZED": return "Snoozed";
+    case "ARCHIVE": return "Archive";
     case "SENT": return "Sent";
     case "DRAFT": return "Drafts";
     default: return "Mailbox";
@@ -105,36 +116,40 @@ function ensureStyles() {
   const style = document.createElement("style");
   style.id = "verdant-dynamic-styles";
   style.textContent = `
-    .verdant-overlay { position: fixed; inset: 0; z-index: 2100; background: rgba(31,28,24,.42); backdrop-filter: blur(2px); display:flex; align-items:center; justify-content:center; }
-    .verdant-panel { width:min(640px, 94vw); max-height: 86vh; overflow:auto; background: var(--surface); border:1px solid var(--border); border-radius:14px; box-shadow: 0 22px 52px rgba(37,35,31,.18); padding: 20px; }
-    .verdant-head { display:flex; align-items:flex-start; justify-content:space-between; gap: 12px; margin-bottom: 10px; }
+    .verdant-overlay { position: fixed; inset: 0; z-index: 2100; background: rgba(31,28,24,.42); backdrop-filter: blur(2px); display:flex; align-items:center; justify-content:center; opacity: 0; pointer-events: none; transition: opacity .18s ease; }
+    .verdant-overlay.open { opacity: 1; pointer-events: auto; }
+    .verdant-panel { width:min(640px, 94vw); max-height: 86vh; overflow:auto; background: var(--surface); border:1px solid var(--border); border-radius:14px; box-shadow: 0 22px 52px rgba(37,35,31,.18); padding: 20px; transform: translateY(12px) scale(.98); transition: transform .18s ease; }
+    .verdant-overlay.open .verdant-panel { transform: translateY(0) scale(1); }
+    .verdant-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom:10px; }
     .verdant-head h2 { font: 500 24px 'Fraunces', serif; color: var(--text); }
     .verdant-close { border:1px solid var(--border); background: var(--surface2); border-radius:8px; width:30px; height:30px; cursor:pointer; color:var(--text); }
-    .verdant-panel p { font: 400 13px 'DM Sans', sans-serif; color: var(--text-mid); line-height: 1.5; margin-bottom: 12px; }
-    .verdant-actions { display:flex; gap: 10px; justify-content:flex-end; }
-    .verdant-btn { padding: 8px 14px; border-radius: 8px; border:1px solid var(--border); background: var(--surface2); color: var(--text); font: 500 12px 'DM Sans', sans-serif; cursor: pointer; }
-    .verdant-btn.primary { background: var(--green); color: #fff; border-color: var(--green); }
+    .verdant-panel p { font: 400 13px 'DM Sans', sans-serif; color: var(--text-mid); line-height:1.5; margin-bottom:12px; }
+    .verdant-actions { display:flex; gap:10px; justify-content:flex-end; }
+    .verdant-btn { padding:8px 14px; border-radius:8px; border:1px solid var(--border); background: var(--surface2); color: var(--text); font: 500 12px 'DM Sans', sans-serif; cursor:pointer; }
+    .verdant-btn.primary { background: var(--green); color:#fff; border-color: var(--green); }
     .email-body-text pre { white-space: pre-wrap; word-break: break-word; }
-    .action-menu { position: absolute; right: 0; top: 34px; width: 190px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 12px 26px rgba(0,0,0,.12); padding: 6px; z-index: 1300; }
+    .action-menu { position:absolute; right:0; top:34px; width:190px; background: var(--surface); border:1px solid var(--border); border-radius:10px; box-shadow:0 12px 26px rgba(0,0,0,.12); padding:6px; z-index:1300; }
     .action-menu button { width:100%; text-align:left; border:0; background:transparent; color:var(--text); padding:8px 10px; border-radius:8px; font:400 12px 'DM Sans', sans-serif; cursor:pointer; }
     .action-menu button:hover { background: var(--surface2); }
-    .settings-grid { display:grid; gap: 10px; margin-top: 12px; }
+    .settings-grid { display:grid; gap:10px; margin-top:12px; }
     .settings-row { display:grid; grid-template-columns: 1fr 160px; align-items:center; gap:10px; }
-    .settings-row input { height:34px; border-radius:8px; border:1px solid var(--border); background: var(--bg); padding: 0 10px; font: 400 12px 'DM Sans', sans-serif; }
-    .settings-switch { display:flex; align-items:center; gap:8px; font: 400 12px 'DM Sans', sans-serif; color:var(--text); }
-    .toast-wrap { position: fixed; top: 12px; left: 50%; transform: translateX(-50%); z-index: 2400; display: grid; gap: 8px; }
-    .toast { min-width: 220px; max-width: 520px; padding: 10px 14px; border-radius: 10px; border:1px solid var(--border); background: var(--surface); color: var(--text); font: 500 12px 'DM Sans', sans-serif; box-shadow: 0 10px 28px rgba(0,0,0,.12); animation: toast-in .22s ease forwards; }
+    .settings-row input { height:34px; border-radius:8px; border:1px solid var(--border); background: var(--bg); padding:0 10px; font:400 12px 'DM Sans', sans-serif; }
+    .settings-switch { display:flex; align-items:center; gap:8px; font:400 12px 'DM Sans', sans-serif; color:var(--text); }
+    .toast-wrap { position: fixed; top:12px; left:50%; transform: translateX(-50%); z-index:2400; display:grid; gap:8px; }
+    .toast { min-width:220px; max-width:520px; padding:10px 14px; border-radius:10px; border:1px solid var(--border); background: var(--surface); color: var(--text); font:500 12px 'DM Sans', sans-serif; box-shadow:0 10px 28px rgba(0,0,0,.12); animation: toast-in .22s ease forwards; }
     .toast.info { border-color: var(--green-muted); }
     .toast.error { border-color: #c08d8d; color: #7a2d2d; }
     @keyframes toast-in { from { opacity:0; transform: translateY(-14px);} to { opacity:1; transform: translateY(0);} }
-    .suppress-anim .email-item { animation: none !important; }
+    .suppress-anim .email-item { animation:none !important; }
     .pager { display:flex; gap:6px; justify-content:center; padding:10px 12px 14px; border-top:1px solid var(--border); background: var(--surface); }
-    .pager button { border:1px solid var(--border); background: var(--surface2); color: var(--text); border-radius: 8px; padding: 6px 10px; cursor:pointer; font: 500 12px 'DM Sans', sans-serif; }
+    .pager button { border:1px solid var(--border); background: var(--surface2); color: var(--text); border-radius:8px; padding:6px 10px; cursor:pointer; font:500 12px 'DM Sans', sans-serif; }
     .pager button.active { background: var(--green); color:#fff; border-color: var(--green); }
-    .icon-btn.active { background: var(--green-pale); color: var(--green); border: 1px solid var(--green-muted); }
-    .icon-btn.danger:hover { background: #f5dede !important; color: #8a2e2e !important; border: 1px solid #d79f9f; }
-    .compose-maximized { width: min(1100px, 96vw) !important; height: min(90vh, 920px) !important; }
+    .icon-btn.active { background: var(--green-pale); color: var(--green); border:1px solid var(--green-muted); }
+    .icon-btn.danger:hover { background:#f5dede !important; color:#8a2e2e !important; border:1px solid #d79f9f; }
+    .compose-maximized { width:min(1100px, 96vw) !important; height:min(90vh, 920px) !important; }
     .compose-maximized .modal-body { height: calc(100% - 190px); }
+    #compose-max-btn { display:flex; align-items:center; justify-content:center; }
+    #compose-max-btn svg { width:16px; height:16px; }
   `;
   document.head.appendChild(style);
 }
@@ -161,7 +176,7 @@ function showToast(message, type = "info", timeout = 2200) {
 
 function showOverlay(title, message, buttons) {
   ensureStyles();
-  closeOverlay();
+  closeOverlay(true);
   const overlay = document.createElement("div");
   overlay.id = "verdant-overlay";
   overlay.className = "verdant-overlay";
@@ -175,8 +190,8 @@ function showOverlay(title, message, buttons) {
       <div class="verdant-actions"></div>
     </div>
   `;
-  overlay.querySelector(".verdant-close")?.addEventListener("click", () => closeOverlay());
 
+  overlay.querySelector(".verdant-close")?.addEventListener("click", () => closeOverlay());
   const actions = overlay.querySelector(".verdant-actions");
   for (const btn of buttons) {
     const el = document.createElement("button");
@@ -185,11 +200,20 @@ function showOverlay(title, message, buttons) {
     el.onclick = btn.onClick;
     actions.appendChild(el);
   }
+
   document.body.appendChild(overlay);
+  requestAnimationFrame(() => overlay.classList.add("open"));
 }
 
-function closeOverlay() {
-  document.getElementById("verdant-overlay")?.remove();
+function closeOverlay(immediate = false) {
+  const overlay = document.getElementById("verdant-overlay");
+  if (!overlay) return;
+  if (immediate) {
+    overlay.remove();
+    return;
+  }
+  overlay.classList.remove("open");
+  setTimeout(() => overlay.remove(), 180);
 }
 
 function clearMockImmediately() {
@@ -210,12 +234,15 @@ function isImportant(email) {
 }
 
 function emailMatchesFilter(email) {
-  if (activeFilter === "Important") return isImportant(email);
-  if (activeFilter === "All") return true;
-  if (activeFilter === "Attachments") {
-    return /attachment|\.pdf|\.doc|\.xlsx|\.zip/i.test(email.snippet || "");
+  if (activeFilter === "Important" && !isImportant(email)) return false;
+  if (activeFilter === "Attachments" && !/attachment|\.pdf|\.doc|\.xlsx|\.zip/i.test(email.snippet || "")) return false;
+  if (activeFilter === "Flagged" && !email.starred) return false;
+
+  if (searchQuery) {
+    const hay = `${email.subject || ""} ${email.sender || ""} ${email.snippet || ""}`.toLowerCase();
+    if (!hay.includes(searchQuery.toLowerCase())) return false;
   }
-  if (activeFilter === "Flagged") return !!email.starred;
+
   return true;
 }
 
@@ -233,13 +260,42 @@ function updateTopActionStates() {
   const buttons = Array.from(document.querySelectorAll(".reading-actions .icon-btn"));
   buttons.forEach((btn) => {
     const title = btn.getAttribute("title") || "";
-    if (title === "Star") {
-      btn.classList.toggle("active", !!selectedEmail?.starred);
-    }
-    if (title === "Delete") {
-      btn.classList.add("danger");
-    }
+    if (title === "Star") btn.classList.toggle("active", !!selectedEmail?.starred);
+    if (title === "Delete") btn.classList.add("danger");
+    if (title === "Label") btn.style.display = "none";
   });
+}
+
+function renderRecipientsLine(email) {
+  const metaTo = document.querySelector(".meta-to");
+  if (!metaTo) return;
+
+  const toList = sanitizeUnicodeNoise(email.to_recipients || "")
+    .split(",")
+    .map((v) => v.trim())
+    .filter(Boolean);
+  const ccList = sanitizeUnicodeNoise(email.cc_recipients || "")
+    .split(",")
+    .map((v) => v.trim())
+    .filter(Boolean);
+
+  const merged = [...toList, ...ccList];
+  let collapsed = "to me";
+  if (merged.length === 1) collapsed = `to ${merged[0]}`;
+  if (merged.length > 1) collapsed = `to ${merged[0]}, +${merged.length - 1} others`;
+
+  metaTo.textContent = collapsed;
+  metaTo.style.cursor = "pointer";
+  metaTo.title = "Click to expand recipients";
+
+  metaTo.onclick = () => {
+    const expanded = [
+      toList.length ? `To: ${toList.join(", ")}` : "",
+      ccList.length ? `Cc: ${ccList.join(", ")}` : "",
+    ].filter(Boolean).join(" | ");
+
+    metaTo.textContent = metaTo.textContent === collapsed ? expanded || collapsed : collapsed;
+  };
 }
 
 function renderReadingPane(email) {
@@ -269,6 +325,7 @@ function renderReadingPane(email) {
     avatar.textContent = initials || "?";
   }
 
+  renderRecipientsLine(email);
   updateTopActionStates();
 }
 
@@ -337,7 +394,7 @@ function renderEmailList(animate = false) {
       <div class="email-item-inner">
         <div class="email-top">
           <span class="email-sender">${escapeHtml(sanitizeUnicodeNoise(email.sender || "Unknown Sender"))}</span>
-          <span class="email-time">${escapeHtml(shortDate(email.date))}</span>
+          <span class="email-time">${escapeHtml(formatListDate(email.date))}</span>
         </div>
         <div class="email-subject">${escapeHtml(sanitizeUnicodeNoise(email.subject || "(No Subject)"))}</div>
         <div class="email-preview">${escapeHtml(sanitizeUnicodeNoise(email.snippet || ""))}</div>
@@ -385,7 +442,7 @@ async function refreshCounts() {
   setBadge(navByLabel("Drafts"), counts.drafts_total);
   setBadge(navByLabel("Starred"), counts.starred_total);
   setBadge(navByLabel("Sent"), counts.sent_total);
-  setBadge(navByLabel("Snoozed"), counts.snoozed_total);
+  setBadge(navByLabel("Archive"), counts.archive_total);
 }
 
 async function notifyNewEmails(nextInbox) {
@@ -406,43 +463,42 @@ async function notifyNewEmails(nextInbox) {
   }
 }
 
-async function loadLocalMailbox(mailbox, label = "", animate = false) {
+async function loadLocalMailbox(mailbox, animate = false) {
   currentMailbox = mailbox;
-  currentLabel = label;
-  currentEmails = await invoke("get_emails", { mailbox, label });
+  currentEmails = await invoke("get_emails", { mailbox });
   currentPage = 1;
   renderEmailList(animate);
   await refreshCounts();
 }
 
-async function syncMailboxInBackground(mailbox, label = "") {
-  const key = `${mailbox}|${label}`;
+async function syncMailboxInBackground(mailbox) {
+  const key = mailbox;
   const now = Date.now();
   const last = lastSynced.get(key) || 0;
 
   if (now - last < RESYNC_COOLDOWN_MS) return;
   lastSynced.set(key, now);
 
-  if (mailbox !== "STARRED") {
+  if (mailbox !== "STARRED" && mailbox !== "ARCHIVE") {
     showToast("Fetching mails...", "info", 1200);
     await invoke("sync_mailbox", { mailbox });
   }
 
-  const latest = await invoke("get_emails", { mailbox, label });
-  if (mailbox === "INBOX" && !label) {
+  const latest = await invoke("get_emails", { mailbox });
+  if (mailbox === "INBOX") {
     await notifyNewEmails(latest);
   }
 
-  if (currentMailbox === mailbox && currentLabel === label) {
+  if (currentMailbox === mailbox) {
     currentEmails = latest;
     renderEmailList(false);
     await refreshCounts();
   }
 }
 
-async function openMailbox(mailbox, label = "", animate = false) {
-  await loadLocalMailbox(mailbox, label, animate);
-  syncMailboxInBackground(mailbox, label).catch((err) => {
+async function openMailbox(mailbox, animate = false) {
+  await loadLocalMailbox(mailbox, animate);
+  syncMailboxInBackground(mailbox).catch((err) => {
     console.error("Background sync failed:", err);
     showToast(String(err), "error", 2500);
   });
@@ -450,15 +506,34 @@ async function openMailbox(mailbox, label = "", animate = false) {
 
 function bindMailboxNav() {
   const map = {
-    Inbox: ["INBOX", ""],
-    Starred: ["STARRED", ""],
-    Snoozed: ["SNOOZED", ""],
-    Sent: ["SENT", ""],
-    Drafts: ["DRAFT", ""],
-    Work: ["INBOX", "Work"],
-    Personal: ["INBOX", "Personal"],
-    Finance: ["INBOX", "Finance"],
+    Inbox: "INBOX",
+    Starred: "STARRED",
+    Archive: "ARCHIVE",
+    Sent: "SENT",
+    Drafts: "DRAFT",
   };
+
+  // Remove labels section completely.
+  const sectionLabels = Array.from(document.querySelectorAll(".section-label"));
+  sectionLabels.forEach((el) => {
+    if (el.textContent.trim() === "Labels") {
+      el.style.display = "none";
+      const divider = el.previousElementSibling;
+      if (divider && divider.classList.contains("sidebar-divider")) divider.style.display = "none";
+      let node = el.nextElementSibling;
+      while (node && node.classList.contains("nav-item")) {
+        node.style.display = "none";
+        node = node.nextElementSibling;
+      }
+    }
+  });
+
+  // Replace Snoozed tab label with Archive.
+  const snoozed = Array.from(document.querySelectorAll(".sidebar .nav-item")).find((n) => n.textContent.trim().startsWith("Snoozed"));
+  if (snoozed) {
+    const textNode = Array.from(snoozed.childNodes).find((n) => n.nodeType === Node.TEXT_NODE && n.textContent.trim().length > 0);
+    if (textNode) textNode.textContent = " Archive ";
+  }
 
   const items = Array.from(document.querySelectorAll(".sidebar .nav-item"));
   for (const item of items) {
@@ -469,8 +544,7 @@ function bindMailboxNav() {
       ev.preventDefault();
       items.forEach((n) => n.classList.remove("active"));
       item.classList.add("active");
-      const [mailbox, localLabel] = map[label];
-      await openMailbox(mailbox, localLabel, true);
+      await openMailbox(map[label], true);
     };
   }
 }
@@ -480,6 +554,7 @@ function buildActionMenu(entries, anchor) {
   const menu = document.createElement("div");
   menu.id = "action-menu";
   menu.className = "action-menu";
+
   entries.forEach((entry) => {
     const b = document.createElement("button");
     b.textContent = entry.label;
@@ -491,6 +566,7 @@ function buildActionMenu(entries, anchor) {
     };
     menu.appendChild(b);
   });
+
   anchor.style.position = "relative";
   anchor.appendChild(menu);
   setTimeout(() => {
@@ -499,8 +575,8 @@ function buildActionMenu(entries, anchor) {
 }
 
 async function refreshAfterAction() {
-  await loadLocalMailbox(currentMailbox, currentLabel, false);
-  syncMailboxInBackground(currentMailbox, currentLabel).catch(() => {});
+  await loadLocalMailbox(currentMailbox, false);
+  syncMailboxInBackground(currentMailbox).catch(() => {});
 }
 
 function bindReadingActions() {
@@ -517,36 +593,32 @@ function bindReadingActions() {
         await refreshAfterAction();
         return;
       }
+
       if (title === "Delete") {
         await invoke("trash_email", { emailId: selectedEmail.id });
         showToast("Email moved to trash");
         await refreshAfterAction();
         return;
       }
+
       if (title === "Mark unread") {
-        await invoke("set_email_read_status", { emailId: selectedEmail.id, isRead: !selectedEmail.is_read });
-        showToast(!selectedEmail.is_read ? "Marked as read" : "Marked as unread");
+        const nextRead = !selectedEmail.is_read;
+        await invoke("set_email_read_status", { emailId: selectedEmail.id, isRead: nextRead });
+        selectedEmail.is_read = nextRead;
+        showToast(nextRead ? "Marked as read" : "Marked as unread");
         await refreshAfterAction();
         return;
       }
+
       if (title === "Star") {
         await invoke("toggle_starred", { emailId: selectedEmail.id });
+        selectedEmail.starred = !selectedEmail.starred;
         showToast("Star status updated");
+        updateTopActionStates();
         await refreshAfterAction();
         return;
       }
-      if (title === "Label") {
-        buildActionMenu(
-          [
-            { label: "Set label: Work", onClick: () => invoke("set_email_labels", { emailId: selectedEmail.id, labels: "Work" }) },
-            { label: "Set label: Personal", onClick: () => invoke("set_email_labels", { emailId: selectedEmail.id, labels: "Personal" }) },
-            { label: "Set label: Finance", onClick: () => invoke("set_email_labels", { emailId: selectedEmail.id, labels: "Finance" }) },
-            { label: "Clear labels", onClick: () => invoke("set_email_labels", { emailId: selectedEmail.id, labels: "" }) },
-          ],
-          button
-        );
-        return;
-      }
+
       if (title === "More") {
         buildActionMenu(
           [
@@ -584,8 +656,18 @@ function bindFilterChips() {
   activeFilter = "Important";
 }
 
+function bindSearch() {
+  const input = document.querySelector(".search-bar input");
+  if (!input) return;
+  input.addEventListener("input", () => {
+    searchQuery = input.value || "";
+    currentPage = 1;
+    renderEmailList(false);
+  });
+}
+
 function openSettingsModal(profile) {
-  showOverlay("Settings", `Signed in as ${profile.email}`, [{ label: "Close", onClick: closeOverlay }]);
+  showOverlay("Settings", `Signed in as ${profile.email}`, []);
   const panel = document.querySelector("#verdant-overlay .verdant-panel");
   if (!panel) return;
 
@@ -619,13 +701,13 @@ function openSettingsModal(profile) {
 
   panel.querySelector("#settings-sync")?.addEventListener("click", async () => {
     showToast("Fetching mails...");
-    await syncMailboxInBackground(currentMailbox, currentLabel);
+    await syncMailboxInBackground(currentMailbox);
     closeOverlay();
   });
 
   panel.querySelector("#settings-clear")?.addEventListener("click", async () => {
     await invoke("clear_local_data");
-    await openMailbox(currentMailbox, currentLabel, false);
+    await openMailbox(currentMailbox, false);
     showToast("Local database cleared");
     closeOverlay();
   });
@@ -673,7 +755,7 @@ function showOnboardingScreen(message = "Connect your Gmail account to continue.
 function startPeriodicSync() {
   if (syncTimer) clearInterval(syncTimer);
   syncTimer = setInterval(() => {
-    syncMailboxInBackground("INBOX", "").catch((e) => console.error("Periodic sync failed", e));
+    syncMailboxInBackground("INBOX").catch((e) => console.error("Periodic sync failed", e));
   }, SYNC_INTERVAL_MS);
 }
 
@@ -687,7 +769,8 @@ function injectComposeMaximizeButton() {
   maxBtn.id = "compose-max-btn";
   maxBtn.className = "modal-close";
   maxBtn.title = "Maximize";
-  maxBtn.textContent = "[]";
+  maxBtn.setAttribute("aria-label", "Maximize");
+  maxBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="1"></rect></svg>';
   maxBtn.style.marginRight = "6px";
 
   maxBtn.onclick = () => {
@@ -723,7 +806,7 @@ function bindComposeSend() {
     const ta = document.querySelector(".modal-body textarea");
     if (ta) ta.value = "";
 
-    await openMailbox(currentMailbox, currentLabel, false);
+    await openMailbox(currentMailbox, false);
   });
 }
 
@@ -753,7 +836,7 @@ function bindHotkeys() {
     if (combo === hotkeys.refresh) {
       event.preventDefault();
       showToast("Fetching mails...");
-      await syncMailboxInBackground(currentMailbox, currentLabel);
+      await syncMailboxInBackground(currentMailbox);
       return;
     }
 
@@ -776,21 +859,23 @@ async function initializeConnectedUI() {
   bindMailboxNav();
   bindReadingActions();
   bindFilterChips();
+  bindSearch();
   bindComposeSend();
   bindHotkeys();
   injectComposeMaximizeButton();
   await bindUserProfileAndSettings();
 
-  const inboxNow = await invoke("get_emails", { mailbox: "INBOX", label: "" });
+  const inboxNow = await invoke("get_emails", { mailbox: "INBOX" });
   knownInboxIds = new Set((inboxNow || []).map((m) => m.id));
 
-  await openMailbox("INBOX", "", true);
+  await openMailbox("INBOX", true);
   startPeriodicSync();
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
   ensureStyles();
   clearMockImmediately();
+  document.querySelector(".reply-bar")?.remove();
 
   try {
     const status = await invoke("auth_status");

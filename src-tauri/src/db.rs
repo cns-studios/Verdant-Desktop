@@ -7,6 +7,8 @@ pub struct Email {
     pub thread_id: String,
     pub subject: String,
     pub sender: String,
+    pub to_recipients: String,
+    pub cc_recipients: String,
     pub snippet: String,
     pub body_html: String,
     pub date: String,
@@ -31,6 +33,8 @@ pub fn init_db(conn: &Connection) -> Result<()> {
             thread_id TEXT NOT NULL,
             subject TEXT NOT NULL,
             sender TEXT NOT NULL,
+            to_recipients TEXT NOT NULL DEFAULT '',
+            cc_recipients TEXT NOT NULL DEFAULT '',
             snippet TEXT NOT NULL DEFAULT '',
             body_html TEXT NOT NULL,
             date TEXT NOT NULL,
@@ -45,6 +49,8 @@ pub fn init_db(conn: &Connection) -> Result<()> {
 
     // Lightweight migration for existing local DBs created before snippet existed.
     let _ = conn.execute("ALTER TABLE emails ADD COLUMN snippet TEXT NOT NULL DEFAULT ''", []);
+    let _ = conn.execute("ALTER TABLE emails ADD COLUMN to_recipients TEXT NOT NULL DEFAULT ''", []);
+    let _ = conn.execute("ALTER TABLE emails ADD COLUMN cc_recipients TEXT NOT NULL DEFAULT ''", []);
     let _ = conn.execute("ALTER TABLE emails ADD COLUMN starred INTEGER NOT NULL DEFAULT 0", []);
     let _ = conn.execute("ALTER TABLE emails ADD COLUMN mailbox TEXT NOT NULL DEFAULT 'INBOX'", []);
     let _ = conn.execute("ALTER TABLE emails ADD COLUMN labels TEXT NOT NULL DEFAULT ''", []);
