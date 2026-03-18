@@ -154,8 +154,9 @@ function applySenderAvatar(container, sender, mailbox = "") {
 }
 
 function formatListDate(raw) {
-  const d = new Date(raw);
-  if (Number.isNaN(d.getTime())) return raw || "";
+  const cleanedRaw = stripMailTimezone(raw);
+  const d = new Date(cleanedRaw);
+  if (Number.isNaN(d.getTime())) return cleanedRaw;
 
   const now = new Date();
   const dayNow = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -169,6 +170,30 @@ function formatListDate(raw) {
     return "Yesterday";
   }
   return d.toLocaleDateString();
+}
+
+function stripMailTimezone(raw) {
+  return String(raw || "")
+    .replace(/\s(?:GMT|UTC)?[+-]\d{4}\b/gi, "")
+    .replace(/\s+\((?:GMT|UTC)[^)]*\)/gi, "")
+    .trim();
+}
+
+function formatReadingDate(raw) {
+  const cleanedRaw = stripMailTimezone(raw);
+  const d = new Date(cleanedRaw);
+  if (Number.isNaN(d.getTime())) return cleanedRaw;
+
+  const now = new Date();
+  const sameYear = now.getFullYear() === d.getFullYear();
+  return d.toLocaleString([], {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    year: sameYear ? undefined : "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function mailboxTitle(mailbox) {
@@ -206,7 +231,12 @@ function ensureStyles() {
     .verdant-actions { display:flex; gap:10px; justify-content:flex-end; }
     .verdant-btn { padding:8px 14px; border-radius:8px; border:1px solid var(--border); background: var(--surface2); color: var(--text); font: 500 12px 'DM Sans', sans-serif; cursor:pointer; }
     .verdant-btn.primary { background: var(--green); color:#fff; border-color: var(--green); }
-    .email-item-main { display:flex; align-items:flex-start; gap:10px; }
+    .email-item-main { display:flex; align-items:flex-start; gap:10px; width:100%; }
+    .email-item { position:relative; }
+    .email-item-inner { position:relative; padding-right:76px; flex:1; min-width:0; }
+    .email-top { display:block; min-height:16px; margin-bottom:3px; }
+    .email-sender { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; -webkit-mask-image: linear-gradient(to right, #000 0%, #000 78%, transparent 100%); mask-image: linear-gradient(to right, #000 0%, #000 78%, transparent 100%); }
+    .email-time { position:absolute; right:18px; top:13px; width:72px; text-align:right; white-space:nowrap; font-variant-numeric: tabular-nums; letter-spacing:.01em; z-index:2; }
     .sender-avatar { width:30px; height:30px; border-radius:50%; flex-shrink:0; display:flex; align-items:center; justify-content:center; font:600 11px 'DM Sans', sans-serif; color:#fff; background: linear-gradient(135deg, var(--green-mid), var(--green-light)); overflow:hidden; }
     .sender-avatar img, .meta-avatar img { width:100%; height:100%; object-fit:cover; display:block; }
     .sender-avatar.has-image, .meta-avatar.has-image { background: var(--surface2); color: transparent; }
@@ -464,7 +494,7 @@ function renderReadingPane(email) {
 
   if (subject) subject.textContent = sanitizeUnicodeNoise(email.subject || "(No Subject)");
   if (from) from.textContent = sanitizeUnicodeNoise(email.sender || "Unknown Sender");
-  if (date) date.textContent = email.date || "";
+  if (date) date.textContent = formatReadingDate(email.date || "");
   if (body) {
     const html = sanitizeUnicodeNoise(email.body_html || "");
     body.innerHTML = html || `<pre>${escapeHtml(sanitizeUnicodeNoise(email.snippet || ""))}</pre>`;
