@@ -29,6 +29,16 @@ let appHeaderControlsBound = false;
 let composeAttachments = [];
 let composeSendMode = "plain";
 let composeDraftId = null;
+let composeRecipientUiBound = false;
+
+const CONTACTS_STORAGE_KEY = "verdant.contacts";
+const MAX_CONTACTS = 1200;
+let contactsByEmail = loadContacts();
+const composeRecipients = { to: [], cc: [] };
+const recipientSuggestState = {
+  to: { items: [], activeIndex: -1 },
+  cc: { items: [], activeIndex: -1 },
+};
 
 const defaultHotkeys = {
   enabled: true,
@@ -110,6 +120,109 @@ function senderInitials(sender) {
   const addr = extractSenderAddress(raw);
   if (!addr) return "?";
   return (addr[0] || "?").toUpperCase();
+}
+
+function normalizeEmailAddress(input) {
+  const value = sanitizeUnicodeNoise(input || "").toLowerCase();
+  const match = value.match(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i);
+  return match ? match[0].toLowerCase() : "";
+}
+
+function parseContactToken(rawToken) {
+  const clean = sanitizeUnicodeNoise(rawToken || "");
+  if (!clean) return null;
+
+  const email = normalizeEmailAddress(clean);
+  if (!email) return null;
+
+  const bracketName = clean.replace(/<[^>]+>/g, "").replace(/[\"']/g, "").trim();
+  const bareName = clean.replace(email, "").replace(/[<>\"']/g, "").trim();
+  const name = sanitizeUnicodeNoise(bracketName || bareName || "");
+  return { email, name };
+}
+
+function parseContactsFromHeader(headerValue) {
+  const value = String(headerValue || "");
+  if (!value.trim()) return [];
+
+  return value
+    .split(/[,;\n]+/)
+    .map((token) => parseContactToken(token))
+    .filter(Boolean);
+}
+
+function loadContacts() {
+  try {
+    const raw = localStorage.getItem(CONTACTS_STORAGE_KEY);
+    if (!raw) return new Map();
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return new Map();
+
+    const map = new Map();
+    for (const item of parsed) {
+      const email = normalizeEmailAddress(item?.email || "");
+      if (!email) continue;
+      map.set(email, {
+        email,
+        name: sanitizeUnicodeNoise(item?.name || ""),
+        updatedAt: Number(item?.updatedAt || 0) || Date.now(),
+      });
+      if (map.size >= MAX_CONTACTS) break;
+    }
+    return map;
+  } catch {
+    return new Map();
+  }
+}
+
+function persistContacts() {
+  try {
+    const list = Array.from(contactsByEmail.values())
+      .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
+      .slice(0, MAX_CONTACTS);
+    localStorage.setItem(CONTACTS_STORAGE_KEY, JSON.stringify(list));
+  } catch {
+    // Ignore storage write failures.
+  }
+}
+
+function upsertContact(rawEmail, rawName = "") {
+  const email = normalizeEmailAddress(rawEmail);
+  if (!email) return;
+
+  const existing = contactsByEmail.get(email);
+  const incomingName = sanitizeUnicodeNoise(rawName || "");
+  const next = {
+    email,
+    name: incomingName || existing?.name || "",
+    updatedAt: Date.now(),
+  };
+
+  contactsByEmail.set(email, next);
+
+  if (contactsByEmail.size > MAX_CONTACTS) {
+    const overflow = Array.from(contactsByEmail.values())
+      .sort((a, b) => (a.updatedAt || 0) - (b.updatedAt || 0));
+    const removeCount = contactsByEmail.size - MAX_CONTACTS;
+    overflow.slice(0, removeCount).forEach((item) => contactsByEmail.delete(item.email));
+  }
+
+  persistContacts();
+}
+
+function extractContactsFromEmailRecord(email) {
+  const contacts = [];
+  contacts.push(...parseContactsFromHeader(email?.sender || ""));
+  contacts.push(...parseContactsFromHeader(email?.to_recipients || ""));
+  contacts.push(...parseContactsFromHeader(email?.cc_recipients || ""));
+  return contacts;
+}
+
+function ingestContactsFromEmails(emails) {
+  for (const email of emails || []) {
+    const contacts = extractContactsFromEmailRecord(email);
+    contacts.forEach((contact) => upsertContact(contact.email, contact.name));
+  }
 }
 
 function senderAvatarUrls(sender, mailbox = "") {
@@ -935,6 +1048,7 @@ async function loadLocalMailbox(mailbox, animate = false) {
   }
   currentMailbox = mailbox;
   currentEmails = await invoke("get_emails", { mailbox });
+  ingestContactsFromEmails(currentEmails);
   currentPage = 1;
   renderEmailList(animate);
   refreshAppHeaderSubtitle();
@@ -956,6 +1070,7 @@ async function syncMailboxInBackground(mailbox, force = false) {
   }
 
   const latest = await invoke("get_emails", { mailbox });
+  ingestContactsFromEmails(latest);
   if (mailbox === "INBOX") {
     await notifyNewEmails(latest);
   }
@@ -1435,11 +1550,276 @@ function normalizeComposeHtml(rawHtml) {
   return rawHtml;
 }
 
+function recipientFieldNodes(field) {
+  return {
+    input: document.getElementById(`compose-${field}`),
+    wrap: document.getElementById(`compose-${field}-input-wrap`),
+    suggest: document.getElementById(`compose-${field}-suggest`),
+  };
+}
+
+function recipientLabel(contact) {
+  const name = sanitizeUnicodeNoise(contact?.name || "");
+  const email = sanitizeUnicodeNoise(contact?.email || "");
+  return name ? `${name} <${email}>` : email;
+}
+
+function renderRecipientChips(field) {
+  const { input, wrap } = recipientFieldNodes(field);
+  if (!input || !wrap) return;
+
+  wrap.querySelectorAll(".compose-recipient-chip").forEach((el) => el.remove());
+  const recipients = composeRecipients[field] || [];
+
+  recipients.forEach((contact, index) => {
+    const chip = document.createElement("span");
+    chip.className = "compose-recipient-chip";
+    chip.innerHTML = `
+      <span class="compose-recipient-chip-label" title="${escapeHtml(recipientLabel(contact))}">${escapeHtml(recipientLabel(contact))}</span>
+      <button class="compose-recipient-chip-remove" type="button" aria-label="Remove recipient">x</button>
+    `;
+    chip.querySelector(".compose-recipient-chip-remove")?.addEventListener("click", () => {
+      composeRecipients[field] = recipients.filter((_, i) => i !== index);
+      renderRecipientChips(field);
+      renderRecipientSuggestions(field);
+      input.focus();
+    });
+    wrap.insertBefore(chip, input);
+  });
+}
+
+function recipientSuggestionsForField(field, query) {
+  const q = sanitizeUnicodeNoise(query || "").toLowerCase();
+  if (!q) return [];
+
+  const existing = new Set((composeRecipients[field] || []).map((r) => r.email));
+  return Array.from(contactsByEmail.values())
+    .filter((contact) => !existing.has(contact.email))
+    .map((contact) => {
+      const hay = `${contact.name || ""} ${contact.email}`.toLowerCase();
+      const starts = contact.email.startsWith(q) || (contact.name || "").toLowerCase().startsWith(q);
+      return { ...contact, hay, starts };
+    })
+    .filter((contact) => contact.hay.includes(q))
+    .sort((a, b) => {
+      if (a.starts !== b.starts) return a.starts ? -1 : 1;
+      return (b.updatedAt || 0) - (a.updatedAt || 0);
+    })
+    .slice(0, 8);
+}
+
+function hideRecipientSuggestions(field) {
+  const { suggest } = recipientFieldNodes(field);
+  if (!suggest) return;
+  suggest.classList.remove("open");
+  suggest.innerHTML = "";
+  recipientSuggestState[field].items = [];
+  recipientSuggestState[field].activeIndex = -1;
+}
+
+function renderRecipientSuggestions(field) {
+  const { input, suggest } = recipientFieldNodes(field);
+  if (!input || !suggest) return;
+
+  const items = recipientSuggestionsForField(field, input.value);
+  recipientSuggestState[field].items = items;
+
+  if (!items.length) {
+    hideRecipientSuggestions(field);
+    return;
+  }
+
+  let activeIndex = recipientSuggestState[field].activeIndex;
+  if (activeIndex < 0 || activeIndex >= items.length) activeIndex = 0;
+  recipientSuggestState[field].activeIndex = activeIndex;
+
+  suggest.innerHTML = items
+    .map((item, idx) => `
+      <button class="compose-recipient-option ${idx === activeIndex ? "active" : ""}" type="button" data-idx="${idx}">
+        <span class="compose-recipient-option-name">${escapeHtml(item.name || item.email)}</span>
+        <span class="compose-recipient-option-email">${escapeHtml(item.email)}</span>
+      </button>
+    `)
+    .join("");
+
+  suggest.classList.add("open");
+  suggest.querySelectorAll(".compose-recipient-option").forEach((btn) => {
+    btn.addEventListener("mousedown", (event) => {
+      event.preventDefault();
+      const idx = Number(btn.getAttribute("data-idx"));
+      const item = items[idx];
+      if (item) {
+        addComposeRecipient(field, item);
+      }
+    });
+  });
+}
+
+function addComposeRecipient(field, contactLike) {
+  const parsed = typeof contactLike === "string" ? parseContactToken(contactLike) : {
+    email: normalizeEmailAddress(contactLike?.email || ""),
+    name: sanitizeUnicodeNoise(contactLike?.name || ""),
+  };
+
+  if (!parsed?.email) return false;
+  if ((composeRecipients[field] || []).some((entry) => entry.email === parsed.email)) return false;
+
+  const known = contactsByEmail.get(parsed.email);
+  const next = {
+    email: parsed.email,
+    name: parsed.name || known?.name || "",
+  };
+
+  composeRecipients[field].push(next);
+  upsertContact(next.email, next.name);
+
+  const { input } = recipientFieldNodes(field);
+  if (input) input.value = "";
+
+  renderRecipientChips(field);
+  hideRecipientSuggestions(field);
+  return true;
+}
+
+function commitRecipientInput(field) {
+  const { input } = recipientFieldNodes(field);
+  if (!input) return;
+
+  const raw = sanitizeUnicodeNoise(input.value || "");
+  if (!raw) {
+    hideRecipientSuggestions(field);
+    return;
+  }
+
+  const parts = parseContactsFromHeader(raw);
+  if (!parts.length) {
+    const fallback = parseContactToken(raw);
+    if (fallback) addComposeRecipient(field, fallback);
+    else hideRecipientSuggestions(field);
+    return;
+  }
+
+  let changed = false;
+  parts.forEach((contact) => {
+    changed = addComposeRecipient(field, contact) || changed;
+  });
+  if (!changed) hideRecipientSuggestions(field);
+}
+
+function pickActiveRecipientSuggestion(field) {
+  const state = recipientSuggestState[field];
+  const item = state.items[state.activeIndex];
+  if (!item) return false;
+  return addComposeRecipient(field, item);
+}
+
+function recipientString(field) {
+  return (composeRecipients[field] || []).map((contact) => contact.email).join(", ");
+}
+
+function setComposeRecipientsFromHeader(field, headerValue) {
+  composeRecipients[field] = parseContactsFromHeader(headerValue).map((contact) => ({
+    email: contact.email,
+    name: contact.name || contactsByEmail.get(contact.email)?.name || "",
+  }));
+  renderRecipientChips(field);
+  hideRecipientSuggestions(field);
+}
+
+function bindComposeRecipientField(field) {
+  const { input } = recipientFieldNodes(field);
+  if (!input) return;
+
+  input.addEventListener("input", () => {
+    recipientSuggestState[field].activeIndex = -1;
+    renderRecipientSuggestions(field);
+  });
+
+  input.addEventListener("keydown", (event) => {
+    const state = recipientSuggestState[field];
+    const open = state.items.length > 0;
+
+    if (event.key === "ArrowDown" && open) {
+      event.preventDefault();
+      state.activeIndex = (state.activeIndex + 1 + state.items.length) % state.items.length;
+      renderRecipientSuggestions(field);
+      return;
+    }
+
+    if (event.key === "ArrowUp" && open) {
+      event.preventDefault();
+      state.activeIndex = (state.activeIndex - 1 + state.items.length) % state.items.length;
+      renderRecipientSuggestions(field);
+      return;
+    }
+
+    if (event.key === "Enter") {
+      event.preventDefault();
+      if (!pickActiveRecipientSuggestion(field)) {
+        commitRecipientInput(field);
+      }
+      return;
+    }
+
+    if (event.key === "Tab" && open) {
+      event.preventDefault();
+      if (!pickActiveRecipientSuggestion(field)) {
+        commitRecipientInput(field);
+      }
+      return;
+    }
+
+    if (event.key === "," || event.key === ";") {
+      event.preventDefault();
+      commitRecipientInput(field);
+      return;
+    }
+
+    if (event.key === " " && (input.value || "").includes("@")) {
+      event.preventDefault();
+      commitRecipientInput(field);
+      return;
+    }
+
+    if (event.key === "Backspace" && !input.value) {
+      const recipients = composeRecipients[field] || [];
+      if (recipients.length) {
+        composeRecipients[field] = recipients.slice(0, -1);
+        renderRecipientChips(field);
+      }
+    }
+  });
+
+  input.addEventListener("blur", () => {
+    setTimeout(() => {
+      commitRecipientInput(field);
+      hideRecipientSuggestions(field);
+    }, 80);
+  });
+
+  input.addEventListener("focus", () => {
+    renderRecipientSuggestions(field);
+  });
+}
+
+function bindComposeRecipientInputs() {
+  if (composeRecipientUiBound) return;
+  composeRecipientUiBound = true;
+
+  bindComposeRecipientField("to");
+  bindComposeRecipientField("cc");
+  renderRecipientChips("to");
+  renderRecipientChips("cc");
+}
+
 function collectComposePayload() {
   const toInput = document.getElementById("compose-to");
   const ccInput = document.getElementById("compose-cc");
   const subjectInput = document.getElementById("compose-subject");
   const bodyInput = document.getElementById("compose-body");
+
+  commitRecipientInput("to");
+  commitRecipientInput("cc");
 
   const bodyHtmlRaw = bodyInput?.innerHTML || "";
   const bodyHtml = normalizeComposeHtml(bodyHtmlRaw);
@@ -1450,8 +1830,8 @@ function collectComposePayload() {
     ccInput,
     subjectInput,
     bodyInput,
-    to: toInput?.value?.trim() || "",
-    cc: ccInput?.value?.trim() || "",
+    to: recipientString("to"),
+    cc: recipientString("cc"),
     subject: subjectInput?.value?.trim() || "",
     body,
     bodyHtml,
@@ -1459,8 +1839,8 @@ function collectComposePayload() {
 }
 
 function resetComposeState() {
-  const toInput = document.getElementById("compose-to");
-  const ccInput = document.getElementById("compose-cc");
+  const toInput = recipientFieldNodes("to").input;
+  const ccInput = recipientFieldNodes("cc").input;
   const subjectInput = document.getElementById("compose-subject");
   const bodyInput = document.getElementById("compose-body");
 
@@ -1472,6 +1852,12 @@ function resetComposeState() {
   composeAttachments = [];
   composeSendMode = "plain";
   composeDraftId = null;
+  composeRecipients.to = [];
+  composeRecipients.cc = [];
+  renderRecipientChips("to");
+  renderRecipientChips("cc");
+  hideRecipientSuggestions("to");
+  hideRecipientSuggestions("cc");
   renderComposeAttachments();
 }
 
@@ -1479,13 +1865,15 @@ function openComposeForDraft(email) {
   if (!email) return;
   if (typeof window.openCompose === "function") window.openCompose();
 
-  const toInput = document.getElementById("compose-to");
-  const ccInput = document.getElementById("compose-cc");
+  const toInput = recipientFieldNodes("to").input;
+  const ccInput = recipientFieldNodes("cc").input;
   const subjectInput = document.getElementById("compose-subject");
   const bodyInput = document.getElementById("compose-body");
 
-  if (toInput) toInput.value = email.to_recipients || "";
-  if (ccInput) ccInput.value = email.cc_recipients || "";
+  setComposeRecipientsFromHeader("to", email.to_recipients || "");
+  setComposeRecipientsFromHeader("cc", email.cc_recipients || "");
+  if (toInput) toInput.value = "";
+  if (ccInput) ccInput.value = "";
   if (subjectInput) subjectInput.value = email.subject || "";
   if (bodyInput) bodyInput.innerHTML = email.body_html || "";
 
@@ -1685,6 +2073,10 @@ function bindComposeSend() {
         attachments: composeAttachments,
       });
     }
+
+    parseContactsFromHeader(payload.to).forEach((contact) => upsertContact(contact.email, contact.name));
+    parseContactsFromHeader(payload.cc).forEach((contact) => upsertContact(contact.email, contact.name));
+
     showToast("Email sent");
 
     if (typeof window.closeCompose === "function") window.closeCompose();
@@ -1776,6 +2168,7 @@ async function initializeConnectedUI() {
   bindPaneResizer();
   bindInfiniteScroll();
   bindComposeWindowControls();
+  bindComposeRecipientInputs();
   bindComposeFormatting();
   bindComposeAttachments();
   bindComposeSend();
@@ -1784,6 +2177,7 @@ async function initializeConnectedUI() {
   await bindUserProfileAndSettings();
 
   const inboxNow = await invoke("get_emails", { mailbox: "INBOX" });
+  ingestContactsFromEmails(inboxNow);
   knownInboxIds = new Set((inboxNow || []).map((m) => m.id));
 
   await openMailbox("INBOX", true);

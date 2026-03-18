@@ -697,6 +697,98 @@
 
   .modal-field input::placeholder { color: var(--text-muted); }
 
+  .compose-recipient-wrap {
+    flex: 1;
+    position: relative;
+    min-width: 0;
+  }
+
+  .compose-recipient-input {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    min-height: 24px;
+  }
+
+  .compose-recipient-input input {
+    flex: 1 1 140px;
+    min-width: 120px;
+  }
+
+  .compose-recipient-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    max-width: 100%;
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1px solid var(--green-muted);
+    background: var(--green-pale);
+    color: var(--green);
+    font: 500 12px 'DM Sans', sans-serif;
+  }
+
+  .compose-recipient-chip-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 260px;
+  }
+
+  .compose-recipient-chip-remove {
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: 500 12px 'DM Sans', sans-serif;
+    cursor: pointer;
+    line-height: 1;
+    padding: 0;
+  }
+
+  .compose-recipient-suggest {
+    display: none;
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    right: 0;
+    z-index: 2600;
+    background: var(--white);
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    box-shadow: 0 10px 24px rgba(0,0,0,.14);
+    max-height: 180px;
+    overflow-y: auto;
+  }
+
+  .compose-recipient-suggest.open { display: block; }
+
+  .compose-recipient-option {
+    width: 100%;
+    border: 0;
+    background: transparent;
+    color: var(--text);
+    text-align: left;
+    padding: 8px 10px;
+    display: grid;
+    gap: 1px;
+    cursor: pointer;
+  }
+
+  .compose-recipient-option:hover,
+  .compose-recipient-option.active {
+    background: var(--green-pale);
+  }
+
+  .compose-recipient-option-name {
+    font: 500 12px 'DM Sans', sans-serif;
+  }
+
+  .compose-recipient-option-email {
+    font: 400 11px 'DM Sans', sans-serif;
+    color: var(--text-muted);
+  }
+
   .modal-body { margin: 4px 18px 0; min-height: 140px; }
 
   .compose-editor {
@@ -1154,11 +1246,21 @@
     <div class="modal-fields">
       <div class="modal-field">
         <label>To</label>
-        <input id="compose-to" type="email" placeholder="recipient@example.com">
+        <div class="compose-recipient-wrap">
+          <div class="compose-recipient-input" id="compose-to-input-wrap">
+            <input id="compose-to" type="text" placeholder="recipient@example.com" autocomplete="off">
+          </div>
+          <div class="compose-recipient-suggest" id="compose-to-suggest"></div>
+        </div>
       </div>
       <div class="modal-field">
         <label>Cc</label>
-        <input id="compose-cc" type="email" placeholder="Add cc…">
+        <div class="compose-recipient-wrap">
+          <div class="compose-recipient-input" id="compose-cc-input-wrap">
+            <input id="compose-cc" type="text" placeholder="Add cc…" autocomplete="off">
+          </div>
+          <div class="compose-recipient-suggest" id="compose-cc-suggest"></div>
+        </div>
       </div>
       <div class="modal-field">
         <label>Re</label>
