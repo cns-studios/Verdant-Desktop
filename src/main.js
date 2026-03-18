@@ -251,6 +251,15 @@ function ensureStyles() {
     .email-attachment-name { font:500 12px 'DM Sans', sans-serif; color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .email-attachment-sub { font:400 11px 'DM Sans', sans-serif; color:var(--text-muted); }
     .email-attachment-download { border:1px solid var(--border); background: var(--surface2); color: var(--text); border-radius:8px; padding:5px 9px; font:500 11px 'DM Sans', sans-serif; cursor:pointer; }
+    .attachment-download-modal { position: fixed; inset: 0; z-index: 2500; background: rgba(31,28,24,.18); pointer-events:none; }
+    .attachment-download-card { position:absolute; right:14px; top:14px; width:min(340px, calc(100vw - 28px)); background: var(--surface); border:1px solid var(--border); border-radius:12px; padding:14px; box-shadow: 0 16px 34px rgba(37,35,31,.2); display:flex; align-items:center; gap:10px; transform: translateX(120%); opacity:0; transition: transform .24s ease, opacity .24s ease; }
+    .attachment-download-modal.open .attachment-download-card { transform: translateX(0); opacity:1; }
+    .attachment-download-icon { width:16px; height:16px; display:flex; align-items:center; justify-content:center; flex-shrink:0; color: var(--green); }
+    .attachment-download-icon.is-spinning { border:2px solid var(--green-muted); border-top-color: var(--green); border-radius:50%; animation: verdant-spin .8s linear infinite; }
+    .attachment-download-icon.is-success { border:0; animation:none; }
+    .attachment-download-icon.is-success svg { width:16px; height:16px; stroke:currentColor; fill:none; stroke-width:2.4; stroke-linecap:round; stroke-linejoin:round; }
+    .attachment-download-text { font:500 12px 'DM Sans', sans-serif; color: var(--text); }
+    @keyframes verdant-spin { to { transform: rotate(360deg); } }
     .icon-btn.active { background: var(--green-pale); color: var(--green); border:1px solid var(--green-muted); }
     .icon-btn.danger:hover { background:#f5dede !important; color:#8a2e2e !important; border:1px solid #d79f9f; }
     .compose-maximized { width:min(1100px, 96vw) !important; height:min(90vh, 920px) !important; }
@@ -480,30 +489,80 @@ function base64ToBytes(base64) {
   return bytes;
 }
 
+function showAttachmentDownloadModal(filename) {
+  const existing = document.getElementById("attachment-download-modal");
+  if (existing) existing.remove();
+
+  const modal = document.createElement("div");
+  modal.id = "attachment-download-modal";
+  modal.className = "attachment-download-modal";
+  modal.innerHTML = `
+    <div class="attachment-download-card" role="dialog" aria-live="polite" aria-label="Downloading attachment">
+      <div class="attachment-download-icon is-spinning"></div>
+      <div class="attachment-download-text">Downloading ${escapeHtml(filename || "attachment")}...</div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  requestAnimationFrame(() => modal.classList.add("open"));
+}
+
+async function showAttachmentDownloadSuccess(filename) {
+  const modal = document.getElementById("attachment-download-modal");
+  if (!modal) return;
+
+  const icon = modal.querySelector(".attachment-download-icon");
+  const text = modal.querySelector(".attachment-download-text");
+
+  if (icon) {
+    icon.classList.remove("is-spinning");
+    icon.classList.add("is-success");
+    icon.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7L10 17l-5-5"/></svg>`;
+  }
+
+  if (text) {
+    text.textContent = `Downloaded ${filename || "attachment"}`;
+  }
+
+  await new Promise((resolve) => setTimeout(resolve, 1500));
+}
+
+function hideAttachmentDownloadModal() {
+  const modal = document.getElementById("attachment-download-modal");
+  if (!modal) return;
+  modal.classList.remove("open");
+  setTimeout(() => modal.remove(), 240);
+}
+
 async function handleAttachmentDownload(emailId, attachment) {
   if (!emailId || !attachment?.attachment_id) {
     showToast("Attachment is unavailable", "error", 2400);
     return;
   }
 
-  const response = await invoke("download_attachment", {
-    emailId,
-    attachmentId: attachment.attachment_id,
-    filename: attachment.filename || "attachment",
-    contentType: attachment.mime_type || "application/octet-stream",
-  });
+  showAttachmentDownloadModal(attachment.filename || "attachment");
+  try {
+    const response = await invoke("download_attachment", {
+      emailId,
+      attachmentId: attachment.attachment_id,
+      filename: attachment.filename || "attachment",
+      contentType: attachment.mime_type || "application/octet-stream",
+    });
 
-  const bytes = base64ToBytes(response.data_base64 || "");
-  const blob = new Blob([bytes], { type: response.content_type || attachment.mime_type || "application/octet-stream" });
-  const url = URL.createObjectURL(blob);
+    const bytes = base64ToBytes(response.data_base64 || "");
+    const blob = new Blob([bytes], { type: response.content_type || attachment.mime_type || "application/octet-stream" });
+    const url = URL.createObjectURL(blob);
 
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = response.filename || attachment.filename || "attachment";
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  URL.revokeObjectURL(url);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = response.filename || attachment.filename || "attachment";
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+    await showAttachmentDownloadSuccess(response.filename || attachment.filename || "attachment");
+  } finally {
+    hideAttachmentDownloadModal();
+  }
 }
 
 function renderReadingAttachments(email) {
