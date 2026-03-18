@@ -43,6 +43,21 @@ struct DraftSaveResult {
     draft_id: String,
 }
 
+#[derive(Serialize, Deserialize, Clone)]
+struct AttachmentMeta {
+    filename: String,
+    mime_type: String,
+    attachment_id: String,
+    size: i64,
+}
+
+#[derive(Serialize)]
+struct AttachmentDownload {
+    filename: String,
+    content_type: String,
+    data_base64: String,
+}
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct EmailAttachment {
@@ -287,6 +302,48 @@ fn extract_body(payload: &Value) -> Option<String> {
     None
 }
 
+fn collect_attachments(payload: &Value, out: &mut Vec<AttachmentMeta>) {
+    let filename = payload
+        .get("filename")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .trim()
+        .to_string();
+    let attachment_id = payload
+        .get("body")
+        .and_then(|b| b.get("attachmentId"))
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .trim()
+        .to_string();
+
+    if !filename.is_empty() && !attachment_id.is_empty() {
+        let mime_type = payload
+            .get("mimeType")
+            .and_then(Value::as_str)
+            .unwrap_or("application/octet-stream")
+            .to_string();
+        let size = payload
+            .get("body")
+            .and_then(|b| b.get("size"))
+            .and_then(Value::as_i64)
+            .unwrap_or(0);
+
+        out.push(AttachmentMeta {
+            filename,
+            mime_type,
+            attachment_id,
+            size,
+        });
+    }
+
+    if let Some(parts) = payload.get("parts").and_then(Value::as_array) {
+        for part in parts {
+            collect_attachments(part, out);
+        }
+    }
+}
+
 async fn persist_token(state: &DbState, token: StoredToken) -> Result<StoredToken, String> {
     {
         let conn = state.conn.lock().await;
@@ -456,11 +513,6 @@ async fn sync_mailbox_page_internal(
                 "https://gmail.googleapis.com/gmail/v1/users/me/drafts/{}?format=full",
                 draft_id.clone().unwrap_or_default()
             )
-        } else if exists {
-            format!(
-                "https://gmail.googleapis.com/gmail/v1/users/me/messages/{}?format=metadata&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=Date&metadataHeaders=To&metadataHeaders=Cc",
-                id
-            )
         } else {
             format!(
                 "https://gmail.googleapis.com/gmail/v1/users/me/messages/{}?format=full",
@@ -534,16 +586,40 @@ async fn sync_mailbox_page_internal(
             .and_then(|s| s.parse::<i64>().ok())
             .unwrap_or(0);
 
-        let body_html = if exists {
+        let (existing_body, existing_attachments) = if exists {
             let conn = state.conn.lock().await;
-            conn.query_row("SELECT body_html FROM emails WHERE id = ?1", [id.as_str()], |r| r.get::<_, String>(0))
-                .unwrap_or_else(|_| format!("<pre>{}</pre>", snippet))
+            let body = conn
+                .query_row("SELECT body_html FROM emails WHERE id = ?1", [id.as_str()], |r| r.get::<_, String>(0))
+                .ok();
+            let attachments = conn
+                .query_row(
+                    "SELECT attachments_json FROM emails WHERE id = ?1",
+                    [id.as_str()],
+                    |r| r.get::<_, String>(0),
+                )
+                .ok();
+            (body, attachments)
         } else {
-            detail_json
-                .get("payload")
-                .and_then(extract_body)
-                .unwrap_or_else(|| format!("<pre>{}</pre>", snippet))
+            (None, None)
         };
+
+        let body_html = detail_json
+            .get("payload")
+            .and_then(extract_body)
+            .or(existing_body)
+            .unwrap_or_else(|| format!("<pre>{}</pre>", snippet));
+
+        let mut attachments = Vec::new();
+        if let Some(payload) = detail_json.get("payload") {
+            collect_attachments(payload, &mut attachments);
+        }
+
+        let attachments_json = if attachments.is_empty() {
+            existing_attachments.unwrap_or_else(|| "[]".to_string())
+        } else {
+            serde_json::to_string(&attachments).unwrap_or_else(|_| "[]".to_string())
+        };
+        let has_attachments = !attachments_json.trim().is_empty() && attachments_json.trim() != "[]";
 
         let labels = detail_json
             .get("labelIds")
@@ -560,8 +636,8 @@ async fn sync_mailbox_page_internal(
 
         let conn = state.conn.lock().await;
         conn.execute(
-                "INSERT INTO emails (id, draft_id, thread_id, subject, sender, to_recipients, cc_recipients, snippet, body_html, date, is_read, mailbox, labels, internal_ts)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
+                "INSERT INTO emails (id, draft_id, thread_id, subject, sender, to_recipients, cc_recipients, snippet, body_html, attachments_json, has_attachments, date, is_read, mailbox, labels, internal_ts)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)
              ON CONFLICT(id)
              DO UPDATE SET
                      draft_id = excluded.draft_id,
@@ -572,6 +648,8 @@ async fn sync_mailbox_page_internal(
                 cc_recipients = excluded.cc_recipients,
                 snippet = excluded.snippet,
                 body_html = excluded.body_html,
+                attachments_json = excluded.attachments_json,
+                has_attachments = excluded.has_attachments,
                 date = excluded.date,
                 mailbox = excluded.mailbox,
                 labels = excluded.labels,
@@ -586,6 +664,8 @@ async fn sync_mailbox_page_internal(
                 &cc_recipients,
                 &snippet,
                 &body_html,
+                &attachments_json,
+                has_attachments as i32,
                 &date,
                 is_read as i32,
                 mailbox,
@@ -639,10 +719,10 @@ async fn get_emails(
     let conn = state.conn.lock().await;
 
     let sql = if box_name == "STARRED" {
-        "SELECT id, draft_id, thread_id, subject, sender, to_recipients, cc_recipients, snippet, body_html, date, is_read, starred, mailbox, labels, internal_ts
+        "SELECT id, draft_id, thread_id, subject, sender, to_recipients, cc_recipients, snippet, body_html, attachments_json, has_attachments, date, is_read, starred, mailbox, labels, internal_ts
          FROM emails WHERE starred = 1 ORDER BY internal_ts DESC, rowid DESC LIMIT 500"
     } else {
-        "SELECT id, draft_id, thread_id, subject, sender, to_recipients, cc_recipients, snippet, body_html, date, is_read, starred, mailbox, labels, internal_ts
+        "SELECT id, draft_id, thread_id, subject, sender, to_recipients, cc_recipients, snippet, body_html, attachments_json, has_attachments, date, is_read, starred, mailbox, labels, internal_ts
          FROM emails WHERE mailbox = ?1 ORDER BY internal_ts DESC, rowid DESC LIMIT 500"
     };
 
@@ -659,12 +739,14 @@ async fn get_emails(
             cc_recipients: row.get(6)?,
             snippet: row.get(7)?,
             body_html: row.get(8)?,
-            date: row.get(9)?,
-            is_read: row.get::<_, i32>(10)? != 0,
-            starred: row.get::<_, i32>(11)? != 0,
-            mailbox: row.get(12)?,
-            labels: row.get(13)?,
-            internal_ts: row.get(14)?,
+            attachments_json: row.get(9)?,
+            has_attachments: row.get::<_, i32>(10)? != 0,
+            date: row.get(11)?,
+            is_read: row.get::<_, i32>(12)? != 0,
+            starred: row.get::<_, i32>(13)? != 0,
+            mailbox: row.get(14)?,
+            labels: row.get(15)?,
+            internal_ts: row.get(16)?,
         })
     };
 
@@ -775,6 +857,11 @@ async fn deep_search_emails(
             .get("payload")
             .and_then(extract_body)
             .unwrap_or_else(|| format!("<pre>{}</pre>", snippet));
+        let mut attachments = Vec::new();
+        if let Some(payload) = detail_json.get("payload") {
+            collect_attachments(payload, &mut attachments);
+        }
+        let attachments_json = serde_json::to_string(&attachments).unwrap_or_else(|_| "[]".to_string());
 
         results.push(Email {
             id: id.to_string(),
@@ -790,6 +877,8 @@ async fn deep_search_emails(
             cc_recipients,
             snippet,
             body_html,
+            attachments_json,
+            has_attachments: !attachments.is_empty(),
             date,
             is_read: !labels.split(',').any(|l| l == "UNREAD"),
             starred: labels.split(',').any(|l| l == "STARRED"),
@@ -1102,6 +1191,55 @@ async fn send_existing_draft(state: State<'_, DbState>, draft_id: String) -> Res
 }
 
 #[tauri::command]
+async fn download_attachment(
+    state: State<'_, DbState>,
+    email_id: String,
+    attachment_id: String,
+    filename: String,
+    content_type: String,
+) -> Result<AttachmentDownload, String> {
+    let token = ensure_token(&state).await?.access_token;
+    let client = reqwest::Client::new();
+    let url = format!(
+        "https://gmail.googleapis.com/gmail/v1/users/me/messages/{}/attachments/{}",
+        email_id.trim(),
+        attachment_id.trim()
+    );
+
+    let res = client
+        .get(url)
+        .bearer_auth(&token)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if !res.status().is_success() {
+        let status = res.status();
+        let body = res.text().await.unwrap_or_default();
+        return Err(format!("Attachment download failed: {} {}", status, body));
+    }
+
+    let json = res.json::<Value>().await.map_err(|e| e.to_string())?;
+    let encoded = json
+        .get("data")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "Attachment data missing".to_string())?;
+    let bytes = URL_SAFE_NO_PAD
+        .decode(encoded.as_bytes())
+        .map_err(|e| e.to_string())?;
+
+    Ok(AttachmentDownload {
+        filename,
+        content_type: if content_type.trim().is_empty() {
+            "application/octet-stream".to_string()
+        } else {
+            content_type
+        },
+        data_base64: STANDARD.encode(bytes),
+    })
+}
+
+#[tauri::command]
 async fn auth_status(state: State<'_, DbState>) -> Result<AuthStatus, String> {
     let has_client_id = std::env::var("GOOGLE_CLIENT_ID")
         .map(|v| !v.trim().is_empty())
@@ -1162,6 +1300,7 @@ pub fn run() {
             send_email,
             save_draft,
             send_existing_draft,
+            download_attachment,
             auth_status
         ])
         .run(tauri::generate_context!())

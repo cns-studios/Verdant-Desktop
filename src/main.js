@@ -239,6 +239,18 @@ function ensureStyles() {
     .pager button { border:1px solid var(--border); background: var(--surface2); color: var(--text); border-radius:8px; padding:6px 10px; cursor:pointer; font:500 12px 'DM Sans', sans-serif; }
     .pager button.active { background: var(--green); color:#fff; border-color: var(--green); }
     .list-fetch-indicator { padding:10px 14px; text-align:center; color:var(--text-muted); font:500 12px 'DM Sans', sans-serif; border-top:1px dashed var(--border); }
+    .search-bar { position: relative; }
+    .search-bar.has-deep-btn { padding-right: 106px; }
+    .deep-search-btn { position:absolute; right:6px; top:50%; transform:translateY(-50%); height:24px; display:inline-flex; align-items:center; border:1px solid var(--green-muted); background: var(--green-pale); color: var(--green); border-radius:999px; padding:0 10px; font:500 11px 'DM Sans', sans-serif; cursor:pointer; white-space:nowrap; }
+    .deep-search-btn:disabled { opacity:.6; cursor:default; }
+    .email-attachments { border:1px solid var(--border); border-radius:10px; background: var(--surface); padding:10px; margin-bottom:12px; }
+    .email-attachments-title { font:600 12px 'DM Sans', sans-serif; color:var(--text-mid); margin-bottom:8px; }
+    .email-attachment-list { display:grid; gap:6px; }
+    .email-attachment-item { display:flex; align-items:center; justify-content:space-between; gap:10px; border:1px solid var(--border); background: var(--white); border-radius:8px; padding:8px 10px; }
+    .email-attachment-meta { min-width:0; display:grid; gap:2px; }
+    .email-attachment-name { font:500 12px 'DM Sans', sans-serif; color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .email-attachment-sub { font:400 11px 'DM Sans', sans-serif; color:var(--text-muted); }
+    .email-attachment-download { border:1px solid var(--border); background: var(--surface2); color: var(--text); border-radius:8px; padding:5px 9px; font:500 11px 'DM Sans', sans-serif; cursor:pointer; }
     .icon-btn.active { background: var(--green-pale); color: var(--green); border:1px solid var(--green-muted); }
     .icon-btn.danger:hover { background:#f5dede !important; color:#8a2e2e !important; border:1px solid #d79f9f; }
     .compose-maximized { width:min(1100px, 96vw) !important; height:min(90vh, 920px) !important; }
@@ -347,7 +359,7 @@ function isImportant(email) {
 
 function emailMatchesFilter(email) {
   if (activeFilter === "Important" && !isImportant(email)) return false;
-  if (activeFilter === "Attachments" && !/attachment|\.pdf|\.doc|\.xlsx|\.zip/i.test(email.snippet || "")) return false;
+  if (activeFilter === "Attachments" && !hasEmailAttachments(email)) return false;
   if (activeFilter === "Flagged" && !email.starred) return false;
 
   if (searchQuery) {
@@ -356,6 +368,23 @@ function emailMatchesFilter(email) {
   }
 
   return true;
+}
+
+function parseEmailAttachments(email) {
+  if (!email?.attachments_json) return [];
+  try {
+    const parsed = JSON.parse(email.attachments_json);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function hasEmailAttachments(email) {
+  const raw = email?.has_attachments;
+  if (raw === true || raw === 1 || raw === "1") return true;
+  if (typeof raw === "string" && raw.toLowerCase() === "true") return true;
+  return parseEmailAttachments(email).length > 0;
 }
 
 function visibleEmails() {
@@ -424,12 +453,112 @@ function renderReadingPane(email) {
     body.innerHTML = html || `<pre>${escapeHtml(sanitizeUnicodeNoise(email.snippet || ""))}</pre>`;
   }
 
+  renderReadingAttachments(email);
+
   if (avatar) {
     applySenderAvatar(avatar, email.sender || "", email.mailbox || "");
   }
 
   renderRecipientsLine(email);
   updateTopActionStates();
+}
+
+function formatAttachmentSize(size) {
+  const n = Number(size || 0);
+  if (!Number.isFinite(n) || n <= 0) return "Unknown size";
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function base64ToBytes(base64) {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
+async function handleAttachmentDownload(emailId, attachment) {
+  if (!emailId || !attachment?.attachment_id) {
+    showToast("Attachment is unavailable", "error", 2400);
+    return;
+  }
+
+  const response = await invoke("download_attachment", {
+    emailId,
+    attachmentId: attachment.attachment_id,
+    filename: attachment.filename || "attachment",
+    contentType: attachment.mime_type || "application/octet-stream",
+  });
+
+  const bytes = base64ToBytes(response.data_base64 || "");
+  const blob = new Blob([bytes], { type: response.content_type || attachment.mime_type || "application/octet-stream" });
+  const url = URL.createObjectURL(blob);
+
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = response.filename || attachment.filename || "attachment";
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
+function renderReadingAttachments(email) {
+  const readingBody = document.querySelector(".reading-body");
+  if (!readingBody) return;
+
+  readingBody.querySelector(".email-attachments")?.remove();
+
+  const attachments = parseEmailAttachments(email).filter((a) => a && a.attachment_id);
+  if (!attachments.length) return;
+
+  const section = document.createElement("section");
+  section.className = "email-attachments";
+  section.innerHTML = `
+    <div class="email-attachments-title">Attachments (${attachments.length})</div>
+    <div class="email-attachment-list">
+      ${attachments.map((attachment, index) => `
+        <div class="email-attachment-item">
+          <div class="email-attachment-meta">
+            <div class="email-attachment-name" title="${escapeHtml(attachment.filename || "attachment")}">${escapeHtml(attachment.filename || "attachment")}</div>
+            <div class="email-attachment-sub">${escapeHtml(attachment.mime_type || "file")} • ${escapeHtml(formatAttachmentSize(attachment.size))}</div>
+          </div>
+          <button class="email-attachment-download" data-attachment-index="${index}">Download</button>
+        </div>
+      `).join("")}
+    </div>
+  `;
+
+  const bodyText = readingBody.querySelector(".email-body-text");
+  if (bodyText) {
+    readingBody.insertBefore(section, bodyText);
+  } else {
+    readingBody.appendChild(section);
+  }
+
+  section.querySelectorAll(".email-attachment-download").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const index = Number(button.getAttribute("data-attachment-index"));
+      const attachment = attachments[index];
+      if (!attachment) return;
+
+      button.disabled = true;
+      const prev = button.textContent;
+      button.textContent = "Downloading...";
+      try {
+        await handleAttachmentDownload(email.id, attachment);
+      } catch (error) {
+        console.error("Attachment download failed", error);
+        showToast("Could not download attachment", "error", 2600);
+      } finally {
+        button.disabled = false;
+        button.textContent = prev;
+      }
+    });
+  });
 }
 
 async function markSelectedAsReadIfNeeded() {
@@ -624,12 +753,12 @@ async function loadLocalMailbox(mailbox, animate = false) {
   await refreshCounts();
 }
 
-async function syncMailboxInBackground(mailbox) {
+async function syncMailboxInBackground(mailbox, force = false) {
   const key = mailbox;
   const now = Date.now();
   const last = lastSynced.get(key) || 0;
 
-  if (now - last < RESYNC_COOLDOWN_MS) return;
+  if (!force && now - last < RESYNC_COOLDOWN_MS) return;
   lastSynced.set(key, now);
 
   if (mailbox !== "STARRED" && mailbox !== "ARCHIVE") {
@@ -700,7 +829,10 @@ function bindMailboxNav() {
       item.classList.add("active");
       searchQuery = "";
       const searchInput = document.querySelector(".search-bar input");
-      if (searchInput) searchInput.value = "";
+      if (searchInput) {
+        searchInput.value = "";
+        searchInput.dispatchEvent(new Event("input"));
+      }
       await openMailbox(map[label], true);
     };
   }
@@ -839,18 +971,16 @@ function bindSearch() {
   if (!deepBtn && searchBar) {
     deepBtn = document.createElement("button");
     deepBtn.id = "deep-search-btn";
-    deepBtn.className = "verdant-btn";
+    deepBtn.className = "deep-search-btn";
     deepBtn.textContent = "Deep Search";
-    deepBtn.style.padding = "5px 10px";
-    deepBtn.style.fontSize = "11px";
-    deepBtn.style.display = "none";
-    deepBtn.style.whiteSpace = "nowrap";
     searchBar.appendChild(deepBtn);
   }
 
+  if (searchBar) searchBar.classList.add("has-deep-btn");
+
   const updateDeepButtonVisibility = () => {
     if (!deepBtn) return;
-    deepBtn.style.display = searchQuery.trim() ? "inline-flex" : "none";
+    deepBtn.hidden = !searchQuery.trim();
   };
 
   deepBtn?.addEventListener("click", async () => {
@@ -988,7 +1118,7 @@ async function openSettingsModal(profile) {
 
   panel.querySelector("#settings-sync")?.addEventListener("click", async () => {
     showToast("Fetching mails...");
-    await syncMailboxInBackground(currentMailbox);
+    await syncMailboxInBackground(currentMailbox, true);
     await refreshCounts();
     showToast("Sync complete");
   });
@@ -1377,7 +1507,7 @@ function bindHotkeys() {
       event.preventDefault();
       if (!canRunHotkey("refresh")) return;
       showToast("Fetching mails...");
-      await syncMailboxInBackground(currentMailbox);
+      await syncMailboxInBackground(currentMailbox, true);
       return;
     }
 

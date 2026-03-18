@@ -12,6 +12,8 @@ pub struct Email {
     pub cc_recipients: String,
     pub snippet: String,
     pub body_html: String,
+    pub attachments_json: String,
+    pub has_attachments: bool,
     pub date: String,
     pub is_read: bool,
     pub starred: bool,
@@ -39,6 +41,8 @@ pub fn init_db(conn: &Connection) -> Result<()> {
             cc_recipients TEXT NOT NULL DEFAULT '',
             snippet TEXT NOT NULL DEFAULT '',
             body_html TEXT NOT NULL,
+            attachments_json TEXT NOT NULL DEFAULT '[]',
+            has_attachments INTEGER NOT NULL DEFAULT 0,
             date TEXT NOT NULL,
             is_read INTEGER NOT NULL,
             starred INTEGER NOT NULL DEFAULT 0,
@@ -58,6 +62,8 @@ pub fn init_db(conn: &Connection) -> Result<()> {
     let _ = conn.execute("ALTER TABLE emails ADD COLUMN labels TEXT NOT NULL DEFAULT ''", []);
     let _ = conn.execute("ALTER TABLE emails ADD COLUMN internal_ts INTEGER NOT NULL DEFAULT 0", []);
     let _ = conn.execute("ALTER TABLE emails ADD COLUMN draft_id TEXT", []);
+    let _ = conn.execute("ALTER TABLE emails ADD COLUMN attachments_json TEXT NOT NULL DEFAULT '[]'", []);
+    let _ = conn.execute("ALTER TABLE emails ADD COLUMN has_attachments INTEGER NOT NULL DEFAULT 0", []);
 
     conn.execute(
         "CREATE TABLE IF NOT EXISTS oauth_tokens (
