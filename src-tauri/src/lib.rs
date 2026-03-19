@@ -1563,9 +1563,7 @@ async fn download_attachment(
 
 #[tauri::command]
 async fn auth_status(state: State<'_, DbState>) -> Result<AuthStatus, String> {
-    let has_client_id = std::env::var("GOOGLE_CLIENT_ID")
-        .map(|v| !v.trim().is_empty())
-        .unwrap_or(false);
+    let has_client_id = auth::has_google_client_id_configured();
 
     let connected = {
         if state.token.lock().await.is_some() {

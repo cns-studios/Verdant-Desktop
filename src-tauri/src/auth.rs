@@ -25,6 +25,33 @@ const AUTH_URL: &str = "https://accounts.google.com/o/oauth2/v2/auth";
 const TOKEN_URL: &str = "https://oauth2.googleapis.com/token";
 const REDIRECT_PORT: u16 = 8765;
 
+fn read_non_empty(value: Option<String>) -> Option<String> {
+    value.and_then(|v| {
+        let trimmed = v.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        }
+    })
+}
+
+fn configured_google_client_id() -> Option<String> {
+    read_non_empty(std::env::var("GOOGLE_CLIENT_ID").ok()).or_else(|| {
+        read_non_empty(option_env!("GOOGLE_CLIENT_ID").map(|v| v.to_string()))
+    })
+}
+
+fn configured_google_client_secret() -> Option<String> {
+    read_non_empty(std::env::var("GOOGLE_CLIENT_SECRET").ok()).or_else(|| {
+        read_non_empty(option_env!("GOOGLE_CLIENT_SECRET").map(|v| v.to_string()))
+    })
+}
+
+pub fn has_google_client_id_configured() -> bool {
+    configured_google_client_id().is_some()
+}
+
 fn now_epoch() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -33,17 +60,10 @@ fn now_epoch() -> i64 {
 }
 
 fn google_client() -> Result<BasicClient, String> {
-    let client_id = std::env::var("GOOGLE_CLIENT_ID")
-        .map_err(|_| "Missing GOOGLE_CLIENT_ID env var".to_string())?;
+    let client_id = configured_google_client_id()
+        .ok_or_else(|| "Missing GOOGLE_CLIENT_ID (runtime env or build-time value)".to_string())?;
 
-    let client_secret = std::env::var("GOOGLE_CLIENT_SECRET").ok().and_then(|value| {
-        let trimmed = value.trim();
-        if trimmed.is_empty() {
-            None
-        } else {
-            Some(ClientSecret::new(trimmed.to_string()))
-        }
-    });
+    let client_secret = configured_google_client_secret().map(ClientSecret::new);
     let has_client_secret = client_secret.is_some();
 
     let auth_url = AuthUrl::new(AUTH_URL.to_string()).map_err(|e| e.to_string())?;
