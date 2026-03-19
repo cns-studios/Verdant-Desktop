@@ -26,7 +26,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           mkdir -p stable-assets
-          gh release download "${{ inputs.nightly_tag }}" -D stable-assets
+          gh release download "${{ inputs.nightly_tag }}" -R "${{ github.repository }}" -D stable-assets
 
       - name: Publish Stable Release
         uses: softprops/action-gh-release@v2
