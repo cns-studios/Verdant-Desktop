@@ -5,6 +5,10 @@ on:
     branches:
       - main
 
+concurrency:
+  group: nightly-main-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: write
 
@@ -26,10 +30,15 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Cache Rust Build Artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
       - name: Install Linux Build Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y \
+          sudo apt-get install -y --no-install-recommends \
             libwebkit2gtk-4.1-dev \
             libgtk-3-dev \
             libayatana-appindicator3-dev \
@@ -42,7 +51,6 @@ jobs:
       - name: Build Tauri Linux Bundles
         env:
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
-          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
         run: npm run tauri build -- --bundles deb,rpm,appimage
 
       - name: Build Arch Linux Package
@@ -51,36 +59,30 @@ jobs:
           VERSION=$(node -p "JSON.parse(require('fs').readFileSync('src-tauri/tauri.conf.json','utf8')).version")
           mkdir -p out/archpkg
           APPIMAGE=$(ls src-tauri/target/release/bundle/appimage/*.AppImage | head -n 1)
-          cp "$APPIMAGE" out/archpkg/Verdant-Desktop.AppImage
+          cp "$APPIMAGE" out/archpkg/verdant_frontend.AppImage
 
           cat > out/archpkg/PKGBUILD <<'PKGEOF'
-          pkgname=Verdant-Desktop-bin
+          pkgname=verdant-frontend-bin
           pkgver=__VERSION__
           pkgrel=1
           pkgdesc="Verdant desktop mail client"
           arch=('x86_64')
-          url="https://github.com/cns-studios/Verdant-Desktop"
+          url="https://github.com/cns-studios/verdant_frontend"
           license=('custom')
           depends=('gtk3' 'webkit2gtk-4.1')
-          source=('Verdant-Desktop.AppImage')
+          source=('verdant_frontend.AppImage')
           sha256sums=('SKIP')
 
           package() {
-            install -Dm755 "$srcdir/Verdant-Desktop.AppImage" "$pkgdir/opt/verdant/Verdant-Desktop.AppImage"
+            install -Dm755 "$srcdir/verdant_frontend.AppImage" "$pkgdir/opt/verdant/verdant_frontend.AppImage"
 
-            install -Dm755 /dev/stdin "$pkgdir/usr/bin/Verdant-Desktop" <<'LAUNCHER'
-            #!/bin/sh
-            exec /opt/verdant/Verdant-Desktop.AppImage "$@"
-            LAUNCHER
+            install -d "$pkgdir/usr/bin"
+            install -d "$pkgdir/usr/share/applications"
 
-            install -Dm644 /dev/stdin "$pkgdir/usr/share/applications/Verdant-Desktop.desktop" <<'DESKTOP'
-            [Desktop Entry]
-            Type=Application
-            Name=Verdant
-            Exec=Verdant-Desktop
-            Terminal=false
-            Categories=Network;Email;
-            DESKTOP
+            printf '%s\n' '#!/bin/sh' 'exec /opt/verdant/verdant_frontend.AppImage "$@"' > "$pkgdir/usr/bin/verdant-frontend"
+            chmod 755 "$pkgdir/usr/bin/verdant-frontend"
+
+            printf '%s\n' '[Desktop Entry]' 'Type=Application' 'Name=Verdant' 'Exec=verdant-frontend' 'Terminal=false' 'Categories=Network;Email;' > "$pkgdir/usr/share/applications/verdant-frontend.desktop"
           }
           PKGEOF
 
@@ -88,7 +90,7 @@ jobs:
 
           docker run --rm -v "$PWD/out/archpkg:/work" archlinux:latest bash -lc '
             set -eux
-            pacman -Syu --noconfirm --needed base-devel
+            pacman -Sy --noconfirm --needed base-devel
             useradd -m builder
             chown -R builder:builder /work
             su builder -c "cd /work && makepkg -f --noconfirm"
@@ -126,13 +128,17 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Cache Rust Build Artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
       - name: Install Frontend Dependencies
         run: npm ci
 
       - name: Build Tauri Windows Bundle
         env:
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
-          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
         run: npm run tauri build -- --bundles nsis
 
       - name: Collect Windows Artifacts
