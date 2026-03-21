@@ -53,7 +53,6 @@ pub fn init_db(conn: &Connection) -> Result<()> {
         [],
     )?;
 
-    // Lightweight migration for existing local DBs created before snippet existed.
     let _ = conn.execute("ALTER TABLE emails ADD COLUMN snippet TEXT NOT NULL DEFAULT ''", []);
     let _ = conn.execute("ALTER TABLE emails ADD COLUMN to_recipients TEXT NOT NULL DEFAULT ''", []);
     let _ = conn.execute("ALTER TABLE emails ADD COLUMN cc_recipients TEXT NOT NULL DEFAULT ''", []);
@@ -75,7 +74,6 @@ pub fn init_db(conn: &Connection) -> Result<()> {
         [],
     )?;
 
-    // Cleanup for legacy mock data inserted by earlier prototype builds.
     let _ = conn.execute(
         "DELETE FROM emails
          WHERE id = '1'
