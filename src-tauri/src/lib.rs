@@ -16,6 +16,10 @@ pub fn run() {
     let _ = dotenvy::from_filename("../.env").or_else(|_| dotenvy::from_filename(".env"));
 
     tauri::Builder::default()
+        // Tauri store plugin for contacts persistence
+        .plugin(tauri_plugin_store::Builder::default().build())
+        // Tauri process plugin for relaunch after update
+        .plugin(tauri_plugin_process::init())
         .setup(|app| {
             let data_dir = app.path().app_data_dir()
                 .expect("Failed to resolve app data dir");
@@ -62,6 +66,7 @@ pub fn run() {
             commands::attachments::download_attachment,
             commands::updater::check_for_updates,
             commands::updater::download_latest_update,
+            commands::updater::install_and_relaunch,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

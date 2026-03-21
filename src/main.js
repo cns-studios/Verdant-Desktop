@@ -1,6 +1,6 @@
 import { authStatus, getUserProfile, getEmails, syncMailboxPage } from "./api.js";
 import { setEmailReadStatus } from "./api.js";
-import { ingestContactsFromEmails } from "./lib/contacts.js";
+import { ingestContactsFromEmails, ensureContactsLoaded } from "./lib/contacts.js";
 import { loadHotkeys, saveHotkeys, normalizeCombo, eventCombo, canRunHotkey } from "./lib/hotkeys.js";
 import { showToast } from "./lib/toast.js";
 import { escapeHtml, sanitizeUnicodeNoise, formatListDate, mailboxTitle } from "./lib/format.js";
@@ -23,8 +23,9 @@ import {
 } from "./ui/compose.js";
 import {
   openSettingsModal, isSettingsOpen, closeOverlay,
-  runAutomaticUpdateFlow, updatePrefs,
+  updatePrefs,
 } from "./ui/settings.js";
+import { checkForUpdates, downloadLatestUpdate } from "./api.js";
 
 let currentMailbox = "INBOX";
 let currentEmails = [];
@@ -35,13 +36,222 @@ let isDeepSearchActive = false;
 let isFetchingMore = false;
 let hotkeys = loadHotkeys();
 
+function injectUpdateModalStyles() {
+  if (document.getElementById("verdant-update-modal-styles")) return;
+  const style = document.createElement("style");
+  style.id = "verdant-update-modal-styles";
+  style.textContent = `
+    .update-toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      width: min(360px, calc(100vw - 48px));
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      box-shadow: 0 16px 40px rgba(30,33,25,.18);
+      padding: 18px 18px 14px;
+      z-index: 3000;
+      transform: translateY(110%);
+      opacity: 0;
+      transition: transform .32s cubic-bezier(.34,1.56,.64,1), opacity .24s ease;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .update-toast.open {
+      transform: translateY(0);
+      opacity: 1;
+    }
+    .update-toast-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .update-toast-title {
+      font: 500 14px 'Fraunces', serif;
+      color: var(--text);
+      letter-spacing: -.2px;
+    }
+    .update-toast-sub {
+      font: 400 12px 'DM Sans', sans-serif;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+    .update-toast-close {
+      width: 24px;
+      height: 24px;
+      border: 1px solid var(--border);
+      background: var(--surface2);
+      border-radius: 6px;
+      cursor: pointer;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      flex-shrink: 0;
+    }
+    .update-toast-close:hover { background: var(--white); color: var(--text); }
+    .update-toast-actions {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+    }
+    .update-toast-btn {
+      padding: 7px 14px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--surface2);
+      color: var(--text);
+      font: 500 12px 'DM Sans', sans-serif;
+      cursor: pointer;
+    }
+    .update-toast-btn.primary {
+      background: var(--green);
+      color: #fff;
+      border-color: var(--green);
+    }
+    .update-toast-btn:disabled { opacity: .6; cursor: default; }
+    .update-progress-wrap {
+      display: none;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .update-progress-wrap.visible { display: flex; }
+    .update-progress-label {
+      font: 400 12px 'DM Sans', sans-serif;
+      color: var(--text-muted);
+    }
+    .update-progress-track {
+      height: 6px;
+      border-radius: 999px;
+      background: var(--surface2);
+      overflow: hidden;
+    }
+    .update-progress-bar {
+      height: 100%;
+      border-radius: 999px;
+      background: var(--green);
+      width: 0%;
+      transition: width .4s ease;
+    }
+    @keyframes verdant-progress-indeterminate {
+      0%   { left: -40%; width: 40%; }
+      60%  { left: 100%; width: 40%; }
+      100% { left: 100%; width: 40%; }
+    }
+    .update-progress-bar.indeterminate {
+      position: relative;
+      width: 100% !important;
+      animation: none;
+      background: linear-gradient(
+        90deg,
+        var(--surface2) 0%,
+        var(--green) 40%,
+        var(--green-light) 60%,
+        var(--surface2) 100%
+      );
+      background-size: 200% 100%;
+      animation: verdant-shimmer 1.4s linear infinite;
+    }
+    @keyframes verdant-shimmer {
+      0%   { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+async function runStartupUpdateCheck() {
+  try {
+    const channel = updatePrefs?.channel || "stable";
+    const info = await checkForUpdates(channel);
+    if (!info?.updateAvailable) return;
+
+    injectUpdateModalStyles();
+
+    const toast = document.createElement("div");
+    toast.className = "update-toast";
+    toast.innerHTML = `
+      <div class="update-toast-header">
+        <div>
+          <div class="update-toast-title">Update available — v${escapeHtml(info.latestVersion)}</div>
+          <div class="update-toast-sub">${escapeHtml(info.releaseName || "New release")}</div>
+        </div>
+        <button class="update-toast-close" id="update-toast-close" aria-label="Dismiss">×</button>
+      </div>
+      <div class="update-progress-wrap" id="update-progress-wrap">
+        <div class="update-progress-label" id="update-progress-label">Downloading...</div>
+        <div class="update-progress-track">
+          <div class="update-progress-bar indeterminate" id="update-progress-bar"></div>
+        </div>
+      </div>
+      <div class="update-toast-actions" id="update-toast-actions">
+        <button class="update-toast-btn" id="update-toast-dismiss">Later</button>
+        <button class="update-toast-btn primary" id="update-toast-download">Download</button>
+      </div>
+    `;
+
+    document.body.appendChild(toast);
+    requestAnimationFrame(() => toast.classList.add("open"));
+
+    const close = () => {
+      toast.classList.remove("open");
+      setTimeout(() => toast.remove(), 350);
+    };
+
+    toast.querySelector("#update-toast-close").onclick = close;
+    toast.querySelector("#update-toast-dismiss").onclick = close;
+
+    toast.querySelector("#update-toast-download").onclick = async () => {
+      toast.querySelector("#update-toast-actions").style.display = "none";
+      toast.querySelector("#update-toast-close").style.display = "none";
+      const progressWrap = toast.querySelector("#update-progress-wrap");
+      const progressLabel = toast.querySelector("#update-progress-label");
+      progressWrap.classList.add("visible");
+
+      try {
+        progressLabel.textContent = "Downloading update...";
+        const result = await downloadLatestUpdate(channel);
+
+        progressLabel.textContent = "Installing...";
+        const { invoke } = await import("@tauri-apps/api/core");
+        await invoke("install_and_relaunch", { filePath: result.filePath });
+
+        progressLabel.textContent = "Restarting...";
+        await new Promise((r) => setTimeout(r, 800));
+        const { relaunch } = await import("@tauri-apps/plugin-process");
+        await relaunch();
+      } catch (err) {
+        progressLabel.textContent = `Update failed: ${String(err)}`;
+        toast.querySelector("#update-progress-bar").classList.remove("indeterminate");
+        toast.querySelector("#update-progress-bar").style.background = "#c08d8d";
+        setTimeout(() => {
+          toast.querySelector("#update-toast-actions").style.display = "flex";
+          toast.querySelector("#update-toast-close").style.display = "flex";
+          toast.querySelector("#update-toast-dismiss").textContent = "Close";
+          toast.querySelector("#update-toast-download").style.display = "none";
+        }, 1800);
+      }
+    };
+  } catch {
+  }
+}
+
 function isImportant(email) {
-  const labels = (email.labels || "").split(",");
-  return !labels.includes("CATEGORY_PROMOTIONS") && !labels.includes("SPAM");
+  const labels = (email.labels || "").split(",").map(l => l.trim());
+  return !labels.some(l =>
+    l === "SPAM" ||
+    l === "TRASH" ||
+    l === "CATEGORY_PROMOTIONS"
+    );
 }
 
 function emailMatchesFilter(email) {
   if (activeFilter === "Important" && !isImportant(email)) return false;
+  if (activeFilter === "Unread" && email.is_read) return false;
   if (activeFilter === "Attachments" && !hasEmailAttachments(email)) return false;
   if (searchQuery) {
     const hay = `${email.subject || ""} ${email.sender || ""} ${email.snippet || ""}`.toLowerCase();
@@ -260,7 +470,8 @@ function bindFilterChips() {
     chip.onclick = () => {
       chips.forEach((c) => c.classList.remove("active"));
       chip.classList.add("active");
-      activeFilter = chip.dataset.filter || chip.textContent.trim();
+      // Use data-filter attribute exclusively — never fall back to text content
+      activeFilter = chip.dataset.filter || "All";
       renderEmailList(false);
     };
   });
@@ -369,17 +580,22 @@ async function initializeConnectedUI() {
 
   await openMailbox("INBOX", true);
   startPeriodicSync(onSynced);
+
+  // Run update check after UI is ready — fire and forget
+  runStartupUpdateCheck().catch(() => {});
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
   ensureStyles();
+
+  // Load contacts from Tauri store before anything else
+  await ensureContactsLoaded().catch(() => {});
 
   try {
     const status = await authStatus();
 
     if (!status.has_client_id) {
       renderShell();
-      const { showOverlay } = await import("./ui/settings.js");
       document.getElementById("root").innerHTML = `
         <div style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:'DM Sans',sans-serif;color:var(--text-mid);flex-direction:column;gap:12px;">
           <div style="font:500 15px 'Fraunces',serif;color:var(--text);">Configuration Required</div>
@@ -388,10 +604,6 @@ document.addEventListener("DOMContentLoaded", async () => {
       `;
       return;
     }
-
-    runAutomaticUpdateFlow().catch((error) => {
-      console.warn("Automatic update check failed", error);
-    });
 
     if (!status.connected) {
       showOnboarding(initializeConnectedUI);

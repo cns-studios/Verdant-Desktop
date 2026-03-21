@@ -313,56 +313,88 @@ pub async fn download_latest_update(channel: Option<String>) -> Result<UpdateDow
     let file_path = folder.join(&info.download_asset_name);
     std::fs::write(&file_path, &bytes).map_err(|e| e.to_string())?;
 
-    let path_str = file_path.to_string_lossy().to_string();
-    let lower = info.download_asset_name.to_ascii_lowercase();
-
-    install_update(&path_str, &lower)?;
-
     Ok(UpdateDownloadResult {
-        file_path: path_str,
+        file_path: file_path.to_string_lossy().to_string(),
         file_name: info.download_asset_name,
         version: info.latest_version,
     })
 }
 
-fn install_update(path: &str, name: &str) -> Result<(), String> {
+#[tauri::command]
+pub async fn install_and_relaunch(file_path: String) -> Result<(), String> {
+    let name = std::path::Path::new(&file_path)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+
+    install_update_sync(&file_path, &name)?;
+    Ok(())
+}
+
+fn install_update_sync(path: &str, name: &str) -> Result<(), String> {
     #[cfg(target_os = "linux")]
     {
         if name.ends_with(".pacman") || name.ends_with(".pkg.tar.zst") {
-            std::process::Command::new("pkexec")
+            let status = std::process::Command::new("pkexec")
                 .args(["pacman", "-U", "--noconfirm", path])
                 .status()
                 .map_err(|e| format!("Failed to launch pacman: {}", e))?;
-        } else if name.ends_with(".deb") {
-            let apt = std::process::Command::new("pkexec")
+            if !status.success() {
+                return Err(format!("pacman exited with status: {}", status));
+            }
+            return Ok(());
+        }
+
+        if name.ends_with(".deb") {
+            let status = std::process::Command::new("pkexec")
                 .args(["apt-get", "install", "-y", path])
                 .status();
-            if apt.is_err() {
-                std::process::Command::new("pkexec")
+            let ok = match status {
+                Ok(s) => s.success(),
+                Err(_) => false,
+            };
+            if !ok {
+                let s = std::process::Command::new("pkexec")
                     .args(["dpkg", "-i", path])
                     .status()
                     .map_err(|e| format!("Failed to launch dpkg: {}", e))?;
+                if !s.success() {
+                    return Err(format!("dpkg exited with status: {}", s));
+                }
             }
-        } else if name.ends_with(".rpm") {
-            let dnf = std::process::Command::new("pkexec")
+            return Ok(());
+        }
+
+        if name.ends_with(".rpm") {
+            let status = std::process::Command::new("pkexec")
                 .args(["dnf", "install", "-y", path])
                 .status();
-            if dnf.is_err() {
-                std::process::Command::new("pkexec")
+            let ok = match status {
+                Ok(s) => s.success(),
+                Err(_) => false,
+            };
+            if !ok {
+                let s = std::process::Command::new("pkexec")
                     .args(["rpm", "-U", path])
                     .status()
                     .map_err(|e| format!("Failed to launch rpm: {}", e))?;
+                if !s.success() {
+                    return Err(format!("rpm exited with status: {}", s));
+                }
             }
-        } else if name.ends_with(".appimage") {
+            return Ok(());
+        }
+
+        if name.ends_with(".appimage") {
             std::fs::set_permissions(
                 path,
                 std::os::unix::fs::PermissionsExt::from_mode(0o755),
             )
             .map_err(|e| e.to_string())?;
-            std::process::Command::new(path)
-                .spawn()
-                .map_err(|e| format!("Failed to launch AppImage: {}", e))?;
-            std::process::exit(0);
+            let current = std::env::current_exe().map_err(|e| e.to_string())?;
+            std::fs::copy(path, &current).map_err(|e| e.to_string())?;
+            return Ok(());
         }
     }
 
@@ -372,14 +404,11 @@ fn install_update(path: &str, name: &str) -> Result<(), String> {
             std::process::Command::new("powershell")
                 .args([
                     "-Command",
-                    &format!(
-                        "Start-Process -FilePath '{}' -Verb RunAs",
-                        path
-                    ),
+                    &format!("Start-Process -FilePath '{}' -Verb RunAs -Wait", path),
                 ])
                 .spawn()
                 .map_err(|e| format!("Failed to launch installer: {}", e))?;
-            std::process::exit(0);
+            return Ok(());
         }
     }
 
@@ -387,21 +416,9 @@ fn install_update(path: &str, name: &str) -> Result<(), String> {
     {
         if name.ends_with(".dmg") {
             open::that(path).map_err(|e| e.to_string())?;
-            std::process::exit(0);
+            return Ok(());
         }
     }
 
-    #[cfg(target_os = "linux")]
-    {
-        let current_exe = std::env::current_exe().map_err(|e| e.to_string())?;
-        std::process::Command::new(current_exe)
-            .spawn()
-            .map_err(|e| e.to_string())?;
-        std::process::exit(0);
-    }
-
-    #[cfg(not(any(target_os = "linux", target_os = "windows", target_os = "macos")))]
-    open::that(path).map_err(|e| e.to_string())?;
-
-    Ok(())
+    Err(format!("No installer handler for: {}", name))
 }

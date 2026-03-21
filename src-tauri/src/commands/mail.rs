@@ -205,11 +205,19 @@ pub async fn sync_mailbox_page_internal(
             (None, None)
         };
 
-        let body_html = detail_json
-            .get("payload")
-            .and_then(extract_body)
-            .or(existing_body)
-            .unwrap_or_else(|| format!("<pre>{}</pre>", snippet));
+let body_html = detail_json
+    .get("payload")
+    .and_then(extract_body)
+    .or(existing_body)
+    .unwrap_or_else(|| {
+        if sender.contains("groups.google.com") {
+            let payload_debug = detail_json.get("payload")
+                .map(|p| p.to_string())
+                .unwrap_or_default();
+            log::info!("VERDANT_EXTRACT_FAILED: {}", payload_debug);
+        }
+        format!("<pre>{}</pre>", snippet)
+    });
 
         let mut attachments: Vec<AttachmentMeta> = Vec::new();
         if let Some(payload) = detail_json.get("payload") {

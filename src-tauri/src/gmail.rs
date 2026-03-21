@@ -65,34 +65,93 @@ pub fn strip_confusable_chars(input: &str) -> String {
         .collect()
 }
 
+fn decode_part(payload: &Value) -> Option<String> {
+    let data = payload
+        .get("body")
+        .and_then(|b| b.get("data"))
+        .and_then(Value::as_str)?;
+
+    use base64::engine::general_purpose::{STANDARD, URL_SAFE};
+
+    let bytes = URL_SAFE_NO_PAD
+        .decode(data.as_bytes())
+        .or_else(|_| URL_SAFE.decode(data.as_bytes()))
+        .or_else(|_| STANDARD.decode(data.as_bytes()))
+        .ok()?;
+
+    let decoded = String::from_utf8_lossy(&bytes).into_owned();
+    if decoded.is_empty() {
+        return None;
+    }
+    Some(strip_confusable_chars(&decoded))
+}
+
 pub fn extract_body(payload: &Value) -> Option<String> {
     let mime = payload
         .get("mimeType")
         .and_then(Value::as_str)
-        .unwrap_or_default();
-    let body_data = payload
-        .get("body")
-        .and_then(|b| b.get("data"))
-        .and_then(Value::as_str);
+        .unwrap_or_default()
+        .to_ascii_lowercase();
 
-    if let Some(data) = body_data {
-        let decoded = decode_gmail_base64(data)?;
-        let cleaned = strip_confusable_chars(&decoded);
-        if mime.eq_ignore_ascii_case("text/html") {
-            return Some(cleaned);
+    if mime == "text/html" {
+        if let Some(text) = decode_part(payload) {
+            return Some(text);
         }
-        if mime.eq_ignore_ascii_case("text/plain") {
-            return Some(format!("<pre>{}</pre>", cleaned));
+    }
+    if mime == "text/plain" {
+        if let Some(text) = decode_part(payload) {
+            return Some(format!("<pre>{}</pre>", text));
         }
     }
 
-    if let Some(parts) = payload.get("parts").and_then(Value::as_array) {
+    let parts = match payload.get("parts").and_then(Value::as_array) {
+        Some(p) => p,
+        None => return None,
+    };
+
+    if mime == "multipart/alternative" {
+        let mut html_result: Option<String> = None;
+        let mut plain_result: Option<String> = None;
+
         for part in parts {
-            if let Some(found) = extract_body(part) {
+            let part_mime = part
+                .get("mimeType")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_ascii_lowercase();
+
+
+            if part_mime == "text/html" && html_result.is_none() {
+                let decoded = decode_part(part);
+                html_result = decoded;
+            } else if part_mime == "text/plain" && plain_result.is_none() {
+                if let Some(text) = decode_part(part) {
+                    plain_result = Some(format!("<pre>{}</pre>", text));
+                }
+            } else if part_mime.starts_with("multipart/") {
+                if let Some(nested) = extract_body(part) {
+                    if html_result.is_none() {
+                        html_result = Some(nested);
+                    }
+                }
+            }
+        }
+
+        return html_result.or(plain_result);
+    }
+
+    let mut plain_fallback: Option<String> = None;
+    for part in parts {
+        if let Some(found) = extract_body(part) {
+            if !found.trim_start().starts_with("<pre>") {
                 return Some(found);
+            }
+            if plain_fallback.is_none() {
+                plain_fallback = Some(found);
             }
         }
     }
+    return plain_fallback;
 
     None
 }

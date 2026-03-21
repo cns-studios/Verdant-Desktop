@@ -86,8 +86,9 @@ export function renderShell() {
             <input type="text" placeholder="Search mail…" id="search-input">
           </div>
           <div class="filter-chips">
-            <div class="chip active" data-filter="Important">All</div>
-            <div class="chip" data-filter="Important">Unread</div>
+            <div class="chip active" data-filter="Important">Important</div>
+            <div class="chip" data-filter="All">All</div>
+            <div class="chip" data-filter="Unread">Unread</div>
             <div class="chip" data-filter="Attachments">Attachments</div>
           </div>
         </div>

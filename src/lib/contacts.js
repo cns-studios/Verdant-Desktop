@@ -1,9 +1,57 @@
+import { Store } from "@tauri-apps/plugin-store";
 import { sanitizeUnicodeNoise } from "./format.js";
 
-const CONTACTS_STORAGE_KEY = "verdant.contacts";
+const STORE_FILE = "verdant.contacts.json";
+const STORE_KEY = "contacts";
 const MAX_CONTACTS = 1200;
 
-export let contactsByEmail = loadContacts();
+let _store = null;
+
+async function getStore() {
+  if (!_store) {
+    _store = await Store.load(STORE_FILE);
+  }
+  return _store;
+}
+
+
+export let contactsByEmail = new Map();
+let _loaded = false;
+
+export async function ensureContactsLoaded() {
+  if (_loaded) return;
+  _loaded = true;
+  try {
+    const store = await getStore();
+    const raw = await store.get(STORE_KEY);
+    if (!Array.isArray(raw)) return;
+    for (const item of raw) {
+      const email = normalizeEmailAddress(item?.email || "");
+      if (!email) continue;
+      contactsByEmail.set(email, {
+        email,
+        name: sanitizeUnicodeNoise(item?.name || ""),
+        updatedAt: Number(item?.updatedAt || 0) || Date.now(),
+      });
+      if (contactsByEmail.size >= MAX_CONTACTS) break;
+    }
+  } catch (err) {
+    console.warn("contacts: failed to load from store", err);
+  }
+}
+
+async function persistContacts() {
+  try {
+    const store = await getStore();
+    const list = Array.from(contactsByEmail.values())
+      .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
+      .slice(0, MAX_CONTACTS);
+    await store.set(STORE_KEY, list);
+    await store.save();
+  } catch (err) {
+    console.warn("contacts: failed to persist", err);
+  }
+}
 
 export function normalizeEmailAddress(input) {
   const value = sanitizeUnicodeNoise(input || "").toLowerCase();
@@ -34,40 +82,6 @@ export function parseContactsFromHeader(headerValue) {
     .filter(Boolean);
 }
 
-function loadContacts() {
-  try {
-    const raw = localStorage.getItem(CONTACTS_STORAGE_KEY);
-    if (!raw) return new Map();
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return new Map();
-
-    const map = new Map();
-    for (const item of parsed) {
-      const email = normalizeEmailAddress(item?.email || "");
-      if (!email) continue;
-      map.set(email, {
-        email,
-        name: sanitizeUnicodeNoise(item?.name || ""),
-        updatedAt: Number(item?.updatedAt || 0) || Date.now(),
-      });
-      if (map.size >= MAX_CONTACTS) break;
-    }
-    return map;
-  } catch {
-    return new Map();
-  }
-}
-
-function persistContacts() {
-  try {
-    const list = Array.from(contactsByEmail.values())
-      .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
-      .slice(0, MAX_CONTACTS);
-    localStorage.setItem(CONTACTS_STORAGE_KEY, JSON.stringify(list));
-  } catch {
-  }
-}
-
 export function upsertContact(rawEmail, rawName = "") {
   const email = normalizeEmailAddress(rawEmail);
   if (!email) return;
@@ -89,7 +103,7 @@ export function upsertContact(rawEmail, rawName = "") {
     overflow.slice(0, removeCount).forEach((item) => contactsByEmail.delete(item.email));
   }
 
-  persistContacts();
+  persistContacts().catch((e) => console.warn("contacts: persist failed", e));
 }
 
 export function extractContactsFromEmailRecord(email) {
