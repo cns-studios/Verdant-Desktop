@@ -26,6 +26,12 @@ import {
   updatePrefs,
 } from "./ui/settings.js";
 import { checkForUpdates, downloadLatestUpdate } from "./api.js";
+import { getInboxThreads } from "./api.js";
+import {
+  renderThreadList, bindThreadActions,
+  getSelectedThreadId, clearSelectedThread,
+} from "./ui/thread.js";
+
 
 let currentMailbox = "INBOX";
 let currentEmails = [];
@@ -339,15 +345,25 @@ async function loadLocalMailbox(mailbox, animate = false) {
   const mailboxChanged = currentMailbox !== mailbox;
   if (mailboxChanged) {
     selectedEmail = null;
+    clearSelectedThread();
     isDeepSearchActive = false;
   }
   currentMailbox = mailbox;
-  currentEmails = await getEmails(mailbox);
-  ingestContactsFromEmails(currentEmails);
-  renderEmailList(animate);
+
+  if (mailbox === "INBOX") {
+    const threads = await getInboxThreads();
+    ingestContactsFromEmails([]);
+    renderThreadList(threads, activeFilter, searchQuery);
+  } else {
+    currentEmails = await getEmails(mailbox);
+    ingestContactsFromEmails(currentEmails);
+    renderEmailList(animate);
+  }
+
   refreshAppHeaderSubtitle(currentMailbox, isComposeOpen, isSettingsOpen);
   await refreshCounts();
 }
+
 
 async function openMailbox(mailbox, animate = false) {
   await loadLocalMailbox(mailbox, animate);
@@ -359,11 +375,18 @@ async function openMailbox(mailbox, animate = false) {
 
 function onSynced(mailbox, latestEmails) {
   if (currentMailbox === mailbox) {
-    currentEmails = latestEmails;
-    renderEmailList(false);
+    if (mailbox === "INBOX") {
+      getInboxThreads().then(threads => {
+        renderThreadList(threads, activeFilter, searchQuery);
+      }).catch(console.error);
+    } else {
+      currentEmails = latestEmails;
+      renderEmailList(false);
+    }
     refreshCounts().catch(console.error);
   }
 }
+
 
 async function refreshAfterAction() {
   await loadLocalMailbox(currentMailbox, false);
@@ -457,7 +480,15 @@ function bindSearch() {
   input.addEventListener("input", () => {
     searchQuery = input.value || "";
     if (!searchQuery.trim()) isDeepSearchActive = false;
-    renderEmailList(false);
+
+    if (currentMailbox === "INBOX") {
+      getInboxThreads().then(threads => {
+        renderThreadList(threads, activeFilter, searchQuery);
+      }).catch(console.error);
+    } else {
+      renderEmailList(false);
+    }
+
     updateDeepButtonVisibility();
   });
 
@@ -470,12 +501,19 @@ function bindFilterChips() {
     chip.onclick = () => {
       chips.forEach((c) => c.classList.remove("active"));
       chip.classList.add("active");
-      // Use data-filter attribute exclusively — never fall back to text content
       activeFilter = chip.dataset.filter || "All";
-      renderEmailList(false);
+
+      if (currentMailbox === "INBOX") {
+        getInboxThreads().then(threads => {
+          renderThreadList(threads, activeFilter, searchQuery);
+        }).catch(console.error);
+      } else {
+        renderEmailList(false);
+      }
     };
   });
 }
+
 
 function bindHotkeys() {
   document.addEventListener("keydown", async (event) => {
@@ -567,6 +605,11 @@ async function initializeConnectedUI() {
   bindComposeSend(async () => { await openMailbox(currentMailbox, false); });
   bindComposeDraftSave(async () => { await openMailbox(currentMailbox, false); });
   bindHotkeys();
+  bindThreadActions(
+    refreshAfterAction,
+    () => refreshCounts().catch(console.error)
+  );
+
 
   const profile = await getUserProfile();
   setUserProfile(profile);

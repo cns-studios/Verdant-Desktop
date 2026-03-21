@@ -26,3 +26,7 @@ export const downloadAttachment = (emailId, attachmentId, filename, contentType)
 
 export const checkForUpdates = (channel) => invoke("check_for_updates", { channel });
 export const downloadLatestUpdate = (channel) => invoke("download_latest_update", { channel });
+
+export const getInboxThreads = () => invoke("get_inbox_threads");
+export const getThreadMessages = (threadId) => invoke("get_thread_messages", { threadId });
+export const markThreadRead = (threadId) => invoke("mark_thread_read", { threadId });

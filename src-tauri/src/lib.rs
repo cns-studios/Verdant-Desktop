@@ -67,6 +67,9 @@ pub fn run() {
             commands::updater::check_for_updates,
             commands::updater::download_latest_update,
             commands::updater::install_and_relaunch,
+            commands::mail::get_inbox_threads,
+            commands::mail::get_thread_messages,
+            commands::mail::mark_thread_read,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

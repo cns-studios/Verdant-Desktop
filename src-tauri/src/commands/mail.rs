@@ -610,3 +610,151 @@ pub async fn clear_local_data(state: State<'_, DbState>) -> Result<(), String> {
     clear_emails(&conn).map_err(|e| e.to_string())?;
     Ok(())
 }
+
+#[derive(serde::Serialize)]
+pub struct ThreadSummary {
+    pub thread_id: String,
+    pub subject: String,
+    pub participants: String,
+    pub snippet: String,
+    pub latest_ts: i64,
+    pub latest_date: String,
+    pub message_count: i64,
+    pub unread_count: i64,
+    pub is_read: bool,
+    pub starred: bool,
+    pub has_attachments: bool,
+    pub labels: String,
+}
+
+#[tauri::command]
+pub async fn get_inbox_threads(
+    state: State<'_, DbState>,
+) -> Result<Vec<ThreadSummary>, String> {
+    let conn = state.conn.lock().await;
+
+    let sql = "
+        SELECT
+            e.thread_id,
+            latest.subject,
+            latest.snippet,
+            latest.date,
+            latest.labels,
+            COUNT(e.id)                          AS message_count,
+            SUM(CASE WHEN e.is_read = 0 THEN 1 ELSE 0 END) AS unread_count,
+            MAX(e.internal_ts)                   AS latest_ts,
+            MAX(e.starred)                       AS any_starred,
+            MAX(e.has_attachments)               AS any_attachments,
+            -- Collect unique senders as a comma-separated list
+            GROUP_CONCAT(DISTINCT e.sender)      AS all_senders
+        FROM emails e
+        -- Join to get subject/snippet/date from the latest message
+        INNER JOIN emails latest
+            ON latest.id = (
+                SELECT id FROM emails
+                WHERE thread_id = e.thread_id
+                  AND mailbox = 'INBOX'
+                ORDER BY internal_ts DESC
+                LIMIT 1
+            )
+        WHERE e.mailbox = 'INBOX'
+        GROUP BY e.thread_id
+        ORDER BY latest_ts DESC
+        LIMIT 500
+    ";
+
+    let mut stmt = conn.prepare(sql).map_err(|e| e.to_string())?;
+
+    let threads = stmt
+        .query_map([], |row| {
+            let thread_id: String = row.get(0)?;
+            let subject: String = row.get(1)?;
+            let snippet: String = row.get(2)?;
+            let latest_date: String = row.get(3)?;
+            let labels: String = row.get(4)?;
+            let message_count: i64 = row.get(5)?;
+            let unread_count: i64 = row.get(6)?;
+            let latest_ts: i64 = row.get(7)?;
+            let any_starred: i64 = row.get(8)?;
+            let any_attachments: i64 = row.get(9)?;
+            let all_senders: String = row.get(10).unwrap_or_default();
+
+            Ok(ThreadSummary {
+                thread_id,
+                subject,
+                snippet,
+                latest_date,
+                labels,
+                message_count,
+                unread_count,
+                latest_ts,
+                starred: any_starred != 0,
+                has_attachments: any_attachments != 0,
+                is_read: unread_count == 0,
+                participants: all_senders,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .filter_map(Result::ok)
+        .collect();
+
+    Ok(threads)
+}
+
+#[tauri::command]
+pub async fn get_thread_messages(
+    state: State<'_, DbState>,
+    thread_id: String,
+) -> Result<Vec<crate::db::Email>, String> {
+    let conn = state.conn.lock().await;
+
+    let mut stmt = conn.prepare(
+        "SELECT id, draft_id, thread_id, subject, sender, to_recipients, cc_recipients,
+                snippet, body_html, attachments_json, has_attachments, date, is_read,
+                starred, mailbox, labels, internal_ts
+         FROM emails
+         WHERE thread_id = ?1
+         ORDER BY internal_ts ASC, rowid ASC",
+    ).map_err(|e| e.to_string())?;
+
+    let emails = stmt
+        .query_map([thread_id.as_str()], |row| {
+            Ok(crate::db::Email {
+                id: row.get(0)?,
+                draft_id: row.get(1)?,
+                thread_id: row.get(2)?,
+                subject: row.get(3)?,
+                sender: row.get(4)?,
+                to_recipients: row.get(5)?,
+                cc_recipients: row.get(6)?,
+                snippet: row.get(7)?,
+                body_html: row.get(8)?,
+                attachments_json: row.get(9)?,
+                has_attachments: row.get::<_, i32>(10)? != 0,
+                date: row.get(11)?,
+                is_read: row.get::<_, i32>(12)? != 0,
+                starred: row.get::<_, i32>(13)? != 0,
+                mailbox: row.get(14)?,
+                labels: row.get(15)?,
+                internal_ts: row.get(16)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .filter_map(Result::ok)
+        .collect();
+
+    Ok(emails)
+}
+
+#[tauri::command]
+pub async fn mark_thread_read(
+    state: State<'_, DbState>,
+    thread_id: String,
+) -> Result<(), String> {
+    let conn = state.conn.lock().await;
+    conn.execute(
+        "UPDATE emails SET is_read = 1 WHERE thread_id = ?1",
+        [thread_id.as_str()],
+    ).map_err(|e| e.to_string())?;
+    Ok(())
+}

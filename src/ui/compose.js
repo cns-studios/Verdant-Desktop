@@ -12,6 +12,7 @@ import {
 export let composeAttachments = [];
 export let composeSendMode = "plain";
 export let composeDraftId = null;
+let _suppressNextReset = false;
 
 const composeRecipients = { to: [], cc: [] };
 const recipientSuggestState = {
@@ -65,6 +66,132 @@ function recipientFieldNodes(field) {
     suggest: document.getElementById(`compose-${field}-suggest`),
   };
 }
+
+export function openComposeForReply(email) {
+  if (!email) return;
+
+  
+  setComposeRecipientsFromHeader("to", email.sender || "");
+  setComposeRecipientsFromHeader("cc", "");
+
+  const subjectInput = document.getElementById("compose-subject");
+  const bodyInput = document.getElementById("compose-body");
+
+  _suppressNextReset = true;
+  
+  const rawSubject = email.subject || "";
+  const reSubject = /^re:/i.test(rawSubject.trim())
+    ? rawSubject
+    : `Re: ${rawSubject}`;
+
+  if (subjectInput) subjectInput.value = reSubject;
+
+  
+  const quotedHtml = buildQuotedHtml(email);
+  if (bodyInput) {
+    
+    bodyInput.innerHTML = `<div><br></div>${quotedHtml}`;
+    
+    const sel = window.getSelection();
+    const range = document.createRange();
+    const firstDiv = bodyInput.querySelector("div");
+    if (firstDiv && sel) {
+      range.setStart(firstDiv, 0);
+      range.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(range);
+    }
+  }
+
+  composeSendMode = "html";
+  composeDraftId = null;
+
+  openCompose();
+  bodyInput?.focus();
+}
+
+export function openComposeForForward(email) {
+  if (!email) return;
+
+  
+  setComposeRecipientsFromHeader("to", "");
+  setComposeRecipientsFromHeader("cc", "");
+
+  const subjectInput = document.getElementById("compose-subject");
+  const bodyInput = document.getElementById("compose-body");
+
+  _suppressNextReset = true;
+  
+  const rawSubject = email.subject || "";
+  const fwdSubject = /^fwd:/i.test(rawSubject.trim())
+    ? rawSubject
+    : `Fwd: ${rawSubject}`;
+
+  if (subjectInput) subjectInput.value = fwdSubject;
+
+  
+  const fwdHtml = buildForwardHtml(email);
+  if (bodyInput) {
+    bodyInput.innerHTML = `<div><br></div>${fwdHtml}`;
+    const sel = window.getSelection();
+    const range = document.createRange();
+    const firstDiv = bodyInput.querySelector("div");
+    if (firstDiv && sel) {
+      range.setStart(firstDiv, 0);
+      range.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(range);
+    }
+  }
+
+  composeSendMode = "html";
+  composeDraftId = null;
+
+  openCompose();
+  
+  document.getElementById("compose-to")?.focus();
+}
+
+function buildQuotedHtml(email) {
+  const sender = escapeHtml(sanitizeUnicodeNoise(email.sender || "Unknown"));
+  const date = escapeHtml(email.date || "");
+  const originalHtml = email.body_html || `<pre>${escapeHtml(email.snippet || "")}</pre>`;
+
+  return `
+    <div style="border-left: 3px solid #c8d5c4; padding-left: 12px; margin-top: 16px; color: #4a4d45;">
+      <div style="font-size: 12px; color: #8a8d84; margin-bottom: 8px;">
+        On ${date}, ${sender} wrote:
+      </div>
+      <div style="font-size: 13px;">
+        ${originalHtml}
+      </div>
+    </div>
+  `;
+}
+
+function buildForwardHtml(email) {
+  const sender = escapeHtml(sanitizeUnicodeNoise(email.sender || "Unknown"));
+  const date = escapeHtml(email.date || "");
+  const to = escapeHtml(sanitizeUnicodeNoise(email.to_recipients || ""));
+  const subject = escapeHtml(sanitizeUnicodeNoise(email.subject || ""));
+  const originalHtml = email.body_html || `<pre>${escapeHtml(email.snippet || "")}</pre>`;
+
+  return `
+    <div style="border-left: 3px solid #c8d5c4; padding-left: 12px; margin-top: 16px; color: #4a4d45;">
+      <div style="font-size: 12px; color: #8a8d84; margin-bottom: 8px; line-height: 1.6;">
+        ———— Forwarded message ————<br>
+        From: ${sender}<br>
+        Date: ${date}<br>
+        Subject: ${subject}<br>
+        To: ${to}
+      </div>
+      <div style="font-size: 13px;">
+        ${originalHtml}
+      </div>
+    </div>
+  `;
+}
+
 
 function recipientLabel(contact) {
   const name = sanitizeUnicodeNoise(contact?.name || "");
@@ -461,7 +588,13 @@ export function bindComposeAttachments() {
     renderComposeAttachments();
   });
 
-  window.addEventListener("verdant-compose-opened", () => { if (!composeDraftId) resetComposeState(); });
+  window.addEventListener("verdant-compose-opened", () => {
+    if (_suppressNextReset) {
+      _suppressNextReset = false;
+      return;
+    }
+    if (!composeDraftId) resetComposeState();
+  });
   window.addEventListener("verdant-compose-closed", () => resetComposeState());
 }
 

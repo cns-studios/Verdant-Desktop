@@ -84,6 +84,253 @@ export function ensureStyles() {
     .compose-maximized .modal-body { height: calc(100% - 190px); }
     #compose-max-btn { display:flex; align-items:center; justify-content:center; }
     #compose-max-btn svg { width:16px; height:16px; }
+    .thread-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-left: 5px;
+    padding: 0 5px;
+    height: 16px;
+    border-radius: 999px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    font: 500 10px 'DM Sans', sans-serif;
+    color: var(--text-muted);
+    vertical-align: middle;
+  }
+  .thread-loading {
+    padding: 40px 32px;
+    font: 400 13px 'DM Sans', sans-serif;
+    color: var(--text-muted);
+  }
+  .thread-participant-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 0 0 16px 0;
+    margin-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  .thread-participant-label {
+    font: 400 13px 'DM Sans', sans-serif;
+    color: var(--text-mid);
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .thread-message-total {
+    font: 400 12px 'DM Sans', sans-serif;
+    color: var(--text-muted);
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .thread-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .thread-bubble {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    background: var(--white);
+    transition: border-color 0.12s;
+  }
+  .thread-bubble:hover {
+    border-color: var(--green-muted);
+  }
+  .thread-bubble-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.1s;
+  }
+  .thread-bubble-header:hover {
+    background: var(--surface);
+  }
+  .thread-bubble-avatar {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font: 600 10px 'DM Sans', sans-serif;
+    color: #fff;
+    background: linear-gradient(135deg, var(--green-mid), var(--green-light));
+    overflow: hidden;
+  }
+  .thread-bubble-avatar img {
+    width: 100%; height: 100%; object-fit: cover; display: block;
+  }
+  .thread-bubble-avatar.has-image {
+    background: var(--surface2);
+  }
+  .thread-bubble-meta-collapsed {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+    overflow: hidden;
+  }
+  .thread-bubble-sender {
+    font: 500 13px 'DM Sans', sans-serif;
+    color: var(--text);
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .thread-bubble-preview {
+    font: 400 13px 'DM Sans', sans-serif;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex: 1;
+  }
+  .thread-bubble-date {
+    font: 400 11px 'DM Sans', sans-serif;
+    color: var(--text-muted);
+    white-space: nowrap;
+    flex-shrink: 0;
+    font-variant-numeric: tabular-nums;
+  }
+  .thread-bubble-attach-icon {
+    font-size: 12px;
+    flex-shrink: 0;
+  }
+  .thread-bubble-meta-expanded {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+  .thread-bubble-to {
+    font: 400 11px 'DM Sans', sans-serif;
+    color: var(--text-muted);
+  }
+  .thread-bubble-body {
+    padding: 4px 16px 16px 54px; /* 54px = avatar width + gap */
+    border-top: 1px solid var(--surface2);
+  }
+  .thread-bubble-content {
+    font-size: 13.5px;
+    line-height: 1.7;
+    color: var(--text-mid);
+    max-width: 580px;
+    overflow-x: auto;
+  }
+  .thread-bubble-content p { margin-bottom: 12px; }
+  .thread-bubble-content p:last-child { margin-bottom: 0; }
+  .thread-bubble-content pre {
+    white-space: pre-wrap;
+    word-break: break-word;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 12px;
+  }
+  .thread-bubble-content img {
+    max-width: 100%;
+    height: auto;
+  }
+  .thread-bubble-content a {
+    color: var(--green);
+  }
+  .thread-bubble-content table {
+    max-width: 100%;
+    overflow-x: auto;
+    display: block;
+  }
+  .thread-bubble-actions {
+    padding: 10px 16px 14px 54px;
+    border-top: 1px solid var(--surface2);
+  }
+  .thread-reply-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 14px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface2);
+    color: var(--text-mid);
+    font: 500 12px 'DM Sans', sans-serif;
+    cursor: pointer;
+    transition: all 0.12s;
+  }
+  .thread-reply-btn:hover {
+    background: var(--green-pale);
+    border-color: var(--green-muted);
+    color: var(--green);
+  }
+  .thread-bubble-attachments {
+    margin-top: 14px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface);
+    padding: 10px;
+    max-width: 420px;
+  }
+  .thread-attachments-label {
+    font: 600 11px 'DM Sans', sans-serif;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
+  }
+  .thread-attachment-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 6px 8px;
+    border: 1px solid var(--border);
+    background: var(--white);
+    border-radius: 6px;
+    margin-bottom: 4px;
+  }
+  .thread-attachment-item:last-child { margin-bottom: 0; }
+  .thread-attachment-name {
+    font: 400 12px 'DM Sans', sans-serif;
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+  }
+  .thread-attachment-dl {
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    color: var(--text);
+    border-radius: 6px;
+    padding: 4px 8px;
+    font: 500 11px 'DM Sans', sans-serif;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .thread-attachment-dl:hover {
+    background: var(--green-pale);
+    border-color: var(--green-muted);
+    color: var(--green);
+  }
+  .thread-attachment-dl:disabled { opacity: 0.6; cursor: default; }
+  .thread-bubble.collapsed {
+    background: var(--surface);
+  }
+  .thread-bubble.expanded {
+    background: var(--white);
+    border-color: var(--green-muted);
+  }
   `;
   document.head.appendChild(style);
 }
