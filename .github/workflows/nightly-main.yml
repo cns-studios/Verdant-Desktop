@@ -116,6 +116,9 @@ jobs:
             mv "$f" "${f%.pkg.tar.zst}.pacman"
           done
 
+      - name: Check Binary Type
+        run: file src-tauri/target/release/Verdant-Desktop
+        
       - name: Collect Linux Artifacts
         run: |
           mkdir -p out/linux
