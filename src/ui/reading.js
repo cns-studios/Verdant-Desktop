@@ -51,10 +51,15 @@ export function applySenderAvatar(container, sender, mailbox = "") {
   let idx = 0;
 
   img.onload = () => {
-    container.classList.add("has-image");
-    container.textContent = "";
-    container.innerHTML = "";
-    container.appendChild(img);
+      if (img.naturalWidth <= 16 && img.naturalHeight <= 16) {
+          idx += 1;
+          if (idx < urls.length) { img.src = urls[idx]; return; }
+          return;
+      }
+      container.classList.add("has-image");
+      container.textContent = "";
+      container.innerHTML = "";
+      container.appendChild(img);
   };
 
   img.onerror = () => {
