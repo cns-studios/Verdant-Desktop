@@ -10,8 +10,8 @@ use semver::Version;
 use std::env;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
-use tauri::State;
 use tokio::sync::Mutex;
+use tauri::{Manager, State};
 
 struct DbState {
     conn: Mutex<Connection>,
@@ -1584,15 +1584,22 @@ async fn auth_status(state: State<'_, DbState>) -> Result<AuthStatus, String> {
 pub fn run() {
     let _ = dotenvy::from_filename("../.env").or_else(|_| dotenvy::from_filename(".env"));
 
-    let conn = Connection::open("emails.db").expect("Failed to open DB");
-    init_db(&conn).expect("Failed to init DB");
-
     tauri::Builder::default()
-        .manage(DbState {
-            conn: Mutex::new(conn),
-            token: Mutex::new(None),
-        })
         .setup(|app| {
+            let data_dir = app.path().app_data_dir()
+                .expect("Failed to resolve app data dir");
+            std::fs::create_dir_all(&data_dir)
+                .expect("Failed to create app data dir");
+            let db_path = data_dir.join("emails.db");
+
+            let conn = Connection::open(&db_path).expect("Failed to open DB");
+            init_db(&conn).expect("Failed to init DB");
+
+            app.manage(DbState {
+                conn: Mutex::new(conn),
+                token: Mutex::new(None),
+            });
+
             if cfg!(debug_assertions) {
                 app.handle().plugin(
                     tauri_plugin_log::Builder::default()
