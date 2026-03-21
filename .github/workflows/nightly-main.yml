@@ -61,6 +61,56 @@ jobs:
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
         run: npm run tauri build -- --bundles deb,rpm,appimage
 
+      - name: Build Pacman Package
+        run: |
+          set -eux
+          VERSION=$(node -p "JSON.parse(require('fs').readFileSync('src-tauri/tauri.conf.json','utf8')).version")
+          APPIMAGE=$(ls src-tauri/target/release/bundle/appimage/*.AppImage | head -n 1)
+          mkdir -p out/archpkg
+          cp "$APPIMAGE" out/archpkg/verdant.AppImage
+
+          cat > out/archpkg/PKGBUILD << EOF
+          pkgname=verdant-desktop-bin
+          pkgver=${VERSION}
+          pkgrel=1
+          pkgdesc="Verdant desktop mail client"
+          arch=('x86_64')
+          url="https://github.com/cns-studios/verdant_frontend"
+          license=('custom')
+          depends=('gtk3' 'webkit2gtk-4.1' 'libayatana-appindicator')
+          source=('verdant.AppImage')
+          sha256sums=('SKIP')
+
+          package() {
+            install -Dm755 "\$srcdir/verdant.AppImage" "\$pkgdir/opt/verdant/verdant.AppImage"
+            install -d "\$pkgdir/usr/bin"
+            install -d "\$pkgdir/usr/share/applications"
+            printf '%s\n' '#!/bin/sh' 'exec /opt/verdant/verdant.AppImage "\$@"' > "\$pkgdir/usr/bin/verdant"
+            chmod 755 "\$pkgdir/usr/bin/verdant"
+            cat > "\$pkgdir/usr/share/applications/verdant.desktop" << DESKTOP
+          [Desktop Entry]
+          Type=Application
+          Name=Verdant
+          Exec=verdant
+          Terminal=false
+          Categories=Network;Email;
+          DESKTOP
+          }
+          EOF
+
+          docker run --rm \
+            -v "$PWD/out/archpkg:/work" \
+            archlinux:latest bash -lc '
+              set -eux
+              pacman -Sy --noconfirm --needed base-devel
+              useradd -m builder
+              chown -R builder:builder /work
+              su builder -c "cd /work && makepkg -f --nodeps --noconfirm"
+            '
+
+          mkdir -p out/linux
+          cp out/archpkg/*.pkg.tar.zst out/linux/
+
       - name: Collect Linux Artifacts
         run: |
           mkdir -p out/linux
@@ -132,7 +182,7 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        
+
       - name: Download Build Artifacts
         uses: actions/download-artifact@v4
         with:
@@ -159,6 +209,7 @@ jobs:
             release-assets/*.deb
             release-assets/*.rpm
             release-assets/*.AppImage
+            release-assets/*.pkg.tar.zst
             release-assets/*.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
