@@ -7,5 +7,5 @@ If you want to contribute, please visit `BUGS.md` to resolve pending Bugs. Featu
 ## ToDo's
 
 - [x] CI Pipeline (GH Actions)
-- [ ] Other SMTP Support (Currently Gmail only)
+- [x] Other SMTP Support (Currently Gmail only)
 - [ ] Performance testing

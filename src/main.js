@@ -257,17 +257,19 @@ async function openMailbox(mailbox, animate = false) {
 }
 
 function onSynced(mailbox, latestEmails) {
-    if (currentMailbox === mailbox) {
-        if (mailbox === "INBOX") {
-            getInboxThreads().then(threads => {
-                renderThreadList(threads, activeFilter, searchQuery);
-            }).catch(console.error);
-        } else {
-            currentEmails = latestEmails;
-            renderEmailList(false);
-        }
-        refreshCounts().catch(console.error);
+  if (currentMailbox === mailbox) {
+    if (mailbox === "INBOX") {
+      setTimeout(() => {
+        getInboxThreads().then(threads => {
+          renderThreadList(threads, activeFilter, searchQuery);
+        }).catch(console.error);
+      }, 300);
+    } else {
+      currentEmails = latestEmails;
+      renderEmailList(false);
     }
+    refreshCounts().catch(console.error);
+  }
 }
 
 async function refreshAfterAction() {

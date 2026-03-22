@@ -23,6 +23,8 @@ pub async fn send_email(
     mode: String,
     body_html: Option<String>,
     attachments: Vec<EmailAttachment>,
+    in_reply_to: Option<String>,
+    references: Option<String>,
 ) -> Result<(), String> {
     let account_id = get_active_id(&state).await;
     let account = {
@@ -54,8 +56,12 @@ pub async fn send_email(
         let html_c = html.clone();
         let attachments_c = smtp_attachments.clone();
 
+        let in_reply_to_c = in_reply_to.clone();
+        let references_c = references.clone();
+
         tokio::task::spawn_blocking(move || {
-            send_imap_email(&account_clone, &to_c, &cc_c, &subject_c, &body_c, html_c.as_deref(), attachments_c)?;
+            send_imap_email(&account_clone, &to_c, &cc_c, &subject_c, &body_c,
+                html_c.as_deref(), attachments_c, in_reply_to_c, references_c)?;
             crate::imap_sync::append_to_sent(&account_clone, &to_c, &cc_c, &subject_c, &body_c, html_c.as_deref())
         }).await.map_err(|e| e.to_string())??;
 
@@ -105,9 +111,40 @@ pub async fn save_draft(
     };
 
     if account.provider == "imap" {
+        let conn = state.conn.lock().await;
+        let draft_id = draft_id.clone()
+            .filter(|d| !d.trim().is_empty())
+            .unwrap_or_else(|| format!("local-draft-{}", chrono::Utc::now().timestamp_millis()));
         
-        let fake_id = format!("local-draft-{}", chrono::Utc::now().timestamp_millis());
-        return Ok(DraftSaveResult { draft_id: fake_id });
+        let composite_id = format!("{}:draft:{}", account_id, draft_id);
+        let now = chrono::Utc::now();
+        let date_str = now.format("%a, %d %b %Y %H:%M:%S +0000").to_string();
+        let internal_ts = now.timestamp_millis();
+
+        conn.execute(
+            "INSERT INTO emails (id, account_id, draft_id, thread_id, subject, sender, to_recipients, cc_recipients,
+                                snippet, body_html, attachments_json, has_attachments, date, is_read, starred,
+                                mailbox, labels, internal_ts)
+            VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,'[]',0,?11,1,0,'DRAFT','DRAFT',?12)
+            ON CONFLICT(id, account_id) DO UPDATE SET
+                subject = excluded.subject,
+                to_recipients = excluded.to_recipients,
+                cc_recipients = excluded.cc_recipients,
+                body_html = excluded.body_html,
+                snippet = excluded.snippet,
+                date = excluded.date,
+                internal_ts = excluded.internal_ts",
+            rusqlite::params![
+                composite_id, account_id, draft_id, draft_id,
+                subject, body.chars().take(60).collect::<String>(),
+                to, cc,
+                body.chars().take(120).collect::<String>(),
+                body_html.as_deref().unwrap_or(&body),
+                date_str, internal_ts
+            ],
+        ).map_err(|e| e.to_string())?;
+
+        return Ok(DraftSaveResult { draft_id });
     }
 
     
@@ -145,6 +182,23 @@ pub async fn send_existing_draft(
     draft_id: String,
 ) -> Result<(), String> {
     let account_id = get_active_id(&state).await;
+    let is_imap = {
+        let conn = state.conn.lock().await;
+        crate::db::get_account_by_id(&conn, account_id)
+            .ok().flatten()
+            .map(|a| a.provider == "imap")
+            .unwrap_or(false)
+    };
+
+    if is_imap {
+        let conn = state.conn.lock().await;
+        let composite = format!("{}:draft:{}", account_id, draft_id.trim());
+        conn.execute(
+            "DELETE FROM emails WHERE (id=?1 OR draft_id=?2) AND account_id=?3 AND mailbox='DRAFT'",
+            rusqlite::params![composite, draft_id.trim(), account_id],
+        ).map_err(|e| e.to_string())?;
+        return Ok(());
+    }
     let token = ensure_token(&state).await?.access_token;
     let client = reqwest::Client::new();
     let draft_id_clean = draft_id.trim().to_string();

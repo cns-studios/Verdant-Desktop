@@ -212,7 +212,6 @@ pub fn sync_imap_mailbox(
         let body_bytes = msg.body().unwrap_or(b"");
         let min_size = if mailbox_label == "INBOX" { 500 } else { 50 };
         if body_bytes.len() < min_size {
-                std::str::from_utf8(&body_bytes[..body_bytes.len().min(200)]).unwrap_or("(invalid utf8)"));
             continue;
         }
 

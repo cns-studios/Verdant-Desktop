@@ -302,6 +302,18 @@ export function bindReadingActions(getSelected, setSelected, onRefresh, openComp
       }
 
       if (title === t("reading.mark_unread")) {
+        const threadId = getThreadId?.();
+        if (threadId) {
+          const { markThreadRead } = await import("../api.js");
+          const messages = Array.from(document.querySelectorAll(".thread-bubble"))
+            .map(b => b.dataset.messageId).filter(Boolean);
+          for (const id of messages) {
+            await setEmailReadStatus(id, false).catch(() => {});
+          }
+          showToast(t("toast.unread_marked"));
+          await onRefresh();
+          return;
+        }
         if (email) {
           const nextRead = !email.is_read;
           await setEmailReadStatus(email.id, nextRead);

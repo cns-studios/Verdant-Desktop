@@ -22,6 +22,9 @@ const recipientSuggestState = {
 
 let composeRecipientUiBound = false;
 
+export let composeInReplyTo = null;
+export let composeReferences = null;
+
 export function isComposeOpen() {
   return document.getElementById("composeModal")?.classList.contains("open");
 }
@@ -69,8 +72,10 @@ function recipientFieldNodes(field) {
 
 export function openComposeForReply(email) {
   if (!email) return;
+  const rawId = email.id.includes(':') ? email.id.split(':').slice(1).join(':') : email.id;
+  composeInReplyTo = rawId;
+  composeReferences = rawId;
 
-  
   setComposeRecipientsFromHeader("to", email.sender || "");
   setComposeRecipientsFromHeader("cc", "");
 
@@ -465,6 +470,8 @@ export function resetComposeState() {
   hideRecipientSuggestions("to");
   hideRecipientSuggestions("cc");
   renderComposeAttachments();
+  composeInReplyTo = null;
+  composeReferences = null;
 }
 
 function selectionContextNode() {
@@ -625,34 +632,52 @@ export function bindComposeSend(onAfterSend) {
   const sendBtn = document.getElementById("compose-send-btn");
   if (!sendBtn) return;
 
-  sendBtn.addEventListener("click", async () => {
+  const doSend = async () => {
+    if (sendBtn.disabled) return;
     const payload = collectComposePayload();
-    if (!payload.to) { showToast("Recipient is required", "error"); return; }
+    if (!payload.to) { showToast(t("toast.recipient_required"), "error"); return; }
 
-    showToast("Sending mail...");
-    if (composeDraftId) {
-      const saved = await saveDraft({
-        to: payload.to, cc: payload.cc, subject: payload.subject,
-        body: payload.body, mode: composeSendMode,
-        bodyHtml: composeSendMode === "html" ? payload.bodyHtml : null,
-        attachments: composeAttachments, draftId: composeDraftId,
-      });
-      await sendExistingDraft(saved.draft_id || composeDraftId);
-    } else {
-      await sendEmail({
-        to: payload.to, cc: payload.cc, subject: payload.subject,
-        body: payload.body, mode: composeSendMode,
-        bodyHtml: composeSendMode === "html" ? payload.bodyHtml : null,
-        attachments: composeAttachments,
-      });
+    sendBtn.disabled = true;
+    showToast(t("toast.sending"));
+    try {
+      if (composeDraftId) {
+        const saved = await saveDraft({
+          to: payload.to, cc: payload.cc, subject: payload.subject,
+          body: payload.body, mode: composeSendMode,
+          bodyHtml: composeSendMode === "html" ? payload.bodyHtml : null,
+          attachments: composeAttachments, draftId: composeDraftId,
+        });
+        await sendExistingDraft(saved.draft_id || composeDraftId);
+      } else {
+        await sendEmail({
+          to: payload.to, cc: payload.cc, subject: payload.subject,
+          body: payload.body, mode: composeSendMode,
+          bodyHtml: composeSendMode === "html" ? payload.bodyHtml : null,
+          attachments: composeAttachments,
+          inReplyTo: composeInReplyTo || null,
+          references: composeReferences || null,
+        });
+      }
+      parseContactsFromHeader(payload.to).forEach((c) => upsertContact(c.email, c.name));
+      parseContactsFromHeader(payload.cc).forEach((c) => upsertContact(c.email, c.name));
+      showToast(t("toast.sent"));
+      closeCompose();
+      await onAfterSend();
+    } catch (err) {
+      showToast(String(err), "error", 4000);
+    } finally {
+      sendBtn.disabled = false;
     }
+  };
 
-    parseContactsFromHeader(payload.to).forEach((c) => upsertContact(c.email, c.name));
-    parseContactsFromHeader(payload.cc).forEach((c) => upsertContact(c.email, c.name));
+  sendBtn.addEventListener("click", doSend);
 
-    showToast("Email sent");
-    closeCompose();
-    await onAfterSend();
+  document.getElementById("composeModal")?.addEventListener("keydown", (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+      e.preventDefault();
+      e.stopPropagation();
+      doSend();
+    }
   });
 }
 

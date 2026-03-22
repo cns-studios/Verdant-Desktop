@@ -1,9 +1,9 @@
 use crate::crypto::decrypt_password;
 use crate::db::Account;
+use base64::{engine::general_purpose::STANDARD, Engine as _};
 use lettre::{
-    message::{header::ContentType, Attachment, MultiPart, SinglePart},
     transport::smtp::authentication::Credentials,
-    Message, SmtpTransport, Transport,
+    Address, Message, SmtpTransport, Transport,
 };
 
 pub struct SmtpCredentials {
@@ -53,107 +53,123 @@ pub fn send_imap_email(
     body_plain: &str,
     body_html: Option<&str>,
     attachments: Vec<SmtpAttachment>,
+    in_reply_to: Option<String>,
+    references: Option<String>,
 ) -> Result<(), String> {
     let creds = SmtpCredentials::from_account(account)?;
 
-    let from_mailbox = if let Some(name) = &account.display_name {
+    let boundary_alt = "verdant-alt-smtp-001";
+    let boundary_mix = "verdant-mix-smtp-001";
+    let date = chrono::Utc::now().format("%a, %d %b %Y %H:%M:%S +0000").to_string();
+
+    let from_display = if let Some(name) = &account.display_name {
         format!("{} <{}>", name, creds.from_email)
     } else {
         creds.from_email.clone()
+    };
+
+    let mut headers = format!(
+        "From: {}\r\nTo: {}\r\nDate: {}\r\nSubject: {}\r\nMIME-Version: 1.0\r\n",
+        from_display, to, date, subject
+    );
+    if !cc.trim().is_empty() {
+        headers.push_str(&format!("Cc: {}\r\n", cc));
     }
-    .parse::<lettre::message::Mailbox>()
-    .map_err(|e| format!("Invalid from address '{}': {}", creds.from_email, e))?;
-
-    let mut builder = Message::builder()
-        .from(from_mailbox)
-        .subject(subject);
-
-    
-    for addr in to.split(',').map(str::trim).filter(|s| !s.is_empty()) {
-        let mailbox = addr.parse::<lettre::message::Mailbox>()
-            .map_err(|e| format!("Invalid recipient '{}': {}", addr, e))?;
-        builder = builder.to(mailbox);
+    if let Some(irt) = &in_reply_to {
+        if !irt.trim().is_empty() {
+            headers.push_str(&format!("In-Reply-To: {}\r\n", irt));
+        }
     }
-
-    
-    for addr in cc.split(',').map(str::trim).filter(|s| !s.is_empty()) {
-        let mailbox = addr.parse::<lettre::message::Mailbox>()
-            .map_err(|e| format!("Invalid cc '{}': {}", addr, e))?;
-        builder = builder.cc(mailbox);
+    if let Some(refs) = &references {
+        if !refs.trim().is_empty() {
+            headers.push_str(&format!("References: {}\r\n", refs));
+        }
     }
 
-    
-    let message = if attachments.is_empty() {
+    let body = if attachments.is_empty() {
         if let Some(html) = body_html {
-            let multipart = MultiPart::alternative()
-                .singlepart(
-                    SinglePart::builder()
-                        .header(ContentType::TEXT_PLAIN)
-                        .body(body_plain.to_string()),
-                )
-                .singlepart(
-                    SinglePart::builder()
-                        .header(ContentType::TEXT_HTML)
-                        .body(html.to_string()),
-                );
-            builder.multipart(multipart).map_err(|e| e.to_string())?
+            headers.push_str(&format!(
+                "Content-Type: multipart/alternative; boundary=\"{}\"\r\n\r\n",
+                boundary_alt
+            ));
+            format!(
+                "--{b}\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n{plain}\r\n\
+                 --{b}\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n{html}\r\n\
+                 --{b}--\r\n",
+                b = boundary_alt, plain = body_plain, html = html
+            )
         } else {
-            builder
-                .header(ContentType::TEXT_PLAIN)
-                .body(body_plain.to_string())
-                .map_err(|e| e.to_string())?
+            headers.push_str("Content-Type: text/plain; charset=UTF-8\r\n\r\n");
+            format!("{}\r\n", body_plain)
         }
     } else {
         use base64::{engine::general_purpose::STANDARD, Engine as _};
+        headers.push_str(&format!(
+            "Content-Type: multipart/mixed; boundary=\"{}\"\r\n\r\n",
+            boundary_mix
+        ));
+        let mut body_part = format!(
+            "--{b}\r\nContent-Type: multipart/alternative; boundary=\"{ba}\"\r\n\r\n\
+             --{ba}\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n{plain}\r\n",
+            b = boundary_mix, ba = boundary_alt, plain = body_plain
+        );
+        if let Some(html) = body_html {
+            body_part.push_str(&format!(
+                "--{ba}\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n{html}\r\n",
+                ba = boundary_alt, html = html
+            ));
+        }
+        body_part.push_str(&format!("--{}--\r\n", boundary_alt));
 
-        let body_part = if let Some(html) = body_html {
-            MultiPart::alternative()
-                .singlepart(
-                    SinglePart::builder()
-                        .header(ContentType::TEXT_PLAIN)
-                        .body(body_plain.to_string()),
-                )
-                .singlepart(
-                    SinglePart::builder()
-                        .header(ContentType::TEXT_HTML)
-                        .body(html.to_string()),
-                )
-        } else {
-            MultiPart::alternative()
-                .singlepart(
-                    SinglePart::builder()
-                        .header(ContentType::TEXT_PLAIN)
-                        .body(body_plain.to_string()),
-                )
-        };
-
-        let mut mixed = MultiPart::mixed().multipart(body_part);
-
-        for att in attachments {
+        for att in &attachments {
             let bytes = STANDARD.decode(&att.data_base64)
                 .map_err(|e| format!("Attachment decode error: {}", e))?;
-            let ct = att.content_type.parse::<ContentType>()
-                .unwrap_or(ContentType::TEXT_PLAIN);
-            let attachment_part = Attachment::new(att.filename)
-                .body(bytes, ct);
-            mixed = mixed.singlepart(attachment_part);
+            let encoded = STANDARD.encode(&bytes);
+            let ct = if att.content_type.trim().is_empty() {
+                "application/octet-stream"
+            } else {
+                &att.content_type
+            };
+            body_part.push_str(&format!(
+                "--{b}\r\nContent-Type: {ct}; name=\"{name}\"\r\n\
+                 Content-Transfer-Encoding: base64\r\n\
+                 Content-Disposition: attachment; filename=\"{name}\"\r\n\r\n{data}\r\n",
+                b = boundary_mix, ct = ct, name = att.filename, data = encoded
+            ));
         }
-
-        builder.multipart(mixed).map_err(|e| e.to_string())?
+        body_part.push_str(&format!("--{}--\r\n", boundary_mix));
+        body_part
     };
 
-    
+    let raw_message = format!("{}{}", headers, body);
 
-    let smtp_creds = Credentials::new(creds.username, creds.password);
+    let from_addr: Address = creds.from_email.parse()
+        .map_err(|e| format!("Invalid from address: {}", e))?;
+
+    let mut to_addrs: Vec<Address> = Vec::new();
+    for addr in to.split(',').map(str::trim).filter(|s| !s.is_empty()) {
+        let clean = addr.split('<').last().unwrap_or(addr)
+            .trim_matches('>').trim();
+        to_addrs.push(clean.parse().map_err(|e| format!("Invalid to address '{}': {}", clean, e))?);
+    }
+    for addr in cc.split(',').map(str::trim).filter(|s| !s.is_empty()) {
+        let clean = addr.split('<').last().unwrap_or(addr)
+            .trim_matches('>').trim();
+        to_addrs.push(clean.parse().map_err(|e| format!("Invalid cc address '{}': {}", clean, e))?);
+    }
+
+    if to_addrs.is_empty() {
+        return Err("No valid recipients".to_string());
+    }
+
+    let smtp_creds = Credentials::new(creds.username.clone(), creds.password.clone());
     let transport = if creds.smtp_port == 465 {
-        
         SmtpTransport::relay(&creds.smtp_host)
             .map_err(|e| e.to_string())?
             .port(creds.smtp_port)
             .credentials(smtp_creds)
             .build()
     } else {
-        
         SmtpTransport::starttls_relay(&creds.smtp_host)
             .map_err(|e| e.to_string())?
             .port(creds.smtp_port)
@@ -161,6 +177,13 @@ pub fn send_imap_email(
             .build()
     };
 
-    transport.send(&message).map_err(|e| e.to_string())?;
+    transport.send_raw(
+        &lettre::address::Envelope::new(
+            Some(from_addr),
+            to_addrs,
+        ).map_err(|e| e.to_string())?,
+        raw_message.as_bytes(),
+    ).map_err(|e| e.to_string())?;
+
     Ok(())
 }

@@ -1,1 +1,0 @@
-- Formatting issues for some mails

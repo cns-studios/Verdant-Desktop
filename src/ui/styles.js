@@ -80,8 +80,9 @@ export function ensureStyles() {
     body.reading-pane-hidden .email-list-pane { flex:1 1 auto !important; width:auto !important; min-width:0 !important; max-width:none !important; border-right:0 !important; }
     .icon-btn.active { background: var(--green-pale); color: var(--green); border:1px solid var(--green-muted); }
     .icon-btn.danger:hover { background:#f5dede !important; color:#8a2e2e !important; border:1px solid #d79f9f; }
-    .compose-maximized { width:min(1100px, 96vw) !important; height:min(90vh, 920px) !important; }
-    .compose-maximized .modal-body { height: calc(100% - 190px); }
+    .compose-maximized { width:min(1100px, 96vw) !important; height:min(90vh, 920px) !important; display:flex !important; flex-direction:column !important; }
+    .compose-maximized .modal-body { flex:1 !important; max-height:none !important; height:auto !important; overflow-y:auto; }
+    .compose-maximized .modal-footer { flex-shrink:0; }
     #compose-max-btn { display:flex; align-items:center; justify-content:center; }
     #compose-max-btn svg { width:16px; height:16px; }
     .thread-count {

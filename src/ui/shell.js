@@ -308,8 +308,7 @@ function injectShellStyles() {
     .email-body-text p:last-child { margin-bottom:0; }
     .modal-overlay { position:fixed; inset:0; background:rgba(30,33,25,0.35); backdrop-filter:blur(4px); display:flex; align-items:flex-end; justify-content:flex-end; padding:24px; z-index:100; opacity:0; pointer-events:none; transition:opacity 0.2s; }
     .modal-overlay.open { opacity:1; pointer-events:all; }
-    .compose-modal { width:480px; background:var(--white); border-radius:14px; box-shadow:var(--shadow-lg), 0 0 0 1px var(--border); display:flex; flex-direction:column; overflow:hidden; transform:translateY(16px) scale(0.98); transition:transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1); }
-    .modal-overlay.open .compose-modal { transform:translateY(0) scale(1); }
+    .compose-modal { width:480px; background:var(--white); border-radius:14px; box-shadow:var(--shadow-lg), 0 0 0 1px var(--border); display:flex; flex-direction:column; overflow:hidden; transform:translateY(16px) scale(0.98); transition:transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1); height:auto; }    .modal-overlay.open .compose-modal { transform:translateY(0) scale(1); }
     .modal-header { padding:14px 18px; background:var(--green); display:flex; align-items:center; justify-content:space-between; }
     .modal-title { font-family:'Fraunces',serif; font-size:14px; font-weight:400; color:white; letter-spacing:-0.2px; }
     .modal-close { width:24px; height:24px; border-radius:6px; border:none; background:rgba(255,255,255,0.15); color:white; cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:16px; line-height:1; transition:background 0.12s; }
@@ -332,8 +331,8 @@ function injectShellStyles() {
     .compose-recipient-option:hover, .compose-recipient-option.active { background:var(--green-pale); }
     .compose-recipient-option-name { font:500 12px 'DM Sans',sans-serif; }
     .compose-recipient-option-email { font:400 11px 'DM Sans',sans-serif; color:var(--text-muted); }
-    .modal-body { margin:4px 18px 0; min-height:140px; }
-    .compose-editor { width:100%; min-height:140px; border:none; background:none; font-family:'DM Sans',sans-serif; font-size:13.5px; color:var(--text); outline:none; line-height:1.65; padding:12px 0; white-space:pre-wrap; word-break:break-word; }
+    .modal-body { margin:4px 18px 0; min-height:140px; flex:1; overflow-y:auto; max-height:340px; }
+    .compose-editor { width:100%; min-height:100px; max-height:320px; overflow-y:auto; border:none; background:none; font-family:'DM Sans',sans-serif; font-size:13.5px; color:var(--text); outline:none; line-height:1.65; padding:12px 0; white-space:pre-wrap; word-break:break-word; }
     .compose-editor:empty::before { content:attr(data-placeholder); color:var(--text-muted); pointer-events:none; }
     .compose-editor h2 { font:500 20px 'Fraunces',serif; color:var(--text); margin:8px 0; }
     .compose-editor blockquote { border-left:3px solid var(--green-light); background:var(--green-pale); margin:8px 0; padding:8px 10px; color:var(--text-mid); }
