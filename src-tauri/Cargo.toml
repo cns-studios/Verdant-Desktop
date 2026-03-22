@@ -1,14 +1,12 @@
 [package]
 name = "Verdant-Desktop"
-version = "1.1.19"
+version = "2.1.0"
 description = "Verdant - a calm mail experience"
 authors = ["cns-studios"]
 license = ""
 repository = ""
 edition = "2021"
 rust-version = "1.77.2"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [lib]
 name = "app_lib"
@@ -36,3 +34,13 @@ pulldown-cmark = "0.12"
 semver = "1"
 tauri-plugin-store = "2"
 tauri-plugin-process = "2"
+
+imap = "2.4"
+native-tls = "0.2"
+mailparse = "0.15"
+lettre = { version = "0.11", default-features = false, features = ["smtp-transport", "native-tls", "builder"] }
+keyring = { version = "2", features = ["linux-secret-service-rt-async-io-crypto-rust"] }
+aes-gcm = "0.10"
+rand = "0.8"
+hex = "0.4"
+chrono = { version = "0.4", features = ["serde"] }

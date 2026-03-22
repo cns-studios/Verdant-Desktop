@@ -1,12 +1,13 @@
+use std::sync::Arc;
 use serde_json::{json, Value};
 use tauri::State;
 
-use crate::db::{clear_emails, Email};
+use crate::db::{clear_account_emails, Email};
 use crate::gmail::{
     collect_attachments, extract_body, header_value, mailbox_from_labels, mailbox_label,
     strip_confusable_chars, AttachmentMeta,
 };
-use crate::state::{ensure_token, DbState};
+use crate::state::{ensure_token, ensure_token_for, DbState, get_active_id};
 
 #[derive(serde::Serialize)]
 pub struct MailboxCounts {
@@ -18,8 +19,11 @@ pub struct MailboxCounts {
     pub archive_total: i64,
 }
 
-pub async fn sync_mailbox_page_internal(
+
+
+pub async fn sync_mailbox_page_internal_for(
     state: &DbState,
+    account_id: i64,
     mailbox: &str,
     page_token: Option<String>,
 ) -> Result<Option<String>, String> {
@@ -28,7 +32,7 @@ pub async fn sync_mailbox_page_internal(
     };
 
     let client = reqwest::Client::new();
-    let token = ensure_token(state).await?.access_token;
+    let token = ensure_token_for(state, account_id).await?.access_token;
 
     let mut list_url = if mailbox == "DRAFT" {
         "https://gmail.googleapis.com/gmail/v1/users/me/drafts?maxResults=50".to_string()
@@ -38,19 +42,14 @@ pub async fn sync_mailbox_page_internal(
             label
         )
     };
-    if let Some(token) = page_token {
-        if !token.trim().is_empty() {
+    if let Some(pt) = page_token {
+        if !pt.trim().is_empty() {
             list_url.push_str("&pageToken=");
-            list_url.push_str(token.trim());
+            list_url.push_str(pt.trim());
         }
     }
-    let res = client
-        .get(list_url)
-        .bearer_auth(&token)
-        .send()
-        .await
-        .map_err(|e| e.to_string())?;
 
+    let res = client.get(&list_url).bearer_auth(&token).send().await.map_err(|e| e.to_string())?;
     if !res.status().is_success() {
         let status = res.status();
         let body = res.text().await.unwrap_or_default();
@@ -58,172 +57,77 @@ pub async fn sync_mailbox_page_internal(
     }
 
     let json = res.json::<Value>().await.map_err(|e| e.to_string())?;
-    let next_page_token = json
-        .get("nextPageToken")
-        .and_then(Value::as_str)
-        .map(str::to_string);
+    let next_page_token = json.get("nextPageToken").and_then(Value::as_str).map(str::to_string);
 
     let message_refs: Vec<(String, Option<String>)> = if mailbox == "DRAFT" {
-        json.get("drafts")
-            .and_then(Value::as_array)
-            .map(|drafts| {
-                drafts
-                    .iter()
-                    .filter_map(|draft| {
-                        let draft_id = draft.get("id").and_then(Value::as_str)?.to_string();
-                        let message_id = draft
-                            .get("message")
-                            .and_then(|m| m.get("id"))
-                            .and_then(Value::as_str)?
-                            .to_string();
-                        Some((message_id, Some(draft_id)))
-                    })
-                    .collect::<Vec<_>>()
-            })
-            .unwrap_or_default()
+        json.get("drafts").and_then(Value::as_array).map(|drafts| {
+            drafts.iter().filter_map(|draft| {
+                let draft_id = draft.get("id").and_then(Value::as_str)?.to_string();
+                let message_id = draft.get("message").and_then(|m| m.get("id")).and_then(Value::as_str)?.to_string();
+                Some((message_id, Some(draft_id)))
+            }).collect::<Vec<_>>()
+        }).unwrap_or_default()
     } else {
-        json.get("messages")
-            .and_then(Value::as_array)
-            .map(|messages| {
-                messages
-                    .iter()
-                    .filter_map(|msg| {
-                        msg.get("id")
-                            .and_then(Value::as_str)
-                            .map(|id| (id.to_string(), None))
-                    })
-                    .collect::<Vec<_>>()
-            })
-            .unwrap_or_default()
+        json.get("messages").and_then(Value::as_array).map(|messages| {
+            messages.iter().filter_map(|msg| {
+                msg.get("id").and_then(Value::as_str).map(|id| (id.to_string(), None))
+            }).collect::<Vec<_>>()
+        }).unwrap_or_default()
     };
 
     for (id, draft_id) in message_refs {
-        if id.is_empty() {
-            continue;
-        }
+        if id.is_empty() { continue; }
 
-        let exists = {
-            let conn = state.conn.lock().await;
-            let count: i64 = conn
-                .query_row("SELECT COUNT(*) FROM emails WHERE id = ?1", [id.as_str()], |r| r.get(0))
-                .unwrap_or(0);
-            count > 0
-        };
+        let composite_id = format!("{}:{}", account_id, id);
 
         let detail_url = if mailbox == "DRAFT" {
-            format!(
-                "https://gmail.googleapis.com/gmail/v1/users/me/drafts/{}?format=full",
-                draft_id.clone().unwrap_or_default()
-            )
+            format!("https://gmail.googleapis.com/gmail/v1/users/me/drafts/{}?format=full", draft_id.clone().unwrap_or_default())
         } else {
-            format!(
-                "https://gmail.googleapis.com/gmail/v1/users/me/messages/{}?format=full",
-                id
-            )
+            format!("https://gmail.googleapis.com/gmail/v1/users/me/messages/{}?format=full", id)
         };
-        let detail = client
-            .get(detail_url)
-            .bearer_auth(&token)
-            .send()
-            .await
-            .map_err(|e| e.to_string())?;
 
-        if !detail.status().is_success() {
-            continue;
-        }
+        let detail = client.get(detail_url).bearer_auth(&token).send().await.map_err(|e| e.to_string())?;
+        if !detail.status().is_success() { continue; }
 
         let raw_detail = detail.json::<Value>().await.map_err(|e| e.to_string())?;
         let detail_json = if mailbox == "DRAFT" {
-            raw_detail
-                .get("message")
-                .cloned()
-                .unwrap_or_else(|| json!({}))
+            raw_detail.get("message").cloned().unwrap_or_else(|| json!({}))
         } else {
             raw_detail.clone()
         };
 
         let resolved_draft_id = if mailbox == "DRAFT" {
-            draft_id.clone().or_else(|| {
-                raw_detail
-                    .get("id")
-                    .and_then(Value::as_str)
-                    .map(str::to_string)
-            })
+            draft_id.clone().or_else(|| raw_detail.get("id").and_then(Value::as_str).map(str::to_string))
         } else {
             None
         };
 
-        let thread_id = detail_json
-            .get("threadId")
-            .and_then(Value::as_str)
-            .unwrap_or_default()
-            .to_string();
+        let thread_id = detail_json.get("threadId").and_then(Value::as_str).unwrap_or_default().to_string();
+        let snippet = strip_confusable_chars(detail_json.get("snippet").and_then(Value::as_str).unwrap_or_default());
 
-        let snippet = strip_confusable_chars(
-            detail_json
-                .get("snippet")
-                .and_then(Value::as_str)
-                .unwrap_or_default(),
-        );
-
-        let headers = detail_json
-            .get("payload")
-            .and_then(|p| p.get("headers"))
-            .and_then(Value::as_array)
-            .cloned()
-            .unwrap_or_default();
-
-        let subject = strip_confusable_chars(
-            &header_value(&headers, "Subject").unwrap_or_else(|| "(No Subject)".to_string()),
-        );
-        let sender = strip_confusable_chars(
-            &header_value(&headers, "From").unwrap_or_else(|| "Unknown Sender".to_string()),
-        );
+        let headers = detail_json.get("payload").and_then(|p| p.get("headers")).and_then(Value::as_array).cloned().unwrap_or_default();
+        let subject = strip_confusable_chars(&header_value(&headers, "Subject").unwrap_or_else(|| "(No Subject)".to_string()));
+        let sender = strip_confusable_chars(&header_value(&headers, "From").unwrap_or_else(|| "Unknown Sender".to_string()));
         let to_recipients = strip_confusable_chars(&header_value(&headers, "To").unwrap_or_default());
         let cc_recipients = strip_confusable_chars(&header_value(&headers, "Cc").unwrap_or_default());
         let date = header_value(&headers, "Date").unwrap_or_else(|| "Unknown Date".to_string());
-        let internal_ts = detail_json
-            .get("internalDate")
-            .and_then(Value::as_str)
-            .and_then(|s| s.parse::<i64>().ok())
-            .unwrap_or(0);
+        let internal_ts = detail_json.get("internalDate").and_then(Value::as_str).and_then(|s| s.parse::<i64>().ok()).unwrap_or(0);
 
-        let (existing_body, existing_attachments) = if exists {
+        let (existing_body, existing_attachments) = {
             let conn = state.conn.lock().await;
-            let body = conn
-                .query_row("SELECT body_html FROM emails WHERE id = ?1", [id.as_str()], |r| r.get::<_, String>(0))
-                .ok();
-            let attachments = conn
-                .query_row(
-                    "SELECT attachments_json FROM emails WHERE id = ?1",
-                    [id.as_str()],
-                    |r| r.get::<_, String>(0),
-                )
-                .ok();
-            (body, attachments)
-        } else {
-            (None, None)
+            let body = conn.query_row("SELECT body_html FROM emails WHERE id = ?1 AND account_id = ?2", [composite_id.as_str(), &account_id.to_string()], |r| r.get::<_, String>(0)).ok();
+            let att = conn.query_row("SELECT attachments_json FROM emails WHERE id = ?1 AND account_id = ?2", [composite_id.as_str(), &account_id.to_string()], |r| r.get::<_, String>(0)).ok();
+            (body, att)
         };
 
-let body_html = detail_json
-    .get("payload")
-    .and_then(extract_body)
-    .or(existing_body)
-    .unwrap_or_else(|| {
-        if sender.contains("groups.google.com") {
-            let payload_debug = detail_json.get("payload")
-                .map(|p| p.to_string())
-                .unwrap_or_default();
-            log::info!("VERDANT_EXTRACT_FAILED: {}", payload_debug);
-        }
-        format!("<pre>{}</pre>", snippet)
-    });
+        let body_html = detail_json.get("payload").and_then(extract_body)
+            .or(existing_body)
+            .unwrap_or_else(|| format!("<pre>{}</pre>", snippet));
 
         let mut attachments: Vec<AttachmentMeta> = Vec::new();
         if let Some(payload) = detail_json.get("payload") {
             collect_attachments(payload, &mut attachments);
         }
-
         let attachments_json = if attachments.is_empty() {
             existing_attachments.unwrap_or_else(|| "[]".to_string())
         } else {
@@ -231,26 +135,18 @@ let body_html = detail_json
         };
         let has_attachments = !attachments_json.trim().is_empty() && attachments_json.trim() != "[]";
 
-        let labels = detail_json
-            .get("labelIds")
-            .and_then(Value::as_array)
-            .map(|a| {
-                a.iter()
-                    .filter_map(Value::as_str)
-                    .collect::<Vec<_>>()
-                    .join(",")
-            })
-            .unwrap_or_default();
-
+        let labels = detail_json.get("labelIds").and_then(Value::as_array).map(|a| {
+            a.iter().filter_map(Value::as_str).collect::<Vec<_>>().join(",")
+        }).unwrap_or_default();
         let is_read = !labels.split(',').any(|l| l == "UNREAD");
 
         let conn = state.conn.lock().await;
         conn.execute(
-                "INSERT INTO emails (id, draft_id, thread_id, subject, sender, to_recipients, cc_recipients, snippet, body_html, attachments_json, has_attachments, date, is_read, mailbox, labels, internal_ts)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)
-             ON CONFLICT(id)
-             DO UPDATE SET
-                     draft_id = excluded.draft_id,
+            "INSERT INTO emails (id, account_id, draft_id, thread_id, subject, sender, to_recipients, cc_recipients,
+                                 snippet, body_html, attachments_json, has_attachments, date, is_read, mailbox, labels, internal_ts)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17)
+             ON CONFLICT(id, account_id) DO UPDATE SET
+                draft_id = excluded.draft_id,
                 thread_id = excluded.thread_id,
                 subject = excluded.subject,
                 sender = excluded.sender,
@@ -264,105 +160,94 @@ let body_html = detail_json
                 mailbox = excluded.mailbox,
                 labels = excluded.labels,
                 internal_ts = excluded.internal_ts",
-            (
-                id,
-                resolved_draft_id,
-                &thread_id,
-                &subject,
-                &sender,
-                &to_recipients,
-                &cc_recipients,
-                &snippet,
-                &body_html,
-                &attachments_json,
-                has_attachments as i32,
-                &date,
-                is_read as i32,
-                mailbox,
-                &labels,
-                internal_ts,
-            ),
-        )
-        .map_err(|e| e.to_string())?;
+            rusqlite::params![
+                composite_id, account_id, resolved_draft_id, thread_id,
+                subject, sender, to_recipients, cc_recipients,
+                snippet, body_html, attachments_json, has_attachments as i32,
+                date, is_read as i32, mailbox, labels, internal_ts
+            ],
+        ).map_err(|e| e.to_string())?;
     }
 
     Ok(next_page_token)
 }
 
-pub async fn sync_mailbox_internal(state: &DbState, mailbox: &str) -> Result<(), String> {
-    let _ = sync_mailbox_page_internal(state, mailbox, None).await?;
-    Ok(())
+pub async fn sync_mailbox_internal_for(state: &DbState, account_id: i64, mailbox: &str) -> Result<(), String> {
+    sync_mailbox_page_internal_for(state, account_id, mailbox, None).await.map(|_| ())
+}
+
+
+
+#[tauri::command]
+pub async fn sync_emails(state: State<'_, Arc<DbState>>) -> Result<(), String> {
+    let id = get_active_id(&state).await;
+    sync_mailbox_internal_for(&state, id, "INBOX").await
 }
 
 #[tauri::command]
-pub async fn sync_emails(state: State<'_, DbState>) -> Result<(), String> {
-    sync_mailbox_internal(&state, "INBOX").await
-}
-
-#[tauri::command]
-pub async fn sync_mailbox(state: State<'_, DbState>, mailbox: String) -> Result<(), String> {
-    sync_mailbox_internal(&state, mailbox.as_str()).await
+pub async fn sync_mailbox(state: State<'_, Arc<DbState>>, mailbox: String) -> Result<(), String> {
+    let id = get_active_id(&state).await;
+    sync_mailbox_internal_for(&state, id, mailbox.as_str()).await
 }
 
 #[tauri::command]
 pub async fn sync_mailbox_page(
-    state: State<'_, DbState>,
+    state: State<'_, Arc<DbState>>,
     mailbox: String,
     page_token: Option<String>,
 ) -> Result<Option<String>, String> {
-    sync_mailbox_page_internal(&state, mailbox.as_str(), page_token).await
+    let id = get_active_id(&state).await;
+    sync_mailbox_page_internal_for(&state, id, mailbox.as_str(), page_token).await
+}
+
+fn map_email_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Email> {
+    Ok(Email {
+        id: row.get(0)?,
+        account_id: row.get(1)?,
+        draft_id: row.get(2)?,
+        thread_id: row.get(3)?,
+        subject: row.get(4)?,
+        sender: row.get(5)?,
+        to_recipients: row.get(6)?,
+        cc_recipients: row.get(7)?,
+        snippet: row.get(8)?,
+        body_html: row.get(9)?,
+        attachments_json: row.get(10)?,
+        has_attachments: row.get::<_, i32>(11)? != 0,
+        date: row.get(12)?,
+        is_read: row.get::<_, i32>(13)? != 0,
+        starred: row.get::<_, i32>(14)? != 0,
+        mailbox: row.get(15)?,
+        labels: row.get(16)?,
+        internal_ts: row.get(17)?,
+    })
 }
 
 #[tauri::command]
 pub async fn get_emails(
-    state: State<'_, DbState>,
+    state: State<'_, Arc<DbState>>,
     mailbox: Option<String>,
 ) -> Result<Vec<Email>, String> {
+    let account_id = get_active_id(&state).await;
     let box_name = mailbox.unwrap_or_else(|| "INBOX".to_string());
     let conn = state.conn.lock().await;
 
-    let sql = if box_name == "STARRED" {
-        "SELECT id, draft_id, thread_id, subject, sender, to_recipients, cc_recipients, snippet, body_html, attachments_json, has_attachments, date, is_read, starred, mailbox, labels, internal_ts
-         FROM emails WHERE starred = 1 ORDER BY internal_ts DESC, rowid DESC LIMIT 500"
-    } else {
-        "SELECT id, draft_id, thread_id, subject, sender, to_recipients, cc_recipients, snippet, body_html, attachments_json, has_attachments, date, is_read, starred, mailbox, labels, internal_ts
-         FROM emails WHERE mailbox = ?1 ORDER BY internal_ts DESC, rowid DESC LIMIT 500"
-    };
-
-    let mut stmt = conn.prepare(sql).map_err(|e| e.to_string())?;
-
-    let mapper = |row: &rusqlite::Row<'_>| {
-        Ok(Email {
-            id: row.get(0)?,
-            draft_id: row.get(1)?,
-            thread_id: row.get(2)?,
-            subject: row.get(3)?,
-            sender: row.get(4)?,
-            to_recipients: row.get(5)?,
-            cc_recipients: row.get(6)?,
-            snippet: row.get(7)?,
-            body_html: row.get(8)?,
-            attachments_json: row.get(9)?,
-            has_attachments: row.get::<_, i32>(10)? != 0,
-            date: row.get(11)?,
-            is_read: row.get::<_, i32>(12)? != 0,
-            starred: row.get::<_, i32>(13)? != 0,
-            mailbox: row.get(14)?,
-            labels: row.get(15)?,
-            internal_ts: row.get(16)?,
-        })
-    };
-
     let emails = if box_name == "STARRED" {
-        stmt.query_map([], mapper)
-            .map_err(|e| e.to_string())?
-            .filter_map(Result::ok)
-            .collect()
+        let mut stmt = conn.prepare(
+            "SELECT id,account_id,draft_id,thread_id,subject,sender,to_recipients,cc_recipients,
+                    snippet,body_html,attachments_json,has_attachments,date,is_read,starred,mailbox,labels,internal_ts
+             FROM emails WHERE starred=1 AND account_id=?1 ORDER BY internal_ts DESC, rowid DESC LIMIT 500"
+        ).map_err(|e| e.to_string())?;
+        let x = stmt.query_map([account_id], map_email_row).map_err(|e| e.to_string())?
+            .filter_map(Result::ok).collect(); x
     } else {
-        stmt.query_map([box_name.as_str()], mapper)
-            .map_err(|e| e.to_string())?
-            .filter_map(Result::ok)
-            .collect()
+        let mut stmt = conn.prepare(
+            "SELECT id,account_id,draft_id,thread_id,subject,sender,to_recipients,cc_recipients,
+                    snippet,body_html,attachments_json,has_attachments,date,is_read,starred,mailbox,labels,internal_ts
+             FROM emails WHERE mailbox=?1 AND account_id=?2 ORDER BY internal_ts DESC, rowid DESC LIMIT 500"
+        ).map_err(|e| e.to_string())?;
+        let x = stmt.query_map(rusqlite::params![box_name, account_id], map_email_row)
+            .map_err(|e| e.to_string())?.filter_map(Result::ok).collect(); x
     };
 
     Ok(emails)
@@ -370,9 +255,10 @@ pub async fn get_emails(
 
 #[tauri::command]
 pub async fn deep_search_emails(
-    state: State<'_, DbState>,
+    state: State<'_, Arc<DbState>>,
     query: String,
 ) -> Result<Vec<Email>, String> {
+    let account_id = get_active_id(&state).await;
     let token = ensure_token(&state).await?.access_token;
     let client = reqwest::Client::new();
     let q = format!("in:anywhere {}", query.trim());
@@ -381,106 +267,46 @@ pub async fn deep_search_emails(
         .get("https://gmail.googleapis.com/gmail/v1/users/me/messages")
         .query(&[("maxResults", "100"), ("q", q.as_str())])
         .bearer_auth(&token)
-        .send()
-        .await
-        .map_err(|e| e.to_string())?;
+        .send().await.map_err(|e| e.to_string())?;
 
     if !list.status().is_success() {
-        let status = list.status();
-        let body = list.text().await.unwrap_or_default();
-        return Err(format!("Deep search failed: {} {}", status, body));
+        return Err(format!("Deep search failed: {}", list.status()));
     }
 
     let json = list.json::<Value>().await.map_err(|e| e.to_string())?;
-    let refs = json
-        .get("messages")
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default();
+    let refs = json.get("messages").and_then(Value::as_array).cloned().unwrap_or_default();
 
     let mut results = Vec::new();
     for msg in refs {
-        let Some(id) = msg.get("id").and_then(Value::as_str) else {
-            continue;
-        };
+        let Some(id) = msg.get("id").and_then(Value::as_str) else { continue; };
 
         let detail = client
-            .get(format!(
-                "https://gmail.googleapis.com/gmail/v1/users/me/messages/{}?format=full",
-                id
-            ))
-            .bearer_auth(&token)
-            .send()
-            .await
-            .map_err(|e| e.to_string())?;
-
-        if !detail.status().is_success() {
-            continue;
-        }
+            .get(format!("https://gmail.googleapis.com/gmail/v1/users/me/messages/{}?format=full", id))
+            .bearer_auth(&token).send().await.map_err(|e| e.to_string())?;
+        if !detail.status().is_success() { continue; }
 
         let detail_json = detail.json::<Value>().await.map_err(|e| e.to_string())?;
-        let headers = detail_json
-            .get("payload")
-            .and_then(|p| p.get("headers"))
-            .and_then(Value::as_array)
-            .cloned()
-            .unwrap_or_default();
+        let headers = detail_json.get("payload").and_then(|p| p.get("headers")).and_then(Value::as_array).cloned().unwrap_or_default();
 
-        let snippet = strip_confusable_chars(
-            detail_json
-                .get("snippet")
-                .and_then(Value::as_str)
-                .unwrap_or_default(),
-        );
-        let subject = strip_confusable_chars(
-            &header_value(&headers, "Subject").unwrap_or_else(|| "(No Subject)".to_string()),
-        );
-        let sender = strip_confusable_chars(
-            &header_value(&headers, "From").unwrap_or_else(|| "Unknown Sender".to_string()),
-        );
+        let snippet = strip_confusable_chars(detail_json.get("snippet").and_then(Value::as_str).unwrap_or_default());
+        let subject = strip_confusable_chars(&header_value(&headers, "Subject").unwrap_or_else(|| "(No Subject)".to_string()));
+        let sender = strip_confusable_chars(&header_value(&headers, "From").unwrap_or_else(|| "Unknown Sender".to_string()));
         let to_recipients = strip_confusable_chars(&header_value(&headers, "To").unwrap_or_default());
         let cc_recipients = strip_confusable_chars(&header_value(&headers, "Cc").unwrap_or_default());
-        let date = header_value(&headers, "Date").unwrap_or_else(|| "Unknown Date".to_string());
-        let labels = detail_json
-            .get("labelIds")
-            .and_then(Value::as_array)
-            .map(|a| {
-                a.iter()
-                    .filter_map(Value::as_str)
-                    .collect::<Vec<_>>()
-                    .join(",")
-            })
-            .unwrap_or_default();
-        let internal_ts = detail_json
-            .get("internalDate")
-            .and_then(Value::as_str)
-            .and_then(|s| s.parse::<i64>().ok())
-            .unwrap_or(0);
-        let body_html = detail_json
-            .get("payload")
-            .and_then(extract_body)
-            .unwrap_or_else(|| format!("<pre>{}</pre>", snippet));
+        let date = header_value(&headers, "Date").unwrap_or_default();
+        let labels = detail_json.get("labelIds").and_then(Value::as_array).map(|a| a.iter().filter_map(Value::as_str).collect::<Vec<_>>().join(",")).unwrap_or_default();
+        let internal_ts = detail_json.get("internalDate").and_then(Value::as_str).and_then(|s| s.parse::<i64>().ok()).unwrap_or(0);
+        let body_html = detail_json.get("payload").and_then(extract_body).unwrap_or_else(|| format!("<pre>{}</pre>", snippet));
         let mut attachments: Vec<AttachmentMeta> = Vec::new();
-        if let Some(payload) = detail_json.get("payload") {
-            collect_attachments(payload, &mut attachments);
-        }
+        if let Some(payload) = detail_json.get("payload") { collect_attachments(payload, &mut attachments); }
         let attachments_json = serde_json::to_string(&attachments).unwrap_or_else(|_| "[]".to_string());
 
         results.push(Email {
-            id: id.to_string(),
+            id: format!("{}:{}", account_id, id),
+            account_id,
             draft_id: None,
-            thread_id: detail_json
-                .get("threadId")
-                .and_then(Value::as_str)
-                .unwrap_or_default()
-                .to_string(),
-            subject,
-            sender,
-            to_recipients,
-            cc_recipients,
-            snippet,
-            body_html,
-            attachments_json,
+            thread_id: detail_json.get("threadId").and_then(Value::as_str).unwrap_or_default().to_string(),
+            subject, sender, to_recipients, cc_recipients, snippet, body_html, attachments_json,
             has_attachments: !attachments.is_empty(),
             date,
             is_read: !labels.split(',').any(|l| l == "UNREAD"),
@@ -496,118 +322,120 @@ pub async fn deep_search_emails(
 
 #[tauri::command]
 pub async fn set_email_read_status(
-    state: State<'_, DbState>,
+    state: State<'_, Arc<DbState>>,
     email_id: String,
     is_read: bool,
 ) -> Result<(), String> {
+    let account_id = get_active_id(&state).await;
     let conn = state.conn.lock().await;
     conn.execute(
-        "UPDATE emails SET is_read = ?1 WHERE id = ?2",
-        (is_read as i32, email_id),
-    )
-    .map_err(|e| e.to_string())?;
+        "UPDATE emails SET is_read=?1 WHERE id=?2 AND account_id=?3",
+        rusqlite::params![is_read as i32, email_id, account_id],
+    ).map_err(|e| e.to_string())?;
     Ok(())
 }
 
 #[tauri::command]
-pub async fn toggle_starred(state: State<'_, DbState>, email_id: String) -> Result<(), String> {
+pub async fn toggle_starred(state: State<'_, Arc<DbState>>, email_id: String) -> Result<(), String> {
+    let account_id = get_active_id(&state).await;
     let conn = state.conn.lock().await;
     conn.execute(
-        "UPDATE emails SET starred = CASE WHEN starred = 1 THEN 0 ELSE 1 END WHERE id = ?1",
-        [email_id],
-    )
-    .map_err(|e| e.to_string())?;
+        "UPDATE emails SET starred=CASE WHEN starred=1 THEN 0 ELSE 1 END WHERE id=?1 AND account_id=?2",
+        rusqlite::params![email_id, account_id],
+    ).map_err(|e| e.to_string())?;
     Ok(())
 }
 
 #[tauri::command]
-pub async fn archive_email(state: State<'_, DbState>, email_id: String) -> Result<(), String> {
-    let token = ensure_token(&state).await?.access_token;
-    let client = reqwest::Client::new();
-    let url = format!("https://gmail.googleapis.com/gmail/v1/users/me/messages/{}/modify", email_id);
+pub async fn archive_email(state: State<'_, Arc<DbState>>, email_id: String) -> Result<(), String> {
+    let account_id = get_active_id(&state).await;
 
-    let res = client
-        .post(url)
-        .bearer_auth(&token)
-        .json(&json!({"removeLabelIds": ["INBOX"]}))
-        .send()
-        .await
-        .map_err(|e| e.to_string())?;
+    
+    let is_gmail = {
+        let conn = state.conn.lock().await;
+        crate::db::get_account_by_id(&conn, account_id)
+            .ok().flatten()
+            .map(|a| a.provider == "gmail")
+            .unwrap_or(false)
+    };
 
-    if !res.status().is_success() {
-        return Err(format!("Archive failed: {}", res.status()));
+    if is_gmail {
+        
+        let gmail_id = email_id.splitn(2, ':').nth(1).unwrap_or(&email_id).to_string();
+        let token = ensure_token(&state).await?.access_token;
+        let client = reqwest::Client::new();
+        let url = format!("https://gmail.googleapis.com/gmail/v1/users/me/messages/{}/modify", gmail_id);
+        let res = client.post(url).bearer_auth(&token)
+            .json(&json!({"removeLabelIds": ["INBOX"]}))
+            .send().await.map_err(|e| e.to_string())?;
+        if !res.status().is_success() {
+            return Err(format!("Archive failed: {}", res.status()));
+        }
     }
 
     let conn = state.conn.lock().await;
-    conn.execute("UPDATE emails SET mailbox = 'ARCHIVE' WHERE id = ?1", [email_id])
-        .map_err(|e| e.to_string())?;
+    conn.execute(
+        "UPDATE emails SET mailbox='ARCHIVE' WHERE id=?1 AND account_id=?2",
+        rusqlite::params![email_id, account_id],
+    ).map_err(|e| e.to_string())?;
     Ok(())
 }
 
 #[tauri::command]
-pub async fn trash_email(state: State<'_, DbState>, email_id: String) -> Result<(), String> {
-    let token = ensure_token(&state).await?.access_token;
-    let client = reqwest::Client::new();
-    let url = format!("https://gmail.googleapis.com/gmail/v1/users/me/messages/{}/trash", email_id);
+pub async fn trash_email(state: State<'_, Arc<DbState>>, email_id: String) -> Result<(), String> {
+    let account_id = get_active_id(&state).await;
 
-    let res = client
-        .post(url)
-        .bearer_auth(&token)
-        .send()
-        .await
-        .map_err(|e| e.to_string())?;
+    let is_gmail = {
+        let conn = state.conn.lock().await;
+        crate::db::get_account_by_id(&conn, account_id)
+            .ok().flatten()
+            .map(|a| a.provider == "gmail")
+            .unwrap_or(false)
+    };
 
-    if !res.status().is_success() {
-        return Err(format!("Trash failed: {}", res.status()));
+    if is_gmail {
+        let gmail_id = email_id.splitn(2, ':').nth(1).unwrap_or(&email_id).to_string();
+        let token = ensure_token(&state).await?.access_token;
+        let client = reqwest::Client::new();
+        let url = format!("https://gmail.googleapis.com/gmail/v1/users/me/messages/{}/trash", gmail_id);
+        let res = client.post(url).bearer_auth(&token).send().await.map_err(|e| e.to_string())?;
+        if !res.status().is_success() {
+            return Err(format!("Trash failed: {}", res.status()));
+        }
     }
 
     let conn = state.conn.lock().await;
-    conn.execute("DELETE FROM emails WHERE id = ?1", [email_id])
-        .map_err(|e| e.to_string())?;
+    conn.execute(
+        "DELETE FROM emails WHERE id=?1 AND account_id=?2",
+        rusqlite::params![email_id, account_id],
+    ).map_err(|e| e.to_string())?;
     Ok(())
 }
 
 #[tauri::command]
-pub async fn get_mailbox_counts(state: State<'_, DbState>) -> Result<MailboxCounts, String> {
+pub async fn get_mailbox_counts(state: State<'_, Arc<DbState>>) -> Result<MailboxCounts, String> {
+    let account_id = get_active_id(&state).await;
     let conn = state.conn.lock().await;
 
-    let inbox_total: i64 = conn
-        .query_row("SELECT COUNT(*) FROM emails WHERE mailbox = 'INBOX'", [], |r| r.get(0))
-        .unwrap_or(0);
-    let inbox_unread: i64 = conn
-        .query_row(
-            "SELECT COUNT(*) FROM emails WHERE mailbox = 'INBOX' AND is_read = 0",
-            [],
-            |r| r.get(0),
-        )
-        .unwrap_or(0);
-    let starred_total: i64 = conn
-        .query_row("SELECT COUNT(*) FROM emails WHERE starred = 1", [], |r| r.get(0))
-        .unwrap_or(0);
-    let sent_total: i64 = conn
-        .query_row("SELECT COUNT(*) FROM emails WHERE mailbox = 'SENT'", [], |r| r.get(0))
-        .unwrap_or(0);
-    let drafts_total: i64 = conn
-        .query_row("SELECT COUNT(*) FROM emails WHERE mailbox = 'DRAFT'", [], |r| r.get(0))
-        .unwrap_or(0);
-    let archive_total: i64 = conn
-        .query_row("SELECT COUNT(*) FROM emails WHERE mailbox = 'ARCHIVE'", [], |r| r.get(0))
-        .unwrap_or(0);
+    let count = |sql: &str| -> i64 {
+        conn.query_row(sql, rusqlite::params![account_id], |r| r.get(0)).unwrap_or(0)
+    };
 
     Ok(MailboxCounts {
-        inbox_total,
-        inbox_unread,
-        starred_total,
-        sent_total,
-        drafts_total,
-        archive_total,
+        inbox_total: count("SELECT COUNT(*) FROM emails WHERE mailbox='INBOX' AND account_id=?1"),
+        inbox_unread: count("SELECT COUNT(*) FROM emails WHERE mailbox='INBOX' AND is_read=0 AND account_id=?1"),
+        starred_total: count("SELECT COUNT(*) FROM emails WHERE starred=1 AND account_id=?1"),
+        sent_total: count("SELECT COUNT(*) FROM emails WHERE mailbox='SENT' AND account_id=?1"),
+        drafts_total: count("SELECT COUNT(*) FROM emails WHERE mailbox='DRAFT' AND account_id=?1"),
+        archive_total: count("SELECT COUNT(*) FROM emails WHERE mailbox='ARCHIVE' AND account_id=?1"),
     })
 }
 
 #[tauri::command]
-pub async fn clear_local_data(state: State<'_, DbState>) -> Result<(), String> {
+pub async fn clear_local_data(state: State<'_, Arc<DbState>>) -> Result<(), String> {
+    let account_id = get_active_id(&state).await;
     let conn = state.conn.lock().await;
-    clear_emails(&conn).map_err(|e| e.to_string())?;
+    clear_account_emails(&conn, account_id).map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -628,9 +456,8 @@ pub struct ThreadSummary {
 }
 
 #[tauri::command]
-pub async fn get_inbox_threads(
-    state: State<'_, DbState>,
-) -> Result<Vec<ThreadSummary>, String> {
+pub async fn get_inbox_threads(state: State<'_, Arc<DbState>>) -> Result<Vec<ThreadSummary>, String> {
+    let account_id = get_active_id(&state).await;
     let conn = state.conn.lock().await;
 
     let sql = "
@@ -640,121 +467,73 @@ pub async fn get_inbox_threads(
             latest.snippet,
             latest.date,
             latest.labels,
-            COUNT(e.id)                          AS message_count,
-            SUM(CASE WHEN e.is_read = 0 THEN 1 ELSE 0 END) AS unread_count,
-            MAX(e.internal_ts)                   AS latest_ts,
-            MAX(e.starred)                       AS any_starred,
-            MAX(e.has_attachments)               AS any_attachments,
-            -- Collect unique senders as a comma-separated list
-            GROUP_CONCAT(DISTINCT e.sender)      AS all_senders
+            COUNT(e.id) AS message_count,
+            SUM(CASE WHEN e.is_read=0 THEN 1 ELSE 0 END) AS unread_count,
+            MAX(e.internal_ts) AS latest_ts,
+            MAX(e.starred) AS any_starred,
+            MAX(e.has_attachments) AS any_attachments,
+            GROUP_CONCAT(DISTINCT e.sender) AS all_senders
         FROM emails e
-        -- Join to get subject/snippet/date from the latest message
-        INNER JOIN emails latest
-            ON latest.id = (
-                SELECT id FROM emails
-                WHERE thread_id = e.thread_id
-                  AND mailbox = 'INBOX'
-                ORDER BY internal_ts DESC
-                LIMIT 1
-            )
-        WHERE e.mailbox = 'INBOX'
+        INNER JOIN emails latest ON latest.id = (
+            SELECT id FROM emails
+            WHERE thread_id = e.thread_id AND mailbox = 'INBOX' AND account_id = ?1
+            ORDER BY internal_ts DESC LIMIT 1
+        )
+        WHERE e.mailbox='INBOX' AND e.account_id=?1
         GROUP BY e.thread_id
         ORDER BY latest_ts DESC
         LIMIT 500
     ";
 
     let mut stmt = conn.prepare(sql).map_err(|e| e.to_string())?;
-
-    let threads = stmt
-        .query_map([], |row| {
-            let thread_id: String = row.get(0)?;
-            let subject: String = row.get(1)?;
-            let snippet: String = row.get(2)?;
-            let latest_date: String = row.get(3)?;
-            let labels: String = row.get(4)?;
-            let message_count: i64 = row.get(5)?;
-            let unread_count: i64 = row.get(6)?;
-            let latest_ts: i64 = row.get(7)?;
-            let any_starred: i64 = row.get(8)?;
-            let any_attachments: i64 = row.get(9)?;
-            let all_senders: String = row.get(10).unwrap_or_default();
-
-            Ok(ThreadSummary {
-                thread_id,
-                subject,
-                snippet,
-                latest_date,
-                labels,
-                message_count,
-                unread_count,
-                latest_ts,
-                starred: any_starred != 0,
-                has_attachments: any_attachments != 0,
-                is_read: unread_count == 0,
-                participants: all_senders,
-            })
+    let threads = stmt.query_map(rusqlite::params![account_id], |row| {
+        let unread_count: i64 = row.get(6)?;
+        Ok(ThreadSummary {
+            thread_id: row.get(0)?,
+            subject: row.get(1)?,
+            snippet: row.get(2)?,
+            latest_date: row.get(3)?,
+            labels: row.get(4)?,
+            message_count: row.get(5)?,
+            unread_count,
+            latest_ts: row.get(7)?,
+            starred: row.get::<_, i64>(8)? != 0,
+            has_attachments: row.get::<_, i64>(9)? != 0,
+            is_read: unread_count == 0,
+            participants: row.get(10).unwrap_or_default(),
         })
-        .map_err(|e| e.to_string())?
-        .filter_map(Result::ok)
-        .collect();
+    }).map_err(|e| e.to_string())?
+    .filter_map(Result::ok).collect();
 
     Ok(threads)
 }
 
 #[tauri::command]
 pub async fn get_thread_messages(
-    state: State<'_, DbState>,
+    state: State<'_, Arc<DbState>>,
     thread_id: String,
-) -> Result<Vec<crate::db::Email>, String> {
+) -> Result<Vec<Email>, String> {
+    let account_id = get_active_id(&state).await;
     let conn = state.conn.lock().await;
 
     let mut stmt = conn.prepare(
-        "SELECT id, draft_id, thread_id, subject, sender, to_recipients, cc_recipients,
-                snippet, body_html, attachments_json, has_attachments, date, is_read,
-                starred, mailbox, labels, internal_ts
-         FROM emails
-         WHERE thread_id = ?1
-         ORDER BY internal_ts ASC, rowid ASC",
+        "SELECT id,account_id,draft_id,thread_id,subject,sender,to_recipients,cc_recipients,
+                snippet,body_html,attachments_json,has_attachments,date,is_read,starred,mailbox,labels,internal_ts
+         FROM emails WHERE thread_id=?1 AND account_id=?2 ORDER BY internal_ts ASC, rowid ASC"
     ).map_err(|e| e.to_string())?;
 
-    let emails = stmt
-        .query_map([thread_id.as_str()], |row| {
-            Ok(crate::db::Email {
-                id: row.get(0)?,
-                draft_id: row.get(1)?,
-                thread_id: row.get(2)?,
-                subject: row.get(3)?,
-                sender: row.get(4)?,
-                to_recipients: row.get(5)?,
-                cc_recipients: row.get(6)?,
-                snippet: row.get(7)?,
-                body_html: row.get(8)?,
-                attachments_json: row.get(9)?,
-                has_attachments: row.get::<_, i32>(10)? != 0,
-                date: row.get(11)?,
-                is_read: row.get::<_, i32>(12)? != 0,
-                starred: row.get::<_, i32>(13)? != 0,
-                mailbox: row.get(14)?,
-                labels: row.get(15)?,
-                internal_ts: row.get(16)?,
-            })
-        })
-        .map_err(|e| e.to_string())?
-        .filter_map(Result::ok)
-        .collect();
-
+    let emails = stmt.query_map(rusqlite::params![thread_id, account_id], map_email_row)
+        .map_err(|e| e.to_string())?.filter_map(Result::ok).collect();
     Ok(emails)
 }
 
 #[tauri::command]
-pub async fn mark_thread_read(
-    state: State<'_, DbState>,
-    thread_id: String,
-) -> Result<(), String> {
+pub async fn mark_thread_read(state: State<'_, Arc<DbState>>, thread_id: String) -> Result<(), String> {
+    let account_id = get_active_id(&state).await;
     let conn = state.conn.lock().await;
     conn.execute(
-        "UPDATE emails SET is_read = 1 WHERE thread_id = ?1",
-        [thread_id.as_str()],
+        "UPDATE emails SET is_read=1 WHERE thread_id=?1 AND account_id=?2",
+        rusqlite::params![thread_id, account_id],
     ).map_err(|e| e.to_string())?;
     Ok(())
 }

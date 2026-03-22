@@ -43,6 +43,20 @@ export async function syncMailboxInBackground(mailbox, force = false, onSynced =
   if (!force && now - last < RESYNC_COOLDOWN_MS) return;
   lastSynced.set(key, now);
 
+  
+  try {
+    const { getActiveAccountInfo } = await import("../api.js");
+    const info = await getActiveAccountInfo();
+    if (info?.provider === "imap") {
+      const latest = await getEmails(mailbox);
+      ingestContactsFromEmails(latest);
+      if (mailbox === "INBOX") await notifyNewEmails(latest);
+      if (onSynced) onSynced(mailbox, latest);
+      return;
+    }
+  } catch {}
+
+  
   if (mailbox !== "STARRED" && mailbox !== "ARCHIVE") {
     showToast(t("toast.fetching"), "info", 1200);
     const next = await syncMailboxPage(mailbox, null);

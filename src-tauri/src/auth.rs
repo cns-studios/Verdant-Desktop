@@ -28,11 +28,7 @@ const REDIRECT_PORT: u16 = 8765;
 fn read_non_empty(value: Option<String>) -> Option<String> {
     value.and_then(|v| {
         let trimmed = v.trim();
-        if trimmed.is_empty() {
-            None
-        } else {
-            Some(trimmed.to_string())
-        }
+        if trimmed.is_empty() { None } else { Some(trimmed.to_string()) }
     })
 }
 
@@ -61,7 +57,7 @@ fn now_epoch() -> i64 {
 
 fn google_client() -> Result<BasicClient, String> {
     let client_id = configured_google_client_id()
-        .ok_or_else(|| "Missing GOOGLE_CLIENT_ID (runtime env or build-time value)".to_string())?;
+        .ok_or_else(|| "Missing GOOGLE_CLIENT_ID".to_string())?;
 
     let client_secret = configured_google_client_secret().map(ClientSecret::new);
     let has_client_secret = client_secret.is_some();
@@ -79,12 +75,7 @@ fn google_client() -> Result<BasicClient, String> {
     )
     .set_redirect_uri(redirect);
 
-    let client = if has_client_secret {
-        client
-    } else {
-        client.set_auth_type(AuthType::RequestBody)
-    };
-
+    let client = if has_client_secret { client } else { client.set_auth_type(AuthType::RequestBody) };
     Ok(client)
 }
 
@@ -96,30 +87,22 @@ fn wait_for_auth_code(port: u16, expected_state: String) -> Result<String, Strin
         .map_err(|e| e.to_string())?;
     let query: HashMap<_, _> = url.query_pairs().into_owned().collect();
 
-    let code = query
-        .get("code")
-        .cloned()
+    let code = query.get("code").cloned()
         .ok_or_else(|| "Authorization code missing in callback".to_string())?;
-
-    let state = query
-        .get("state")
-        .cloned()
+    let state = query.get("state").cloned()
         .ok_or_else(|| "OAuth state missing in callback".to_string())?;
 
     if state != expected_state {
-        let _ = request.respond(
-            Response::from_string("State mismatch. You can close this window.")
-                .with_status_code(400),
-        );
+        let _ = request.respond(Response::from_string("State mismatch.").with_status_code(400));
         return Err("OAuth state mismatch".to_string());
     }
+
     let html = include_str!("../assets/oauth-success.html");
     let mut response = Response::from_string(html);
     if let Ok(header) = Header::from_bytes(&b"Content-Type"[..], &b"text/html; charset=utf-8"[..]) {
         response = response.with_header(header);
     }
     let _ = request.respond(response);
-
     Ok(code)
 }
 
@@ -149,15 +132,12 @@ pub async fn login_interactive() -> Result<StoredToken, String> {
         .await
         .map_err(|e| e.to_string())?;
 
-    let expires = token_result
-        .expires_in()
+    let expires = token_result.expires_in()
         .map(|d| now_epoch() + d.as_secs() as i64);
 
     Ok(StoredToken {
         access_token: token_result.access_token().secret().to_string(),
-        refresh_token: token_result
-            .refresh_token()
-            .map(|t| t.secret().to_string()),
+        refresh_token: token_result.refresh_token().map(|t| t.secret().to_string()),
         expires_at_epoch: expires,
     })
 }
@@ -170,14 +150,12 @@ pub async fn refresh_access_token(refresh_token: &str) -> Result<StoredToken, St
         .await
         .map_err(|e| e.to_string())?;
 
-    let expires = token_result
-        .expires_in()
+    let expires = token_result.expires_in()
         .map(|d| now_epoch() + d.as_secs() as i64);
 
     Ok(StoredToken {
         access_token: token_result.access_token().secret().to_string(),
-        refresh_token: token_result
-            .refresh_token()
+        refresh_token: token_result.refresh_token()
             .map(|t| t.secret().to_string())
             .or(Some(refresh_token.to_string())),
         expires_at_epoch: expires,
