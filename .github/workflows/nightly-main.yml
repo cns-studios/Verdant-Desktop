@@ -67,8 +67,10 @@ jobs:
           set -eux
           VERSION=$(node -p "JSON.parse(require('fs').readFileSync('src-tauri/tauri.conf.json','utf8')).version")
           BINARY=$(ls src-tauri/target/release/Verdant-Desktop)
-          mkdir -p out/archpkg
+          mkdir -p out/archpkg/icons
           cp "$BINARY" out/archpkg/verdant
+          cp src-tauri/icons/32x32.png out/archpkg/icons/32x32.png
+          cp src-tauri/icons/128x128.png out/archpkg/icons/128x128.png
 
           cat > out/archpkg/PKGBUILD << EOF
           pkgname=verdant-desktop-bin
@@ -80,11 +82,15 @@ jobs:
           license=('custom')
           depends=('gtk3' 'webkit2gtk-4.1' 'libayatana-appindicator')
           options=('!debug' '!strip')
-          source=('verdant')
-          sha256sums=('SKIP')
+          source=('verdant' 'icons/32x32.png' 'icons/128x128.png')
+          sha256sums=('SKIP' 'SKIP' 'SKIP')
 
           package() {
             install -Dm755 "\$srcdir/verdant" "\$pkgdir/usr/bin/verdant"
+
+            install -Dm644 "\$srcdir/32x32.png" "\$pkgdir/usr/share/icons/hicolor/32x32/apps/verdant.png"
+            install -Dm644 "\$srcdir/128x128.png" "\$pkgdir/usr/share/icons/hicolor/128x128/apps/verdant.png"
+
             install -d "\$pkgdir/usr/share/applications"
             cat > "\$pkgdir/usr/share/applications/verdant.desktop" << DESKTOP
           [Desktop Entry]
@@ -93,6 +99,7 @@ jobs:
           Exec=verdant
           Terminal=false
           Categories=Network;Email;
+          Icon=verdant
           DESKTOP
           }
           EOF

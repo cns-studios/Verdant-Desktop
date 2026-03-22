@@ -337,7 +337,7 @@ fn install_update_sync(path: &str, name: &str) -> Result<(), String> {
     {
         if name.ends_with(".pacman") || name.ends_with(".pkg.tar.zst") {
             let status = std::process::Command::new("pkexec")
-                .args(["pacman", "-U", "--noconfirm", path])
+                .args(["/usr/bin/pacman", "-U", "--noconfirm", path])
                 .status()
                 .map_err(|e| format!("Failed to launch pacman: {}", e))?;
             if !status.success() {

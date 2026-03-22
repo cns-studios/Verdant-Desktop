@@ -1,3 +1,5 @@
+import { getLang } from "./i18n.js";
+
 export function escapeHtml(input) {
   if (!input) return "";
   return input
@@ -33,13 +35,15 @@ export function formatListDate(raw) {
   const dayMail = new Date(d.getFullYear(), d.getMonth(), d.getDate());
   const diff = Math.round((dayNow - dayMail) / 86400000);
 
+  const locale = getLang() === "de" ? "de-DE" : "en-US";
+
   if (diff === 0) {
-    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    return d.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" });
   }
   if (diff === 1) {
-    return "Yesterday";
+    return getLang() === "de" ? "Gestern" : "Yesterday";
   }
-  return d.toLocaleDateString();
+  return d.toLocaleDateString(locale);
 }
 
 export function formatReadingDate(raw) {
@@ -47,9 +51,10 @@ export function formatReadingDate(raw) {
   const d = new Date(cleanedRaw);
   if (Number.isNaN(d.getTime())) return cleanedRaw;
 
+  const locale = getLang() === "de" ? "de-DE" : "en-US";
   const now = new Date();
   const sameYear = now.getFullYear() === d.getFullYear();
-  return d.toLocaleString([], {
+  return d.toLocaleString(locale, {
     weekday: "short",
     month: "short",
     day: "numeric",

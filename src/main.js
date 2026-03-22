@@ -31,6 +31,7 @@ import {
   renderThreadList, bindThreadActions,
   getSelectedThreadId, clearSelectedThread,
 } from "./ui/thread.js";
+import { initLang } from "./lib/i18n.js";
 
 
 let currentMailbox = "INBOX";
@@ -575,6 +576,7 @@ async function onSync() {
 
 function showOnboardingAndReset() {
   document.getElementById("root").innerHTML = "";
+  initLang();
   showOnboarding(initializeConnectedUI);
 }
 
@@ -624,14 +626,12 @@ async function initializeConnectedUI() {
   await openMailbox("INBOX", true);
   startPeriodicSync(onSynced);
 
-  // Run update check after UI is ready — fire and forget
   runStartupUpdateCheck().catch(() => {});
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
   ensureStyles();
-
-  // Load contacts from Tauri store before anything else
+  initLang();
   await ensureContactsLoaded().catch(() => {});
 
   try {
