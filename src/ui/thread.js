@@ -389,9 +389,11 @@ export function bindThreadActions(onRefresh, onCountsRefresh) {
   const buttons = Array.from(document.querySelectorAll(".reading-actions .icon-btn"));
 
   for (const button of buttons) {
-    const title = button.getAttribute("title") || "";
+      const title = button.getAttribute("title") || "";
 
-    button.onclick = async () => {
+      if (title === t("reading.more") || title === t("reading.close")) continue;
+
+      button.onclick = async () => {
       if (!selectedThreadId) return;
 
       const messageIds = Array.from(document.querySelectorAll(".thread-bubble"))
