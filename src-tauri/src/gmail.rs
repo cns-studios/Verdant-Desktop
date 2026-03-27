@@ -152,8 +152,6 @@ pub fn extract_body(payload: &Value) -> Option<String> {
         }
     }
     return plain_fallback;
-
-    None
 }
 
 pub fn collect_attachments(payload: &Value, out: &mut Vec<AttachmentMeta>) {

@@ -6,7 +6,8 @@ use crate::db::{get_all_accounts, Account};
 use crate::state::DbState;
 
 const SYNC_INTERVAL_SECS: u64 = 45;
-const IMAP_MAILBOXES: &[&str] = &["INBOX", "SENT", "DRAFT"];
+const IMAP_SYNC_INTERVAL_SECS: u64 = 12;
+const IMAP_MAILBOXES: &[&str] = &["INBOX", "SENT", "DRAFT", "TRASH"];
 
 
 pub async fn start_all_sync_tasks(state: Arc<DbState>) {
@@ -56,9 +57,11 @@ async fn run_sync_loop(
     
     sync_account(&state, &account).await;
 
+    let interval = if account.provider == "imap" { IMAP_SYNC_INTERVAL_SECS } else { SYNC_INTERVAL_SECS };
+
     loop {
         tokio::select! {
-            _ = tokio::time::sleep(Duration::from_secs(SYNC_INTERVAL_SECS)) => {
+            _ = tokio::time::sleep(Duration::from_secs(interval)) => {
                 
                 let fresh_account = {
                     let conn = state.conn.lock().await;
@@ -127,7 +130,7 @@ async fn sync_imap_account(state: &DbState, account: &Account) {
     }
 }
 
-async fn upsert_emails(state: &DbState, account_id: i64, emails: Vec<crate::db::Email>) {
+async fn upsert_emails(state: &DbState, _account_id: i64, emails: Vec<crate::db::Email>) {
     let conn = state.conn.lock().await;
     for email in emails {
         let _ = conn.execute(

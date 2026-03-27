@@ -35,10 +35,7 @@ function setUpdateStatus(message, isError = false) {
   el.style.color = isError ? "#8a3b3b" : "";
 }
 
-function setDownloadButtonEnabled(enabled) {
-  const btn = document.getElementById("settings-download-update");
-  if (btn) btn.disabled = !enabled;
-}
+
 
 export async function checkForAppUpdates(options = {}) {
   const {
@@ -55,10 +52,14 @@ export async function checkForAppUpdates(options = {}) {
     if (updateSettingsUi) {
       if (info.updateAvailable) {
         setUpdateStatus(t("settings.app.update_available_status", { channel: channelLabel, version: info.latestVersion }));
+        const btn = document.getElementById("settings-check-update");
+        if (btn) {
+          btn.textContent = t("settings.app.download_update");
+          btn.dataset.updateReady = "true";
+        }
       } else {
         setUpdateStatus(t("settings.app.up_to_date", { channel: channelLabel, version: info.currentVersion }));
       }
-      setDownloadButtonEnabled(!!info.updateAvailable);
     }
 
     if (!info.updateAvailable) {
@@ -78,7 +79,6 @@ export async function checkForAppUpdates(options = {}) {
   } catch (error) {
     if (updateSettingsUi) {
       setUpdateStatus(t("settings.app.check_failed"), true);
-      setDownloadButtonEnabled(false);
     }
     if (!silent) showToast(`${t("settings.app.check_failed")}: ${String(error)}`, "error");
     return null;
@@ -169,7 +169,7 @@ export async function openSettingsModal(profile, currentMailbox, onLogout, onSyn
     <!-- Account tab -->
     <section class="settings-pane active" data-pane="account">
       <div class="settings-card">
-        <div class="settings-info-row"><span>${escapeHtml(t("settings.account.name"))}</span><strong>${escapeHtml(profile.name || "User")}</strong></div>
+        <div class="settings-info-row"><span>${escapeHtml(t("settings.account.name"))}</span><strong>${escapeHtml(profile.name || t("settings.user_fallback"))}</strong></div>
         <div class="settings-info-row"><span>${escapeHtml(t("settings.account.email"))}</span><strong>${escapeHtml(profile.email || "-")}</strong></div>
         <div class="settings-info-row"><span>${escapeHtml(t("settings.account.gmail_status"))}</span><strong>${auth.connected ? escapeHtml(t("settings.account.gmail_connected")) : escapeHtml(t("settings.account.gmail_disconnected"))}</strong></div>
         <div class="settings-info-row"><span>${escapeHtml(t("settings.account.inbox"))}</span><strong>${escapeHtml(t("settings.account.inbox_value", { unread: counts.inbox_unread, total: counts.inbox_total }))}</strong></div>
@@ -206,7 +206,7 @@ export async function openSettingsModal(profile, currentMailbox, onLogout, onSyn
     <!-- App tab -->
     <section class="settings-pane" data-pane="app">
 
-      <div class="settings-section-label">Version</div>
+      <div class="settings-section-label">${escapeHtml(t("settings.version"))}</div>
       <div class="settings-card">
         <div class="settings-info-row">
           <span>${escapeHtml(t("settings.app.installed_version"))}</span>
@@ -238,7 +238,6 @@ export async function openSettingsModal(profile, currentMailbox, onLogout, onSyn
       </div>
       <div class="settings-actions">
         <button class="verdant-btn" id="settings-check-update">${escapeHtml(t("settings.app.check_update"))}</button>
-        <button class="verdant-btn" id="settings-download-update" disabled>${escapeHtml(t("settings.app.download_update"))}</button>
       </div>
 
       <div class="settings-section-label">${escapeHtml(t("settings.tab.account"))}</div>
@@ -302,7 +301,8 @@ export async function openSettingsModal(profile, currentMailbox, onLogout, onSyn
     saveUpdatePrefs({ ...updatePrefs, channel: value });
     const label = value === "nightly" ? t("settings.app.channel.nightly") : t("settings.app.channel.stable");
     setUpdateStatus(t("settings.app.channel_set", { channel: label }));
-    setDownloadButtonEnabled(false);
+    const btn = panel.querySelector("#settings-check-update");
+    if (btn) { btn.textContent = t("settings.app.check_update"); btn.dataset.updateReady = ""; }
   });
 
   panel.querySelector("#update-auto-check")?.addEventListener("change", (e) => {
@@ -314,44 +314,36 @@ export async function openSettingsModal(profile, currentMailbox, onLogout, onSyn
   });
 
   panel.querySelector("#settings-check-update")?.addEventListener("click", async () => {
-    setUpdateStatus(t("settings.app.checking"));
-    await checkForAppUpdates({ silent: false, autoDownload: false, updateSettingsUi: true, channel: updatePrefs.channel });
-  });
+    const btn = panel.querySelector("#settings-check-update");
 
-  // Download + install + relaunch
-  panel.querySelector("#settings-download-update")?.addEventListener("click", async () => {
-    const btn = panel.querySelector("#settings-download-update");
-    if (btn) { btn.disabled = true; btn.textContent = t("settings.app.downloading"); }
+    if (btn?.dataset.updateReady === "true") {
+      if (btn) { btn.disabled = true; btn.textContent = t("settings.app.downloading"); }
+      setUpdateStatus(t("settings.app.downloading"));
+      try {
+        const downloaded = await downloadLatestUpdate(updatePrefs.channel);
+        setUpdateStatus(t("toast.update_downloaded", { file: downloaded.fileName }));
+        showToast(t("toast.update_downloaded", { file: downloaded.fileName }));
 
-    setUpdateStatus(t("settings.app.checking"));
-    const info = await checkForAppUpdates({ silent: true, autoDownload: false, updateSettingsUi: true, channel: updatePrefs.channel });
-    if (!info?.updateAvailable) {
-      showToast(t("toast.no_update"));
-      if (btn) { btn.disabled = false; btn.textContent = t("settings.app.download_update"); }
+        if (btn) btn.textContent = t("update.installing");
+        const { invoke } = await import("@tauri-apps/api/core");
+        await invoke("install_and_relaunch", { filePath: downloaded.filePath });
+
+        if (btn) btn.textContent = t("update.restarting");
+        await new Promise(r => setTimeout(r, 600));
+        const { relaunch } = await import("@tauri-apps/plugin-process");
+        await relaunch();
+      } catch (error) {
+        setUpdateStatus(t("settings.app.download_failed"), true);
+        showToast(`${t("settings.app.download_failed")}: ${String(error)}`, "error");
+        if (btn) { btn.disabled = false; btn.textContent = t("settings.app.download_update"); btn.dataset.updateReady = "true"; }
+      }
       return;
     }
 
-    setUpdateStatus(t("settings.app.downloading"));
-    try {
-      const downloaded = await downloadLatestUpdate(updatePrefs.channel);
-      setUpdateStatus(t("toast.update_downloaded", { file: downloaded.fileName }));
-      showToast(t("toast.update_downloaded", { file: downloaded.fileName }));
-
-      // Install
-      if (btn) btn.textContent = t("update.installing");
-      const { invoke } = await import("@tauri-apps/api/core");
-      await invoke("install_and_relaunch", { filePath: downloaded.filePath });
-
-      // Relaunch
-      if (btn) btn.textContent = t("update.restarting");
-      await new Promise(r => setTimeout(r, 600));
-      const { relaunch } = await import("@tauri-apps/plugin-process");
-      await relaunch();
-    } catch (error) {
-      setUpdateStatus(t("settings.app.download_failed"), true);
-      showToast(`${t("settings.app.download_failed")}: ${String(error)}`, "error");
-      if (btn) { btn.disabled = false; btn.textContent = t("settings.app.download_update"); }
-    }
+    setUpdateStatus(t("settings.app.checking"));
+    if (btn) { btn.disabled = true; btn.textContent = t("settings.app.checking"); }
+    await checkForAppUpdates({ silent: false, autoDownload: false, updateSettingsUi: true, channel: updatePrefs.channel });
+    if (btn) btn.disabled = false;
   });
 
   panel.querySelector("#settings-sync")?.addEventListener("click", async () => {

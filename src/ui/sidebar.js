@@ -1,15 +1,16 @@
 import { getMailboxCounts } from "../api.js";
 import { mailboxTitle } from "../lib/format.js";
+import { t } from "../lib/i18n.js";
 
 export function setAppHeaderSubtitle(label) {
     const subtitle = document.querySelector(".app-subtitle");
     if (!subtitle) return;
-    subtitle.textContent = `- ${(label || "Mailbox").trim()}`;
+    subtitle.textContent = `- ${(label || t("sidebar.mailbox_fallback")).trim()}`;
 }
 
 export function refreshAppHeaderSubtitle(currentMailbox, isComposeOpen, isSettingsOpen) {
     if (isComposeOpen()) {
-        setAppHeaderSubtitle("Compose");
+        setAppHeaderSubtitle(t("sidebar.compose_title"));
         return;
     }
     const overlay = document.getElementById("verdant-overlay");
@@ -27,7 +28,7 @@ export function setListTitle(mailbox, count) {
     const title = document.querySelector(".list-title");
     const countEl = document.querySelector(".list-count");
     if (title) title.textContent = mailboxTitle(mailbox);
-    if (countEl) countEl.textContent = `${count} messages`;
+    if (countEl) countEl.textContent = t("list.count", { n: count });
 }
 
 function setBadge(navItem, value) {
@@ -46,11 +47,17 @@ export async function refreshCounts() {
     const counts = await getMailboxCounts();
     const items = Array.from(document.querySelectorAll(".sidebar .nav-item"));
     const find = (mb) => items.find((n) => n.dataset.mailbox === mb);
-    setBadge(find("INBOX"), counts.inbox_unread);
-    setBadge(find("DRAFT"), counts.drafts_total);
-    setBadge(find("STARRED"), counts.starred_total);
-    setBadge(find("SENT"), counts.sent_total);
-    setBadge(find("ARCHIVE"), counts.archive_total);
+    const mCounts = {
+        INBOX: counts.inbox_unread,
+        STARRED: counts.starred_total,
+        SENT: counts.sent_total,
+        DRAFT: counts.drafts_total,
+        ARCHIVE: counts.archive_total,
+        TRASH: counts.trash_total,
+    };
+    for (const mailboxId in mCounts) {
+        setBadge(find(mailboxId), mCounts[mailboxId]);
+    }
 }
 
 export function bindMailboxNav(onMailboxSelect) {
@@ -75,10 +82,7 @@ export function setUserProfile(profile) {
     if (email) email.textContent = profile.email;
 }
 
-/**
- * Bind the user row to open the account popover.
- * onAccountPopover: async () => void — called when user row is clicked.
- */
+
 export function bindUserRow(onAccountPopover) {
     const row = document.getElementById("user-row");
     if (row) row.onclick = onAccountPopover;

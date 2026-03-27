@@ -43,18 +43,28 @@ export async function syncMailboxInBackground(mailbox, force = false, onSynced =
   if (!force && now - last < RESYNC_COOLDOWN_MS) return;
   lastSynced.set(key, now);
 
-  
   try {
-    const { getActiveAccountInfo } = await import("../api.js");
+    const { getActiveAccountInfo, syncImapMailboxPage } = await import("../api.js");
     const info = await getActiveAccountInfo();
     if (info?.provider === "imap") {
+      const currentOffset = mailboxNextPageToken.get(mailbox) || 0;
+      if (currentOffset !== -1) {
+        const hasMore = await syncImapMailboxPage(mailbox, currentOffset);
+        if (hasMore) {
+          mailboxNextPageToken.set(mailbox, currentOffset + 50);
+        } else {
+          mailboxNextPageToken.set(mailbox, -1);
+        }
+      }
       const latest = await getEmails(mailbox);
       ingestContactsFromEmails(latest);
       if (mailbox === "INBOX") await notifyNewEmails(latest);
       if (onSynced) onSynced(mailbox, latest);
       return;
     }
-  } catch {}
+  } catch (err) {
+    console.error("IMAP sync error:", err);
+  }
 
   
   if (mailbox !== "STARRED" && mailbox !== "ARCHIVE") {

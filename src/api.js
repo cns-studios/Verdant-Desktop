@@ -19,13 +19,16 @@ export const getActiveAccountInfo = () => invoke("get_active_account_info");
 
 export const syncEmails = () => invoke("sync_emails");
 export const syncMailbox = (mailbox) => invoke("sync_mailbox", { mailbox });
-export const syncMailboxPage = (mailbox, pageToken) => invoke("sync_mailbox_page", { mailbox, pageToken });
+export async function syncMailboxPage(mailbox, pageToken) { return invoke("sync_mailbox_page", { mailbox, pageToken }); }
+export async function syncImapMailboxPage(mailbox, offset) { return invoke("sync_imap_mailbox_page", { mailbox, offset }); }
 export const getEmails = (mailbox) => invoke("get_emails", { mailbox });
 export const deepSearchEmails = (query) => invoke("deep_search_emails", { query });
 export const setEmailReadStatus = (emailId, isRead) => invoke("set_email_read_status", { emailId, isRead });
 export const toggleStarred = (emailId) => invoke("toggle_starred", { emailId });
-export const archiveEmail = (emailId) => invoke("archive_email", { emailId });
-export const trashEmail = (emailId) => invoke("trash_email", { emailId });
+export async function archiveEmail(emailId) { return invoke("archive_email", { emailId }); }
+export async function trashEmail(emailId) { return invoke("trash_email", { emailId }); }
+export async function permanentDeleteEmail(emailId) { return invoke("permanent_delete_email", { emailId }); }
+export async function restoreFromTrash(emailId) { return invoke("restore_from_trash", { emailId }); }
 export const getMailboxCounts = () => invoke("get_mailbox_counts");
 export const clearLocalData = () => invoke("clear_local_data");
 

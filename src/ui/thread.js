@@ -2,7 +2,7 @@ import { getInboxThreads, getThreadMessages, markThreadRead, archiveEmail, trash
 import { escapeHtml, sanitizeUnicodeNoise, formatListDate, formatReadingDate } from "../lib/format.js";
 import { showToast } from "../lib/toast.js";
 import { t } from "../lib/i18n.js";
-import { applySenderAvatar } from "./reading.js";
+import { applySenderAvatar, buildActionMenu } from "./reading.js";
 import { downloadAttachment } from "../api.js";
 import { openComposeForReply, openComposeForForward } from "./compose.js";
 
@@ -245,7 +245,7 @@ function buildExpandedBubble(message, senderName) {
       <div class="thread-bubble-avatar"></div>
       <div class="thread-bubble-meta-expanded">
         <span class="thread-bubble-sender">${escapeHtml(senderName)}</span>
-        <span class="thread-bubble-to">to ${escapeHtml(sanitizeUnicodeNoise(message.to_recipients || "me"))}</span>
+        <span class="thread-bubble-to">${t("reading.to_x", { name: escapeHtml(sanitizeUnicodeNoise(message.to_recipients || t("reading.to_me"))) })}</span>
       </div>
       <span class="thread-bubble-date">${escapeHtml(formatReadingDate(message.date))}</span>
     </div>
@@ -450,8 +450,60 @@ export function bindThreadActions(onRefresh, onCountsRefresh) {
       }
 
       if (title === t("reading.more")) {
-        // "more" menu is handled by reading.js bindReadingActions for non-thread path;
-        // for threads we just skip — no-op here since bindReadingActions also attaches to this button.
+        const messageIds = Array.from(document.querySelectorAll(".thread-bubble"))
+          .map(b => b.dataset.messageId).filter(Boolean);
+          
+        const isTrash = document.querySelector(".sidebar .nav-item.active")?.dataset?.mailbox === "TRASH";
+
+        const entries = [
+          {
+            label: t("reading.mark_read"),
+            onClick: async () => {
+              for (const id of messageIds) await setEmailReadStatus(id, true).catch(() => {});
+              showToast(t("toast.read_marked"));
+            },
+          },
+          {
+            label: t("reading.mark_unread_action"),
+            onClick: async () => {
+              for (const id of messageIds) await setEmailReadStatus(id, false).catch(() => {});
+              showToast(t("toast.unread_marked"));
+            },
+          },
+          {
+            label: t("reading.toggle_star"),
+            onClick: async () => {
+              for (const id of messageIds) await toggleStarred(id).catch(() => {});
+              showToast(t("toast.star_updated"));
+            },
+          },
+          ...(isTrash ? [
+            {
+              label: t("reading.restore"),
+              onClick: async () => {
+                const { restoreFromTrash } = await import("../api.js");
+                for (const id of messageIds) {
+                  await restoreFromTrash(id).catch(() => {});
+                }
+                showToast(t("toast.restored"));
+              },
+            },
+            {
+              label: t("reading.permanent_delete"),
+              onClick: async () => {
+                const { permanentDeleteEmail } = await import("../api.js");
+                for (const id of messageIds) {
+                  await permanentDeleteEmail(id).catch(() => {});
+                }
+                showToast(t("toast.permanently_deleted"));
+              },
+            },
+          ] : []),
+        ];
+
+        buildActionMenu(entries, button, async () => {
+          if (onRefreshCallback) await onRefreshCallback();
+        });
         return;
       }
     };

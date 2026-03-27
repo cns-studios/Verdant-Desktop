@@ -10,13 +10,13 @@ export function renderShell() {
         <span class="app-subtitle">- ${t("sidebar.inbox")}</span>
       </div>
       <div class="app-header-controls" id="app-header-controls">
-        <button class="app-win-btn" id="app-min-btn" aria-label="Minimize window" title="Minimize">
+        <button class="app-win-btn" id="app-min-btn" aria-label="${t("app.minimize_window")}" title="${t("app.minimize")}">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
         </button>
-        <button class="app-win-btn" id="app-max-btn" aria-label="Maximize window" title="Maximize">
+        <button class="app-win-btn" id="app-max-btn" aria-label="${t("app.maximize_window")}" title="${t("app.maximize")}">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="5" width="14" height="14" rx="1"/></svg>
         </button>
-        <button class="app-win-btn close" id="app-close-btn" aria-label="Close window" title="Close">
+        <button class="app-win-btn close" id="app-close-btn" aria-label="${t("app.close_window")}" title="${t("app.close")}">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
       </div>
@@ -64,6 +64,10 @@ export function renderShell() {
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
             ${t("sidebar.drafts")}
           </div>
+          <div class="nav-item" data-mailbox="TRASH">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+            ${t("sidebar.trash")}
+          </div>
         </div>
 
         <div class="sidebar-footer">
@@ -81,7 +85,7 @@ export function renderShell() {
         <div class="list-header">
           <div class="list-title-row">
             <span class="list-title">${t("sidebar.inbox")}</span>
-            <span class="list-count">0 ${t("list.count", { n: "" }).trim()}</span>
+            <span class="list-count">0 ${t("list.count", { n: 0 })}</span>
           </div>
           <div class="search-bar">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
@@ -98,7 +102,7 @@ export function renderShell() {
         <div class="email-list" id="email-list"></div>
       </div>
 
-      <div class="pane-resizer" id="pane-resizer" role="separator" aria-orientation="vertical" aria-label="Resize inbox list"></div>
+      <div class="pane-resizer" id="pane-resizer" role="separator" aria-orientation="vertical" aria-label="${t("list.resize_label")}"></div>
 
       <div class="reading-pane">
         <div class="reading-header">
@@ -146,7 +150,7 @@ export function renderShell() {
         <div class="modal-header">
           <span class="modal-title">${t("compose.title")}</span>
           <div class="modal-header-actions">
-            <button class="modal-close" id="compose-max-btn" title="Maximize" aria-label="Maximize">
+            <button class="modal-close" id="compose-max-btn" title="${t("app.maximize")}" aria-label="${t("app.maximize")}">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="1"></rect></svg>
             </button>
             <button class="modal-close" id="compose-close-btn">×</button>
@@ -180,22 +184,22 @@ export function renderShell() {
           <div id="compose-body" class="compose-editor" contenteditable="true" data-placeholder="${t("compose.placeholder")}"></div>
         </div>
         <div class="compose-format-toolbar" id="compose-format-toolbar">
-          <button class="compose-format-btn" type="button" data-format="bold">Bold</button>
-          <button class="compose-format-btn" type="button" data-format="header">Header</button>
-          <button class="compose-format-btn" type="button" data-format="italic">Cursive</button>
-          <button class="compose-format-btn" type="button" data-format="list">List</button>
-          <button class="compose-format-btn" type="button" data-format="quote">Quote</button>
-          <button class="compose-format-btn" type="button" data-format="code">Code</button>
-          <button class="compose-format-btn" type="button" data-format="clear">Clear formatting</button>
+          <button class="compose-format-btn" type="button" data-format="bold">${t("compose.format.bold")}</button>
+          <button class="compose-format-btn" type="button" data-format="header">${t("compose.format.header")}</button>
+          <button class="compose-format-btn" type="button" data-format="italic">${t("compose.format.italic")}</button>
+          <button class="compose-format-btn" type="button" data-format="list">${t("compose.format.list")}</button>
+          <button class="compose-format-btn" type="button" data-format="quote">${t("compose.format.quote")}</button>
+          <button class="compose-format-btn" type="button" data-format="code">${t("compose.format.code")}</button>
+          <button class="compose-format-btn" type="button" data-format="clear">${t("compose.format.clear")}</button>
         </div>
         <div class="compose-attachments" id="compose-attachments"></div>
         <input id="compose-file-input" type="file" multiple hidden>
         <div class="modal-footer">
           <div class="modal-tools">
-            <button class="modal-tool" id="compose-attach-btn" title="Attach file">
+            <button class="modal-tool" id="compose-attach-btn" title="${t("compose.tool.attach")}">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
             </button>
-            <button class="modal-tool" id="compose-format-btn" title="Format text">
+            <button class="modal-tool" id="compose-format-btn" title="${t("compose.tool.format")}">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/></svg>
             </button>
           </div>
@@ -342,6 +346,7 @@ function injectShellStyles() {
     .compose-format-toolbar.open { display:flex; }
     .compose-format-btn { border:1px solid var(--border); background:var(--white); color:var(--text-mid); border-radius:6px; padding:5px 8px; font-family:'DM Sans',sans-serif; font-size:12px; cursor:pointer; transition:background 0.12s, color 0.12s; }
     .compose-format-btn:hover { background:var(--green-pale); color:var(--green); }
+    .compose-format-btn.active { background:var(--green-pale); color:var(--green); border-color:var(--green-muted); font-weight:600; }
     .compose-attachments { margin:0 18px 10px; display:flex; flex-wrap:wrap; gap:6px; min-height:20px; }
     .compose-attachment { display:inline-flex; align-items:center; gap:6px; padding:4px 8px; border-radius:999px; border:1px solid var(--green-muted); background:var(--green-pale); color:var(--green); font-size:11px; max-width:100%; }
     .compose-attachment-name { max-width:180px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }

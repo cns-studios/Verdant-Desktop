@@ -160,7 +160,7 @@ function buildQuotedHtml(email) {
   return `
     <div style="border-left: 3px solid #c8d5c4; padding-left: 12px; margin-top: 16px; color: #4a4d45;">
       <div style="font-size: 12px; color: #8a8d84; margin-bottom: 8px;">
-        On ${date}, ${sender} wrote:
+        ${t("compose.quoted_on", { date, sender })}
       </div>
       <div style="font-size: 13px;">
         ${originalHtml}
@@ -179,8 +179,8 @@ function buildForwardHtml(email) {
   return `
     <div style="border-left: 3px solid #c8d5c4; padding-left: 12px; margin-top: 16px; color: #4a4d45;">
       <div style="font-size: 12px; color: #8a8d84; margin-bottom: 8px; line-height: 1.6;">
-        ———— Forwarded message ————<br>
-        From: ${sender}<br>
+        ${t("compose.forwarded_message")}<br>
+        ${t("compose.to")}: ${sender}<br>
         Date: ${date}<br>
         Subject: ${subject}<br>
         To: ${to}
@@ -211,7 +211,7 @@ function renderRecipientChips(field) {
     chip.className = "compose-recipient-chip";
     chip.innerHTML = `
       <span class="compose-recipient-chip-label" title="${escapeHtml(recipientLabel(contact))}">${escapeHtml(recipientLabel(contact))}</span>
-      <button class="compose-recipient-chip-remove" type="button" aria-label="Remove recipient">x</button>
+      <button class="compose-recipient-chip-remove" type="button" aria-label="${t("compose.remove_recipient")}">x</button>
     `;
     chip.querySelector(".compose-recipient-chip-remove")?.addEventListener("click", () => {
       composeRecipients[field] = recipients.filter((_, i) => i !== index);
@@ -515,6 +515,7 @@ function applyFormatToComposer(formatType) {
   }
 
   composeSendMode = "html";
+  updateFormatToolbarState();
 }
 
 export function bindComposeFormatting() {
@@ -529,18 +530,54 @@ export function bindComposeFormatting() {
   });
 
   toolbar.querySelectorAll("[data-format]").forEach((button) => {
-    button.addEventListener("click", () => applyFormatToComposer(button.getAttribute("data-format") || "bold"));
+    button.addEventListener("click", () => {
+      applyFormatToComposer(button.getAttribute("data-format") || "bold");
+      updateFormatToolbarState();
+    });
+  });
+
+  // Track active formatting state
+  const editor = document.getElementById("compose-body");
+  if (editor) {
+    editor.addEventListener("input", () => updateFormatToolbarState());
+    editor.addEventListener("mouseup", () => updateFormatToolbarState());
+    editor.addEventListener("keyup", () => updateFormatToolbarState());
+  }
+  document.addEventListener("selectionchange", () => {
+    if (!toolbar.classList.contains("open")) return;
+    updateFormatToolbarState();
   });
 
   window.addEventListener("verdant-compose-closed", () => {
     toolbar.classList.remove("open");
     formatToggle.classList.remove("active");
     composeSendMode = "plain";
+    toolbar.querySelectorAll("[data-format]").forEach((b) => b.classList.remove("active"));
+  });
+}
+
+function updateFormatToolbarState() {
+  const toolbar = document.getElementById("compose-format-toolbar");
+  const editor = document.getElementById("compose-body");
+  if (!toolbar || !editor) return;
+
+  toolbar.querySelectorAll("[data-format]").forEach((btn) => {
+    const fmt = btn.getAttribute("data-format");
+    let isActive = false;
+    try {
+      if (fmt === "bold") isActive = document.queryCommandState("bold");
+      else if (fmt === "italic") isActive = document.queryCommandState("italic");
+      else if (fmt === "list") isActive = document.queryCommandState("insertUnorderedList");
+      else if (fmt === "header") isActive = !!closestInEditor(editor, "h2");
+      else if (fmt === "quote") isActive = !!closestInEditor(editor, "blockquote");
+      else if (fmt === "code") isActive = !!closestInEditor(editor, "pre");
+    } catch {}
+    btn.classList.toggle("active", isActive);
   });
 }
 
 function composeAttachmentLabel(fileName) {
-  const clean = (fileName || "attachment").trim();
+  const clean = (fileName || t("compose.attachment_fallback")).trim();
   return clean.length > 34 ? `${clean.slice(0, 31)}...` : clean;
 }
 
@@ -553,7 +590,7 @@ function renderComposeAttachments() {
     chip.className = "compose-attachment";
     chip.innerHTML = `
       <span class="compose-attachment-name" title="${escapeHtml(attachment.filename)}">${escapeHtml(composeAttachmentLabel(attachment.filename))}</span>
-      <button class="compose-attachment-remove" aria-label="Remove attachment">x</button>
+      <button class="compose-attachment-remove" aria-label="${t("compose.remove_attachment")}">x</button>
     `;
     chip.querySelector(".compose-attachment-remove")?.addEventListener("click", () => {
       composeAttachments = composeAttachments.filter((_, i) => i !== idx);
@@ -595,9 +632,45 @@ export function bindComposeAttachments() {
       _suppressNextReset = false;
       return;
     }
-    if (!composeDraftId) resetComposeState();
+    if (!composeDraftId) {
+      resetComposeState();
+      restoreLocalComposeState();
+    }
   });
-  window.addEventListener("verdant-compose-closed", () => resetComposeState());
+  window.addEventListener("verdant-compose-closed", () => {
+    saveLocalComposeState();
+    resetComposeState();
+  });
+}
+
+function saveLocalComposeState() {
+  if (composeDraftId || composeInReplyTo) return;
+  const payload = collectComposePayload();
+  if (!payload.to && !payload.subject && (!payload.body || payload.body.trim() === "")) {
+    localStorage.removeItem("verdant.localDraft");
+    return;
+  }
+  localStorage.setItem("verdant.localDraft", JSON.stringify({
+    to: payload.to, cc: payload.cc, subject: payload.subject,
+    bodyHtml: payload.bodyHtml, mode: composeSendMode,
+  }));
+}
+
+function restoreLocalComposeState() {
+  try {
+    const raw = localStorage.getItem("verdant.localDraft");
+    if (!raw) return;
+    const data = JSON.parse(raw);
+    setComposeRecipientsFromHeader("to", data.to || "");
+    setComposeRecipientsFromHeader("cc", data.cc || "");
+    const subInput = document.getElementById("compose-subject");
+    if (subInput) subInput.value = data.subject || "";
+    const domBody = document.getElementById("compose-body");
+    if (domBody) domBody.innerHTML = data.bodyHtml || "";
+    composeSendMode = data.mode || "html";
+  } catch (e) {
+    console.error("Failed to restore local draft", e);
+  }
 }
 
 export function bindComposeWindowControls() {
@@ -656,6 +729,7 @@ export function bindComposeSend(onAfterSend) {
       parseContactsFromHeader(payload.to).forEach((c) => upsertContact(c.email, c.name));
       parseContactsFromHeader(payload.cc).forEach((c) => upsertContact(c.email, c.name));
       showToast(t("toast.sent"));
+      localStorage.removeItem("verdant.localDraft");
       closeCompose();
       await onAfterSend();
     } catch (err) {

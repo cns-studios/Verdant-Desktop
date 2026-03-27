@@ -17,6 +17,7 @@ pub struct MailboxCounts {
     pub sent_total: i64,
     pub drafts_total: i64,
     pub archive_total: i64,
+    pub trash_total: i64,
 }
 
 
@@ -259,6 +260,41 @@ pub async fn deep_search_emails(
     query: String,
 ) -> Result<Vec<Email>, String> {
     let account_id = get_active_id(&state).await;
+
+    let account_info = {
+        let conn = state.conn.lock().await;
+        crate::db::get_account_by_id(&conn, account_id)
+            .ok().flatten()
+    };
+
+    if let Some(ref acc) = account_info {
+        if acc.provider == "imap" {
+            let acc_clone = acc.clone();
+            let q = query.clone();
+            let result = tokio::task::spawn_blocking(move || {
+                crate::imap_sync::imap_search_emails(&acc_clone, &q, 100)
+            }).await;
+            return match result {
+                Ok(Ok(emails)) => Ok(emails),
+                Ok(Err(_e)) => {
+                    // Fallback to local DB search on IMAP error
+                    let conn = state.conn.lock().await;
+                    let pattern = format!("%{}%", query);
+                    let mut stmt = conn.prepare(
+                        "SELECT id,account_id,draft_id,thread_id,subject,sender,to_recipients,cc_recipients,
+                                snippet,body_html,attachments_json,has_attachments,date,is_read,starred,mailbox,labels,internal_ts
+                         FROM emails WHERE account_id=?1 AND (subject LIKE ?2 OR sender LIKE ?2 OR snippet LIKE ?2)
+                         ORDER BY internal_ts DESC LIMIT 100"
+                    ).map_err(|e| e.to_string())?;
+                    let emails = stmt.query_map(rusqlite::params![account_id, pattern], map_email_row)
+                        .map_err(|e| e.to_string())?.filter_map(Result::ok).collect();
+                    Ok(emails)
+                },
+                Err(e) => Err(format!("Search task error: {}", e)),
+            };
+        }
+    }
+
     let token = ensure_token(&state).await?.access_token;
     let client = reqwest::Client::new();
     let q = format!("in:anywhere {}", query.trim());
@@ -327,6 +363,39 @@ pub async fn set_email_read_status(
     is_read: bool,
 ) -> Result<(), String> {
     let account_id = get_active_id(&state).await;
+
+    let account = {
+        let conn = state.conn.lock().await;
+        crate::db::get_account_by_id(&conn, account_id).ok().flatten()
+    };
+
+    if let Some(ref acc) = account {
+        if acc.provider == "gmail" {
+            let gmail_id = email_id.splitn(2, ':').nth(1).unwrap_or(&email_id).to_string();
+            if let Ok(token_info) = ensure_token(&state).await {
+                let client = reqwest::Client::new();
+                let url = format!("https://gmail.googleapis.com/gmail/v1/users/me/messages/{}/modify", gmail_id);
+                let body = if is_read {
+                    json!({"removeLabelIds": ["UNREAD"]})
+                } else {
+                    json!({"addLabelIds": ["UNREAD"]})
+                };
+                let _ = client.post(url).bearer_auth(&token_info.access_token).json(&body).send().await;
+            }
+        } else if acc.provider == "imap" {
+            let msg_id = email_id.splitn(2, ':').nth(1).unwrap_or(&email_id).to_string();
+            let mailbox = {
+                let conn = state.conn.lock().await;
+                conn.query_row("SELECT mailbox FROM emails WHERE id=?1 AND account_id=?2",
+                    rusqlite::params![email_id, account_id], |r| r.get::<_, String>(0)).unwrap_or_else(|_| "INBOX".to_string())
+            };
+            let acc_clone = acc.clone();
+            let _ = tokio::task::spawn_blocking(move || {
+                crate::imap_sync::imap_set_flag(&acc_clone, &msg_id, "\\Seen", is_read, &mailbox)
+            }).await;
+        }
+    }
+
     let conn = state.conn.lock().await;
     conn.execute(
         "UPDATE emails SET is_read=?1 WHERE id=?2 AND account_id=?3",
@@ -338,6 +407,45 @@ pub async fn set_email_read_status(
 #[tauri::command]
 pub async fn toggle_starred(state: State<'_, Arc<DbState>>, email_id: String) -> Result<(), String> {
     let account_id = get_active_id(&state).await;
+
+    let (is_currently_starred, mailbox) = {
+        let conn = state.conn.lock().await;
+        let starred: bool = conn.query_row("SELECT starred FROM emails WHERE id=?1 AND account_id=?2",
+            rusqlite::params![email_id, account_id], |r| r.get::<_, i32>(0)).unwrap_or(0) != 0;
+        let mb: String = conn.query_row("SELECT mailbox FROM emails WHERE id=?1 AND account_id=?2",
+            rusqlite::params![email_id, account_id], |r| r.get::<_, String>(0)).unwrap_or_else(|_| "INBOX".to_string());
+        (starred, mb)
+    };
+    let will_be_starred = !is_currently_starred;
+
+    let account = {
+        let conn = state.conn.lock().await;
+        crate::db::get_account_by_id(&conn, account_id).ok().flatten()
+    };
+
+    if let Some(ref acc) = account {
+        if acc.provider == "gmail" {
+            let gmail_id = email_id.splitn(2, ':').nth(1).unwrap_or(&email_id).to_string();
+            if let Ok(token_info) = ensure_token(&state).await {
+                let client = reqwest::Client::new();
+                let url = format!("https://gmail.googleapis.com/gmail/v1/users/me/messages/{}/modify", gmail_id);
+                let body = if will_be_starred {
+                    json!({"addLabelIds": ["STARRED"]})
+                } else {
+                    json!({"removeLabelIds": ["STARRED"]})
+                };
+                let _ = client.post(url).bearer_auth(&token_info.access_token).json(&body).send().await;
+            }
+        } else if acc.provider == "imap" {
+            let msg_id = email_id.splitn(2, ':').nth(1).unwrap_or(&email_id).to_string();
+            let acc_clone = acc.clone();
+            let mb = mailbox.clone();
+            let _ = tokio::task::spawn_blocking(move || {
+                crate::imap_sync::imap_set_flag(&acc_clone, &msg_id, "\\Flagged", will_be_starred, &mb)
+            }).await;
+        }
+    }
+
     let conn = state.conn.lock().await;
     conn.execute(
         "UPDATE emails SET starred=CASE WHEN starred=1 THEN 0 ELSE 1 END WHERE id=?1 AND account_id=?2",
@@ -371,6 +479,25 @@ pub async fn archive_email(state: State<'_, Arc<DbState>>, email_id: String) -> 
         if !res.status().is_success() {
             return Err(format!("Archive failed: {}", res.status()));
         }
+    } else {
+        let account = {
+            let conn = state.conn.lock().await;
+            crate::db::get_account_by_id(&conn, account_id).ok().flatten()
+        };
+        if let Some(acc) = account {
+            if acc.provider == "imap" {
+                let msg_id = email_id.splitn(2, ':').nth(1).unwrap_or(&email_id).to_string();
+                let mailbox = {
+                    let conn = state.conn.lock().await;
+                    conn.query_row("SELECT mailbox FROM emails WHERE id=?1 AND account_id=?2",
+                        rusqlite::params![email_id, account_id], |r| r.get::<_, String>(0)).unwrap_or_else(|_| "INBOX".to_string())
+                };
+                let acc_clone = acc.clone();
+                let _ = tokio::task::spawn_blocking(move || {
+                    crate::imap_sync::imap_move_to_folder(&acc_clone, &msg_id, &mailbox, "ARCHIVE")
+                }).await;
+            }
+        }
     }
 
     let conn = state.conn.lock().await;
@@ -385,28 +512,38 @@ pub async fn archive_email(state: State<'_, Arc<DbState>>, email_id: String) -> 
 pub async fn trash_email(state: State<'_, Arc<DbState>>, email_id: String) -> Result<(), String> {
     let account_id = get_active_id(&state).await;
 
-    let is_gmail = {
+    let account = {
         let conn = state.conn.lock().await;
-        crate::db::get_account_by_id(&conn, account_id)
-            .ok().flatten()
-            .map(|a| a.provider == "gmail")
-            .unwrap_or(false)
+        crate::db::get_account_by_id(&conn, account_id).ok().flatten()
     };
 
-    if is_gmail {
-        let gmail_id = email_id.splitn(2, ':').nth(1).unwrap_or(&email_id).to_string();
-        let token = ensure_token(&state).await?.access_token;
-        let client = reqwest::Client::new();
-        let url = format!("https://gmail.googleapis.com/gmail/v1/users/me/messages/{}/trash", gmail_id);
-        let res = client.post(url).bearer_auth(&token).send().await.map_err(|e| e.to_string())?;
-        if !res.status().is_success() {
-            return Err(format!("Trash failed: {}", res.status()));
+    if let Some(ref acc) = account {
+        if acc.provider == "gmail" {
+            let gmail_id = email_id.splitn(2, ':').nth(1).unwrap_or(&email_id).to_string();
+            let token = ensure_token(&state).await?.access_token;
+            let client = reqwest::Client::new();
+            let url = format!("https://gmail.googleapis.com/gmail/v1/users/me/messages/{}/trash", gmail_id);
+            let res = client.post(url).bearer_auth(&token).send().await.map_err(|e| e.to_string())?;
+            if !res.status().is_success() {
+                return Err(format!("Trash failed: {}", res.status()));
+            }
+        } else if acc.provider == "imap" {
+            let msg_id = email_id.splitn(2, ':').nth(1).unwrap_or(&email_id).to_string();
+            let mailbox = {
+                let conn = state.conn.lock().await;
+                conn.query_row("SELECT mailbox FROM emails WHERE id=?1 AND account_id=?2",
+                    rusqlite::params![email_id, account_id], |r| r.get::<_, String>(0)).unwrap_or_else(|_| "INBOX".to_string())
+            };
+            let acc_clone = acc.clone();
+            let _ = tokio::task::spawn_blocking(move || {
+                crate::imap_sync::imap_move_to_folder(&acc_clone, &msg_id, &mailbox, "TRASH")
+            }).await;
         }
     }
 
     let conn = state.conn.lock().await;
     conn.execute(
-        "DELETE FROM emails WHERE id=?1 AND account_id=?2",
+        "UPDATE emails SET mailbox='TRASH' WHERE id=?1 AND account_id=?2",
         rusqlite::params![email_id, account_id],
     ).map_err(|e| e.to_string())?;
     Ok(())
@@ -428,6 +565,7 @@ pub async fn get_mailbox_counts(state: State<'_, Arc<DbState>>) -> Result<Mailbo
         sent_total: count("SELECT COUNT(*) FROM emails WHERE mailbox='SENT' AND account_id=?1"),
         drafts_total: count("SELECT COUNT(*) FROM emails WHERE mailbox='DRAFT' AND account_id=?1"),
         archive_total: count("SELECT COUNT(*) FROM emails WHERE mailbox='ARCHIVE' AND account_id=?1"),
+        trash_total: count("SELECT COUNT(*) FROM emails WHERE mailbox='TRASH' AND account_id=?1"),
     })
 }
 
@@ -536,4 +674,130 @@ pub async fn mark_thread_read(state: State<'_, Arc<DbState>>, thread_id: String)
         rusqlite::params![thread_id, account_id],
     ).map_err(|e| e.to_string())?;
     Ok(())
+}
+
+#[tauri::command]
+pub async fn permanent_delete_email(state: State<'_, Arc<DbState>>, email_id: String) -> Result<(), String> {
+    let account_id = get_active_id(&state).await;
+
+    let account = {
+        let conn = state.conn.lock().await;
+        crate::db::get_account_by_id(&conn, account_id).ok().flatten()
+    };
+
+    if let Some(ref acc) = account {
+        if acc.provider == "gmail" {
+            let gmail_id = email_id.splitn(2, ':').nth(1).unwrap_or(&email_id).to_string();
+            if let Ok(token_info) = ensure_token(&state).await {
+                let client = reqwest::Client::new();
+                let url = format!("https://gmail.googleapis.com/gmail/v1/users/me/messages/{}", gmail_id);
+                let _ = client.delete(url).bearer_auth(&token_info.access_token).send().await;
+            }
+        } else if acc.provider == "imap" {
+            let msg_id = email_id.splitn(2, ':').nth(1).unwrap_or(&email_id).to_string();
+            let acc_clone = acc.clone();
+            let _ = tokio::task::spawn_blocking(move || {
+                crate::imap_sync::imap_set_flag(&acc_clone, &msg_id, "\\Deleted", true, "TRASH")
+            }).await;
+        }
+    }
+
+    let conn = state.conn.lock().await;
+    conn.execute(
+        "DELETE FROM emails WHERE id=?1 AND account_id=?2",
+        rusqlite::params![email_id, account_id],
+    ).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn restore_from_trash(state: State<'_, Arc<DbState>>, email_id: String) -> Result<(), String> {
+    let account_id = get_active_id(&state).await;
+
+    let account = {
+        let conn = state.conn.lock().await;
+        crate::db::get_account_by_id(&conn, account_id).ok().flatten()
+    };
+
+    if let Some(ref acc) = account {
+        if acc.provider == "gmail" {
+            let gmail_id = email_id.splitn(2, ':').nth(1).unwrap_or(&email_id).to_string();
+            if let Ok(token_info) = ensure_token(&state).await {
+                let client = reqwest::Client::new();
+                let url = format!("https://gmail.googleapis.com/gmail/v1/users/me/messages/{}/untrash", gmail_id);
+                let _ = client.post(url).bearer_auth(&token_info.access_token).send().await;
+            }
+        } else if acc.provider == "imap" {
+            let msg_id = email_id.splitn(2, ':').nth(1).unwrap_or(&email_id).to_string();
+            let acc_clone = acc.clone();
+            let _ = tokio::task::spawn_blocking(move || {
+                crate::imap_sync::imap_move_to_folder(&acc_clone, &msg_id, "TRASH", "INBOX")
+            }).await;
+        }
+    }
+
+    let conn = state.conn.lock().await;
+    conn.execute(
+        "UPDATE emails SET mailbox='INBOX' WHERE id=?1 AND account_id=?2",
+        rusqlite::params![email_id, account_id],
+    ).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn sync_imap_mailbox_page(
+    state: State<'_, Arc<DbState>>,
+    mailbox: String,
+    offset: u32,
+) -> Result<bool, String> {
+    let account_id = get_active_id(&state).await;
+
+    let account = {
+        let conn = state.conn.lock().await;
+        crate::db::get_account_by_id(&conn, account_id)
+            .ok().flatten()
+            .ok_or_else(|| "Account not found".to_string())?
+    };
+
+    if account.provider != "imap" {
+        return Err("Not an IMAP account".to_string());
+    }
+
+    let acc_clone = account.clone();
+    let mb = mailbox.clone();
+    let result = tokio::task::spawn_blocking(move || {
+        crate::imap_sync::sync_imap_mailbox_page(&acc_clone, &mb, offset, 50)
+    }).await;
+
+    match result {
+        Ok(Ok(emails)) => {
+            let has_more = !emails.is_empty();
+            let conn = state.conn.lock().await;
+            for email in emails {
+                let _ = conn.execute(
+                    "INSERT INTO emails (id, account_id, draft_id, thread_id, subject, sender, to_recipients, cc_recipients,
+                                         snippet, body_html, attachments_json, has_attachments, date, is_read, starred,
+                                         mailbox, labels, internal_ts)
+                     VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18)
+                    ON CONFLICT(id, account_id) DO UPDATE SET
+                        snippet = excluded.snippet,
+                        body_html = excluded.body_html,
+                        is_read = excluded.is_read,
+                        mailbox = excluded.mailbox,
+                        labels = excluded.labels,
+                        internal_ts = excluded.internal_ts",
+                    rusqlite::params![
+                        email.id, email.account_id, email.draft_id, email.thread_id,
+                        email.subject, email.sender, email.to_recipients, email.cc_recipients,
+                        email.snippet, email.body_html, email.attachments_json,
+                        email.has_attachments as i32, email.date, email.is_read as i32,
+                        email.starred as i32, email.mailbox, email.labels, email.internal_ts
+                    ],
+                );
+            }
+            Ok(has_more)
+        }
+        Ok(Err(e)) => Err(e),
+        Err(e) => Err(format!("Task error: {}", e)),
+    }
 }

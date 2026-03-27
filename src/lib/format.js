@@ -42,7 +42,7 @@ export function formatListDate(raw) {
     return d.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" });
   }
   if (diff === 1) {
-    return lang === "de" ? "Gestern" : "Yesterday";
+    return t("app.yesterday");
   }
   return d.toLocaleDateString(locale);
 }
@@ -67,7 +67,7 @@ export function formatReadingDate(raw) {
 
 export function formatAttachmentSize(size) {
   const n = Number(size || 0);
-  if (!Number.isFinite(n) || n <= 0) return "Unknown size";
+  if (!Number.isFinite(n) || n <= 0) return t("app.unknown_size");
   if (n < 1024) return `${n} B`;
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
   return `${(n / (1024 * 1024)).toFixed(1)} MB`;
@@ -80,6 +80,7 @@ export function mailboxTitle(mailbox) {
     case "ARCHIVE": return t("sidebar.archive");
     case "SENT": return t("sidebar.sent");
     case "DRAFT": return t("sidebar.drafts");
+    case "TRASH": return t("sidebar.trash");
     default: return t("sidebar.inbox");
   }
 }

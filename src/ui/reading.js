@@ -82,18 +82,18 @@ function renderRecipientsLine(email) {
 
   const merged = [...toList, ...ccList];
   const mailbox = (email.mailbox || "").toUpperCase();
-  let collapsed = mailbox === "SENT" ? "recipients loading..." : "to me";
-  if (merged.length === 1) collapsed = `to ${merged[0]}`;
-  if (merged.length > 1) collapsed = `to ${merged[0]}, +${merged.length - 1} others`;
+  let collapsed = mailbox === "SENT" ? t("reading.recipients_loading") : t("reading.to_me");
+  if (merged.length === 1) collapsed = t("reading.to_x", { name: merged[0] });
+  if (merged.length > 1) collapsed = t("reading.to_x_others", { name: merged[0], n: merged.length - 1 });
 
   metaTo.textContent = collapsed;
   metaTo.style.cursor = "pointer";
-  metaTo.title = "Click to expand recipients";
+  metaTo.title = t("reading.expand_recipients");
 
   metaTo.onclick = () => {
     const expanded = [
-      toList.length ? `To: ${toList.join(", ")}` : "",
-      ccList.length ? `Cc: ${ccList.join(", ")}` : "",
+      toList.length ? `${t("compose.to")}: ${toList.join(", ")}` : "",
+      ccList.length ? `${t("compose.cc")}: ${ccList.join(", ")}` : "",
     ].filter(Boolean).join(" | ");
     metaTo.textContent = metaTo.textContent === collapsed ? expanded || collapsed : collapsed;
   };
@@ -338,6 +338,7 @@ export function bindReadingActions(getSelected, setSelected, onRefresh, openComp
       if (title === t("reading.more")) {
         const mailbox = getCurrentMailbox?.() || "INBOX";
         const isDraft = email?.mailbox === "DRAFT";
+        const isTrash = email?.mailbox === "TRASH" || mailbox === "TRASH";
 
         const entries = [
           {
@@ -383,6 +384,24 @@ export function bindReadingActions(getSelected, setSelected, onRefresh, openComp
               },
             },
           ] : []),
+          ...(isTrash && email ? [
+            {
+              label: t("reading.restore"),
+              onClick: async () => {
+                const { restoreFromTrash } = await import("../api.js");
+                await restoreFromTrash(email.id);
+                showToast(t("toast.restored"));
+              },
+            },
+            {
+              label: t("reading.permanent_delete"),
+              onClick: async () => {
+                const { permanentDeleteEmail } = await import("../api.js");
+                await permanentDeleteEmail(email.id);
+                showToast(t("toast.permanently_deleted"));
+              },
+            },
+          ] : []),
         ];
 
         buildActionMenu(entries, button, onRefresh);
@@ -398,7 +417,7 @@ export function bindReadingActions(getSelected, setSelected, onRefresh, openComp
   }
 }
 
-function buildActionMenu(entries, anchor, onRefresh) {
+export function buildActionMenu(entries, anchor, onRefresh) {
   document.getElementById("action-menu")?.remove();
   const menu = document.createElement("div");
   menu.id = "action-menu";

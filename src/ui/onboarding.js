@@ -83,6 +83,25 @@ function buildOnboardingStyles() {
             cursor: pointer; transition: background .12s, color .12s;
         }
         .ob-cancel-btn:hover { background: var(--surface2); color: var(--text); }
+
+        .ob-header {
+            position:fixed; top:0; left:0; right:0;
+            height: 42px; min-height: 42px;
+            background: linear-gradient(180deg, var(--surface), #ebe8e2);
+            border-bottom: 1px solid var(--border);
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 0 10px 0 12px; gap: 12px;
+            z-index: 9001;
+        }
+        .ob-header-left { display:flex; align-items:center; gap:9px; }
+        .ob-header-dot { width:9px; height:9px; border-radius:50%; background:var(--green); box-shadow:0 0 0 3px var(--green-pale); flex-shrink:0; }
+        .ob-header-title { font:500 13px 'Fraunces', serif; color:var(--text); letter-spacing:-0.2px; white-space:nowrap; }
+        .ob-header-controls { display:flex; align-items:center; gap:6px; }
+        .ob-win-btn { width:28px; height:24px; border-radius:7px; border:1px solid var(--border); background:var(--surface2); color:var(--text-mid); display:inline-flex; align-items:center; justify-content:center; cursor:pointer; transition:all .12s ease; }
+        .ob-win-btn:hover { background:var(--white); color:var(--text); }
+        .ob-win-btn.close:hover { background:#f3dfdf; border-color:#ddb5b5; color:#8a2e2e; }
+        .ob-win-btn svg { width:12px; height:12px; stroke-width:2.2; }
+        .ob-root.ob-has-header { padding-top: 66px; }
     `;
     document.head.appendChild(style);
 }
@@ -128,19 +147,19 @@ function renderOnboardingContent(root, onSuccess, cancelable) {
         </div>
 
         <div class="ob-heading">
-            <h1>${escapeHtml(cancelable ? "Add an account" : t("onboarding.title"))}</h1>
+            <h1>${escapeHtml(cancelable ? t("accounts.title") : t("onboarding.title"))}</h1>
             <p>${escapeHtml(t("onboarding.subtitle"))}</p>
         </div>
 
         <div class="ob-providers">
             ${providerCardHtml("gmail", t("onboarding.provider.gmail.label"), t("onboarding.provider.gmail.desc"), mailIcon, true)}
-            ${providerCardHtml("gmx", "GMX", "IMAP / SMTP with prefilled config", globeIcon, true)}
+            ${providerCardHtml("gmx", "GMX", t("onboarding.provider.gmx.desc"), globeIcon, true)}
             ${providerCardHtml("imap", t("onboarding.provider.smtp.label"), t("onboarding.provider.smtp.desc"), serverIcon, true)}
         </div>
 
         <div class="ob-error" id="ob-error"></div>
 
-        ${cancelable ? `<div class="ob-cancel-row"><button class="ob-cancel-btn" id="ob-cancel-btn">Cancel</button></div>` : ""}
+        ${cancelable ? `<div class="ob-cancel-row"><button class="ob-cancel-btn" id="ob-cancel-btn">${escapeHtml(t("accounts.cancel"))}</button></div>` : ""}
     `;
 
     root.querySelector("#ob-lang-select")?.addEventListener("change", (e) => {
@@ -191,8 +210,42 @@ export function showOnboarding(onSuccess, cancelable = false) {
 
     const root = document.createElement("div");
     root.id = "verdant-onboarding";
-    root.className = `ob-root${cancelable ? " ob-modal" : ""}`;
-    root.innerHTML = `<div class="ob-inner"></div>`;
+    root.className = `ob-root${cancelable ? " ob-modal" : " ob-has-header"}`;
+
+    if (!cancelable) {
+        const header = document.createElement("div");
+        header.className = "ob-header";
+        header.setAttribute("data-tauri-drag-region", "");
+        header.innerHTML = `
+            <div class="ob-header-left">
+                <span class="ob-header-dot"></span>
+                <span class="ob-header-title">Verdant</span>
+            </div>
+            <div class="ob-header-controls">
+                <button class="ob-win-btn" id="ob-min-btn" aria-label="Minimize">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                </button>
+                <button class="ob-win-btn" id="ob-max-btn" aria-label="Maximize">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="5" width="14" height="14" rx="1"/></svg>
+                </button>
+                <button class="ob-win-btn close" id="ob-close-btn" aria-label="Close">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </div>
+        `;
+        root.appendChild(header);
+
+        import("@tauri-apps/api/window").then(({ getCurrentWindow }) => {
+            const win = getCurrentWindow();
+            header.querySelector("#ob-min-btn")?.addEventListener("click", () => win.minimize());
+            header.querySelector("#ob-max-btn")?.addEventListener("click", () => win.toggleMaximize());
+            header.querySelector("#ob-close-btn")?.addEventListener("click", () => win.close());
+        }).catch(() => {});
+    }
+
+    const inner = document.createElement("div");
+    inner.className = "ob-inner";
+    root.appendChild(inner);
 
     document.getElementById("root").appendChild(root);
     renderOnboardingContent(root, onSuccess, cancelable);
