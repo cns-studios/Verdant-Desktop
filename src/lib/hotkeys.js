@@ -4,6 +4,7 @@ const HOTKEY_COOLDOWN_MS = {
   refresh: 1800,
   settings: 1200,
   search: 250,
+  send: 1000,
 };
 
 export const defaultHotkeys = {
@@ -13,6 +14,7 @@ export const defaultHotkeys = {
   refresh: "ctrl+r",
   settings: "ctrl+,",
   search: "ctrl+k",
+  send: "ctrl+enter",
   close: "escape",
 };
 

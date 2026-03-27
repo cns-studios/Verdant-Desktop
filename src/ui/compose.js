@@ -9,6 +9,7 @@ import {
   parseContactToken,
   parseContactsFromHeader,
 } from "../lib/contacts.js";
+import { loadHotkeys, eventCombo } from "../lib/hotkeys.js";
 
 export let composeAttachments = [];
 export let composeSendMode = "plain";
@@ -742,7 +743,8 @@ export function bindComposeSend(onAfterSend) {
   sendBtn.addEventListener("click", doSend);
 
   document.getElementById("composeModal")?.addEventListener("keydown", (e) => {
-    if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+    const hk = loadHotkeys();
+    if (eventCombo(e) === hk.send) {
       e.preventDefault();
       e.stopPropagation();
       doSend();

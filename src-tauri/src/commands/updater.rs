@@ -232,7 +232,7 @@ fn install_update_sync(path: &str, name: &str) -> Result<(), String> {
     {
         if name.ends_with(".exe") || name.ends_with(".msi") {
             std::process::Command::new("powershell")
-                .args(["-Command", &format!("Start-Process -FilePath '{}' -Verb RunAs -Wait", path)])
+                .args(["-Command", &format!("Start-Process -FilePath '{}' -Verb RunAs", path)])
                 .spawn().map_err(|e| e.to_string())?;
             return Ok(());
         }

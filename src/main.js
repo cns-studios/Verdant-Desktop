@@ -120,8 +120,8 @@ async function runStartupUpdateCheck() {
                 await invoke("install_and_relaunch", { filePath: result.filePath });
                 progressLabel.textContent = t("update.restarting");
                 await new Promise((r) => setTimeout(r, 800));
-                const { relaunch } = await import("@tauri-apps/plugin-process");
-                await relaunch();
+                const { exit } = await import("@tauri-apps/plugin-process");
+                await exit(0);
             } catch (err) {
                 progressLabel.textContent = t("update.failed", { error: String(err) });
                 toast.querySelector("#update-progress-bar").classList.remove("indeterminate");

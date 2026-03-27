@@ -198,6 +198,7 @@ export async function openSettingsModal(profile, currentMailbox, onLogout, onSyn
       <div class="settings-row"><span>${escapeHtml(t("settings.shortcuts.refresh"))}</span><input id="hk-refresh" value="${escapeHtml(hotkeys.refresh)}" /></div>
       <div class="settings-row"><span>${escapeHtml(t("settings.shortcuts.settings"))}</span><input id="hk-settings" value="${escapeHtml(hotkeys.settings)}" /></div>
       <div class="settings-row"><span>${escapeHtml(t("settings.shortcuts.search"))}</span><input id="hk-search" value="${escapeHtml(hotkeys.search)}" /></div>
+      <div class="settings-row"><span>${escapeHtml(t("settings.shortcuts.send"))}</span><input id="hk-send" value="${escapeHtml(hotkeys.send)}" /></div>
       <div class="settings-actions">
         <button class="verdant-btn" id="settings-save">${escapeHtml(t("settings.shortcuts.save"))}</button>
       </div>
@@ -253,7 +254,6 @@ export async function openSettingsModal(profile, currentMailbox, onLogout, onSyn
   `;
   panel.appendChild(grid);
 
-  // Load version
   getVersion().then((v) => {
     const el = panel.querySelector("#settings-installed-version");
     if (el) el.textContent = `v${v}`;
@@ -262,7 +262,6 @@ export async function openSettingsModal(profile, currentMailbox, onLogout, onSyn
     if (el) el.textContent = t("app.version_unknown");
   });
 
-  // Tab switching
   const tabs = Array.from(panel.querySelectorAll(".settings-tab"));
   const panes = Array.from(panel.querySelectorAll(".settings-pane"));
   tabs.forEach((tab) => {
@@ -273,14 +272,12 @@ export async function openSettingsModal(profile, currentMailbox, onLogout, onSyn
     });
   });
 
-  // Language
   panel.querySelector("#settings-lang-select")?.addEventListener("change", (e) => {
     setLang(e.target.value);
     closeOverlay();
     openSettingsModal(profile, currentMailbox, onLogout, onSync);
   });
 
-  // Shortcuts
   panel.querySelector("#settings-save")?.addEventListener("click", () => {
     hotkeys = {
       enabled: !!panel.querySelector("#hk-enabled")?.checked,
@@ -289,13 +286,13 @@ export async function openSettingsModal(profile, currentMailbox, onLogout, onSyn
       refresh: normalizeCombo(panel.querySelector("#hk-refresh")?.value || defaultHotkeys.refresh),
       settings: normalizeCombo(panel.querySelector("#hk-settings")?.value || defaultHotkeys.settings),
       search: normalizeCombo(panel.querySelector("#hk-search")?.value || defaultHotkeys.search),
+      send: normalizeCombo(panel.querySelector("#hk-send")?.value || defaultHotkeys.send),
       close: "escape",
     };
     saveHotkeys(hotkeys);
     showToast(t("toast.shortcuts_saved"));
   });
 
-  // Update channel
   panel.querySelector("#update-channel")?.addEventListener("change", (e) => {
     const value = e.target?.value === "nightly" ? "nightly" : "stable";
     saveUpdatePrefs({ ...updatePrefs, channel: value });
@@ -330,8 +327,8 @@ export async function openSettingsModal(profile, currentMailbox, onLogout, onSyn
 
         if (btn) btn.textContent = t("update.restarting");
         await new Promise(r => setTimeout(r, 600));
-        const { relaunch } = await import("@tauri-apps/plugin-process");
-        await relaunch();
+        const { exit } = await import("@tauri-apps/plugin-process");
+        await exit(0);
       } catch (error) {
         setUpdateStatus(t("settings.app.download_failed"), true);
         showToast(`${t("settings.app.download_failed")}: ${String(error)}`, "error");
