@@ -86,16 +86,28 @@ function renderRecipientsLine(email) {
   if (merged.length === 1) collapsed = t("reading.to_x", { name: merged[0] });
   if (merged.length > 1) collapsed = t("reading.to_x_others", { name: merged[0], n: merged.length - 1 });
 
+  const expanded = [
+    toList.length ? `${t("compose.to")}: ${toList.join(", ")}` : "",
+    ccList.length ? `${t("compose.cc")}: ${ccList.join(", ")}` : "",
+  ].filter(Boolean).join(" | ");
+
+  // Reset to collapsed state
   metaTo.textContent = collapsed;
+  metaTo.dataset.isExpanded = "false";
   metaTo.style.cursor = "pointer";
   metaTo.title = t("reading.expand_recipients");
 
+  // Remove old click handler and add new one
+  metaTo.onclick = null;
   metaTo.onclick = () => {
-    const expanded = [
-      toList.length ? `${t("compose.to")}: ${toList.join(", ")}` : "",
-      ccList.length ? `${t("compose.cc")}: ${ccList.join(", ")}` : "",
-    ].filter(Boolean).join(" | ");
-    metaTo.textContent = metaTo.textContent === collapsed ? expanded || collapsed : collapsed;
+    const isExpanded = metaTo.dataset.isExpanded === "true";
+    if (isExpanded) {
+      metaTo.textContent = collapsed;
+      metaTo.dataset.isExpanded = "false";
+    } else {
+      metaTo.textContent = expanded || collapsed;
+      metaTo.dataset.isExpanded = "true";
+    }
   };
 }
 
@@ -307,8 +319,23 @@ export function renderReadingPane(email) {
   const subject = document.querySelector(".reading-subject");
   const from = document.querySelector(".meta-from");
   const date = document.querySelector(".meta-date");
-  const body = document.querySelector(".email-body-text");
   const avatar = document.querySelector(".meta-avatar");
+  const metaEl = document.querySelector(".reading-meta");
+  const readingBody = document.querySelector(".reading-body");
+
+  // Clear reading body to remove any leftover thread content
+  if (readingBody) readingBody.innerHTML = "";
+
+  // Recreate email-body-text element
+  let body = document.querySelector(".email-body-text");
+  if (!body && readingBody) {
+    body = document.createElement("div");
+    body.className = "email-body-text";
+    readingBody.appendChild(body);
+  }
+
+  // Ensure meta is visible (may be hidden from thread view)
+  if (metaEl) metaEl.style.display = "";
 
   if (subject) subject.textContent = sanitizeUnicodeNoise(email.subject || t("app.no_subject"));
   if (from) from.textContent = sanitizeUnicodeNoise(email.sender || t("app.unknown_sender"));
