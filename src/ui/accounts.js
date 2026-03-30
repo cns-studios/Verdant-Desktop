@@ -235,7 +235,7 @@ function renderForm(provider, panel, closeModal, onSwitch, onAfterAdd) {
             try {
                 const acc = await addGmailAccount();
                 closeModal();
-                showToast(`Connected ${acc.email}`);
+                showToast(t("accounts.connected_toast", { email: acc.email }));
                 if (onAfterAdd) onAfterAdd(acc);
             } catch (err) {
                 btn.disabled = false;
@@ -296,14 +296,14 @@ function renderForm(provider, panel, closeModal, onSwitch, onAfterAdd) {
                 <span class="add-account-advanced-toggle" id="imap-advanced-toggle">▸ ${t("accounts.imap.advanced")}</span>
                 <div class="add-account-advanced" id="imap-advanced">
                     <div class="add-account-field">
-                        <label>IMAP Host</label>
+                        <label>${t("accounts.imap.host")}</label>
                         <div class="add-account-row">
                             <input id="imap-host" type="text" placeholder="imap.example.com">
                             <input id="imap-port" type="number" placeholder="993" value="993">
                         </div>
                     </div>
                     <div class="add-account-field">
-                        <label>SMTP Host</label>
+                        <label>${t("accounts.smtp.host")}</label>
                         <div class="add-account-row">
                             <input id="smtp-host" type="text" placeholder="smtp.example.com">
                             <input id="smtp-port" type="number" placeholder="587" value="587">
@@ -374,7 +374,7 @@ function bindImapForm(panel, prefix, closeModal, onSwitch, onAfterAdd) {
         const payload = collectImapPayload(panel, prefix);
 
         if (!payload.email || !payload.password) {
-            errEl.textContent = "Email and password are required.";
+            errEl.textContent = t("accounts.error.email_pass");
             errEl.classList.add("visible");
             return;
         }
@@ -389,7 +389,7 @@ function bindImapForm(panel, prefix, closeModal, onSwitch, onAfterAdd) {
             errEl.style.color = "var(--green)";
             errEl.style.background = "var(--green-pale)";
             errEl.style.borderColor = "var(--green-muted)";
-            errEl.textContent = "Connection successful!";
+            errEl.textContent = t("accounts.test_success");
             errEl.classList.add("visible");
         } catch (err) {
             errEl.style.color = "";
@@ -409,7 +409,7 @@ function bindImapForm(panel, prefix, closeModal, onSwitch, onAfterAdd) {
         const payload = collectImapPayload(panel, prefix);
 
         if (!payload.email || !payload.password) {
-            errEl.textContent = "Email and password are required.";
+            errEl.textContent = t("accounts.error.email_pass");
             errEl.classList.add("visible");
             return;
         }
@@ -422,7 +422,7 @@ function bindImapForm(panel, prefix, closeModal, onSwitch, onAfterAdd) {
             const addFn = prefix === "gmx" ? addGmxAccount : addImapAccount;
             const acc = await addFn(payload);
             closeModal();
-            showToast(`Connected ${acc.email}`);
+            showToast(t("accounts.connected_toast", { email: acc.email }));
             if (onAfterAdd) onAfterAdd(acc);
         } catch (err) {
             errEl.textContent = String(err);

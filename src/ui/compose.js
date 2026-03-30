@@ -181,10 +181,10 @@ function buildForwardHtml(email) {
     <div style="border-left: 3px solid #c8d5c4; padding-left: 12px; margin-top: 16px; color: #4a4d45;">
       <div style="font-size: 12px; color: #8a8d84; margin-bottom: 8px; line-height: 1.6;">
         ${t("compose.forwarded_message")}<br>
-        ${t("compose.to")}: ${sender}<br>
-        Date: ${date}<br>
-        Subject: ${subject}<br>
-        To: ${to}
+        ${t("app.from")}: ${sender}<br>
+        ${t("app.date")}: ${date}<br>
+        ${t("app.subject")}: ${subject}<br>
+        ${t("app.to")}: ${to}
       </div>
       <div style="font-size: 13px;">
         ${originalHtml}
