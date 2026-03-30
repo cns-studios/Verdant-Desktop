@@ -1,5 +1,6 @@
 use crate::crypto::decrypt_password;
 use crate::db::Account;
+use crate::mime::fold_base64_for_mime;
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use lettre::{
     transport::smtp::authentication::Credentials,
@@ -125,6 +126,7 @@ pub fn send_imap_email(
             let bytes = STANDARD.decode(&att.data_base64)
                 .map_err(|e| format!("Attachment decode error: {}", e))?;
             let encoded = STANDARD.encode(&bytes);
+            let wrapped_encoded = fold_base64_for_mime(&encoded);
             let ct = if att.content_type.trim().is_empty() {
                 "application/octet-stream"
             } else {
@@ -133,8 +135,8 @@ pub fn send_imap_email(
             body_part.push_str(&format!(
                 "--{b}\r\nContent-Type: {ct}; name=\"{name}\"\r\n\
                  Content-Transfer-Encoding: base64\r\n\
-                 Content-Disposition: attachment; filename=\"{name}\"\r\n\r\n{data}\r\n",
-                b = boundary_mix, ct = ct, name = att.filename, data = encoded
+                 Content-Disposition: attachment; filename=\"{name}\"\r\n\r\n{data}",
+                b = boundary_mix, ct = ct, name = att.filename, data = wrapped_encoded
             ));
         }
         body_part.push_str(&format!("--{}--\r\n", boundary_mix));

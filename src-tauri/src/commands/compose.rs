@@ -13,6 +13,46 @@ pub struct DraftSaveResult {
     pub draft_id: String,
 }
 
+const GMAIL_BLOCKED_EXTENSIONS: &[&str] = &[
+    "exe", "bat", "cmd", "com", "app", "apk", "dmg", "deb", "rpm", "msi",
+    "scr", "vbs", "js", "jar", "zip", "rar", "7z", "tar", "gz", "iso",
+    "img", "bin", "so", "dll", "dylib", "pif", "inf", "ini", "hta", "chm",
+    "hlp", "cpl", "ps1", "vb", "lnk", "cab", "crt", "drv", "lib", "key",
+    "dex", "ipa", "ade", "adp", "ins", "isp", "job", "jse", "mda", "mdb",
+    "mde", "msp", "mst", "ops", "pcd", "prf", "reg", "scf", "shs", "spl",
+    "swf", "sys", "vbe", "wmd", "wmz", "wsc", "wsf", "wsh", "xnk",
+];
+
+fn get_file_extension(filename: &str) -> Option<String> {
+    filename
+        .split('.')
+        .last()
+        .map(|ext| ext.to_lowercase())
+}
+
+fn is_gmail_blocked_attachment(filename: &str) -> bool {
+    get_file_extension(filename)
+        .map(|ext| GMAIL_BLOCKED_EXTENSIONS.contains(&ext.as_str()))
+        .unwrap_or(false)
+}
+
+fn check_gmail_attachments(attachments: &[EmailAttachment]) -> Result<(), String> {
+    let blocked: Vec<String> = attachments
+        .iter()
+        .filter(|a| is_gmail_blocked_attachment(&a.filename))
+        .map(|a| a.filename.clone())
+        .collect();
+
+    if !blocked.is_empty() {
+        return Err(format!(
+            "Gmail doesn't allow these file types: {}",
+            blocked.join(", ")
+        ));
+    }
+
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn send_email(
     state: State<'_, Arc<DbState>>,
@@ -72,7 +112,9 @@ pub async fn send_email(
         return Ok(());
     }
 
-    // Gmail path
+    // Gmail path - check for blocked file types
+    check_gmail_attachments(&attachments)?;
+
     let token = ensure_token(&state).await?.access_token;
     let encoded = build_raw_mime_message(to, cc, subject, body, mode, body_html, attachments)?;
     let client = reqwest::Client::new();
