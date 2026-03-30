@@ -32,6 +32,7 @@
 .nav-item svg { width:14px; height:14px; opacity:0.7; flex-shrink:0; }
 .nav-item.active svg { opacity:1; }
 .nav-badge { margin-left:auto; background:var(--green); color:white; font-size:10px; font-weight:500; padding:1px 6px; border-radius:20px; line-height:16px; }
+.nav-badge.subtle { background:var(--surface2); color:var(--text); opacity:1; font-weight:500; }
 .sidebar-footer { padding:14px 16px; border-top:1px solid var(--border); }
 .user-row { display:flex; align-items:center; gap:10px; cursor:pointer; padding:6px; border-radius:8px; transition:background 0.12s; }
 .user-row:hover { background:var(--surface2); }

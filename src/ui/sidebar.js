@@ -31,7 +31,7 @@ export function setListTitle(mailbox, count) {
     if (countEl) countEl.textContent = t("list.count", { n: count });
 }
 
-function setBadge(navItem, value) {
+function setBadge(navItem, value, mailbox) {
     if (!navItem) return;
     let badge = navItem.querySelector(".nav-badge");
     if (value <= 0) { badge?.remove(); return; }
@@ -41,6 +41,13 @@ function setBadge(navItem, value) {
         navItem.appendChild(badge);
     }
     badge.textContent = String(value);
+    
+    // Apply subtle style for non-INBOX mailboxes
+    if (mailbox === "INBOX") {
+        badge.classList.remove("subtle");
+    } else {
+        badge.classList.add("subtle");
+    }
 }
 
 export async function refreshCounts() {
@@ -56,7 +63,7 @@ export async function refreshCounts() {
         TRASH: counts.trash_total,
     };
     for (const mailboxId in mCounts) {
-        setBadge(find(mailboxId), mCounts[mailboxId]);
+        setBadge(find(mailboxId), mCounts[mailboxId], mailboxId);
     }
 }
 
