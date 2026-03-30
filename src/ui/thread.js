@@ -371,145 +371,47 @@ function parseAttachments(message) {
 
 function updateThreadActionStates(thread) {
   const buttons = Array.from(document.querySelectorAll(".reading-actions .icon-btn"));
+  
   buttons.forEach(btn => {
-    const title = btn.getAttribute("title") || "";
-    if (title === t("reading.star")) {
-      btn.classList.toggle("active", !!thread?.starred);
+    // Ensure we have the action stored
+    if (!btn.dataset.action) {
+      const initialTitle = btn.getAttribute("title") || "";
+      if (initialTitle === t("reading.archive") || initialTitle === t("reading.restore")) btn.dataset.action = "archive";
+      else if (initialTitle === t("reading.delete") || initialTitle === t("reading.permanent_delete")) btn.dataset.action = "delete";
+      else if (initialTitle === t("reading.mark_unread")) btn.dataset.action = "mark_unread";
+      else if (initialTitle === t("reading.star")) btn.dataset.action = "star";
+      else if (initialTitle === t("reading.more")) btn.dataset.action = "more";
+      else if (initialTitle === t("reading.close")) btn.dataset.action = "close";
     }
-    if (title === t("reading.delete")) {
+
+    const action = btn.dataset.action;
+
+    // In Inbox threads, we always want the standard icons/titles (Archive, Delete, etc.)
+    if (action === "archive") {
+      btn.style.display = "";
+      btn.setAttribute("title", t("reading.archive"));
+      btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>`;
+    }
+    
+    if (action === "delete") {
+      btn.style.display = "";
       btn.classList.add("danger");
+      btn.setAttribute("title", t("reading.delete"));
+      btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>`;
+    }
+
+    if (action === "mark_unread") {
+      btn.style.display = "";
+    }
+
+    if (action === "star") {
+      btn.style.display = "";
+      btn.classList.toggle("active", !!thread?.starred);
     }
   });
 }
 
-export function bindThreadActions(onRefresh, onCountsRefresh) {
-  onRefreshCallback = onRefresh;
-  onCountsRefreshCallback = onCountsRefresh;
 
-  const buttons = Array.from(document.querySelectorAll(".reading-actions .icon-btn"));
-
-  for (const button of buttons) {
-    const title = button.getAttribute("title") || "";
-
-    button.onclick = async () => {
-      if (title === t("reading.close")) {
-        selectedThreadId = null;
-        selectedThreadMessages = [];
-        document.body.classList.add("reading-pane-hidden");
-        document.querySelectorAll(".email-item").forEach(el => el.classList.remove("active"));
-        return;
-      }
-
-      if (!selectedThreadId) return;
-
-      const messageIds = Array.from(document.querySelectorAll(".thread-bubble"))
-        .map(b => b.dataset.messageId).filter(Boolean);
-
-      if (title === t("reading.archive")) {
-        for (const id of messageIds) await archiveEmail(id).catch(() => {});
-        resetReadingPane();
-        showToast(t("toast.archived"));
-        if (onRefreshCallback) await onRefreshCallback();
-        return;
-      }
-
-      if (title === t("reading.delete")) {
-        for (const id of messageIds) await trashEmail(id).catch(() => {});
-        resetReadingPane();
-        showToast(t("toast.trashed"));
-        if (onRefreshCallback) await onRefreshCallback();
-        return;
-      }
-
-      if (title === t("reading.mark_unread")) {
-        // Mark all messages in thread as unread
-        for (const id of messageIds) {
-          await setEmailReadStatus(id, false).catch(() => {});
-        }
-        // Update the thread row in the list
-        const row = document.querySelector(`.email-item[data-thread-id="${selectedThreadId}"]`);
-        if (row) {
-          row.classList.add("unread");
-          if (!row.querySelector(".unread-dot")) {
-            const dot = document.createElement("div");
-            dot.className = "unread-dot";
-            row.prepend(dot);
-          }
-        }
-        showToast(t("toast.unread_marked"));
-        if (onCountsRefreshCallback) onCountsRefreshCallback();
-        return;
-      }
-
-      if (title === t("reading.star")) {
-        for (const id of messageIds) await toggleStarred(id).catch(() => {});
-        button.classList.toggle("active");
-        showToast(t("toast.star_updated"));
-        if (onCountsRefreshCallback) onCountsRefreshCallback();
-        return;
-      }
-
-      if (title === t("reading.more")) {
-        const messageIds = Array.from(document.querySelectorAll(".thread-bubble"))
-          .map(b => b.dataset.messageId).filter(Boolean);
-          
-        const activeNav = document.querySelector(".sidebar .nav-item.active")?.dataset?.mailbox || "";
-        const isTrash = activeNav.toUpperCase() === "TRASH" || activeNav.toUpperCase().includes("TRASH");
-
-        const entries = [
-          {
-            label: t("reading.mark_read"),
-            onClick: async () => {
-              for (const id of messageIds) await setEmailReadStatus(id, true).catch(() => {});
-              showToast(t("toast.read_marked"));
-            },
-          },
-          {
-            label: t("reading.mark_unread_action"),
-            onClick: async () => {
-              for (const id of messageIds) await setEmailReadStatus(id, false).catch(() => {});
-              showToast(t("toast.unread_marked"));
-            },
-          },
-          {
-            label: t("reading.toggle_star"),
-            onClick: async () => {
-              for (const id of messageIds) await toggleStarred(id).catch(() => {});
-              showToast(t("toast.star_updated"));
-            },
-          },
-          ...(isTrash ? [
-            {
-              label: t("reading.restore"),
-              onClick: async () => {
-                const { restoreFromTrash } = await import("../api.js");
-                for (const id of messageIds) {
-                  await restoreFromTrash(id).catch(() => {});
-                }
-                showToast(t("toast.restored"));
-              },
-            },
-            {
-              label: t("reading.permanent_delete"),
-              onClick: async () => {
-                const { permanentDeleteEmail } = await import("../api.js");
-                for (const id of messageIds) {
-                  await permanentDeleteEmail(id).catch(() => {});
-                }
-                showToast(t("toast.permanently_deleted"));
-              },
-            },
-          ] : []),
-        ];
-
-        buildActionMenu(entries, button, async () => {
-          if (onRefreshCallback) await onRefreshCallback();
-        });
-        return;
-      }
-    };
-  }
-}
 
 function resetReadingPane() {
   selectedThreadId = null;

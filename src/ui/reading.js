@@ -424,14 +424,24 @@ export function bindReadingActions(getSelected, setSelected, onRefresh, openComp
       const title = button.getAttribute("title") || "";
 
       if (title === t("reading.archive") || title === t("reading.restore")) {
+        const threadId = getThreadId?.();
+        const messageIds = threadId 
+          ? Array.from(document.querySelectorAll(".thread-bubble")).map(b => b.dataset.messageId).filter(Boolean)
+          : [];
+
         if (title === t("reading.restore")) {
-          if (email) {
+          if (threadId && messageIds.length) {
+            const { restoreFromTrash } = await import("../api.js");
+            for (const id of messageIds) await restoreFromTrash(id).catch(() => {});
+          } else if (email) {
             const { restoreFromTrash } = await import("../api.js");
             await restoreFromTrash(email.id);
           }
           showToast(t("toast.restored"));
         } else {
-          if (email) {
+          if (threadId && messageIds.length) {
+            for (const id of messageIds) await archiveEmail(id).catch(() => {});
+          } else if (email) {
             await archiveEmail(email.id);
           }
           showToast(t("toast.archived"));
@@ -441,14 +451,23 @@ export function bindReadingActions(getSelected, setSelected, onRefresh, openComp
       }
 
       if (title === t("reading.delete") || title === t("reading.permanent_delete")) {
+        const threadId = getThreadId?.();
+        const messageIds = threadId 
+          ? Array.from(document.querySelectorAll(".thread-bubble")).map(b => b.dataset.messageId).filter(Boolean)
+          : [];
+
         if (title === t("reading.permanent_delete")) {
-          if (email) {
-            const { permanentDeleteEmail } = await import("../api.js");
+          const { permanentDeleteEmail } = await import("../api.js");
+          if (threadId && messageIds.length) {
+            for (const id of messageIds) await permanentDeleteEmail(id).catch(() => {});
+          } else if (email) {
             await permanentDeleteEmail(email.id);
           }
           showToast(t("toast.permanently_deleted"));
         } else {
-          if (email) {
+          if (threadId && messageIds.length) {
+            for (const id of messageIds) await trashEmail(id).catch(() => {});
+          } else if (email) {
             await trashEmail(email.id);
           }
           showToast(t("toast.trashed"));
@@ -481,17 +500,31 @@ export function bindReadingActions(getSelected, setSelected, onRefresh, openComp
       }
 
       if (title === t("reading.star")) {
-        if (email) {
+        const threadId = getThreadId?.();
+        const messageIds = threadId 
+          ? Array.from(document.querySelectorAll(".thread-bubble")).map(b => b.dataset.messageId).filter(Boolean)
+          : [];
+
+        if (threadId && messageIds.length) {
+          for (const id of messageIds) await toggleStarred(id).catch(() => {});
+          button.classList.toggle("active");
+          showToast(t("toast.star_updated"));
+        } else if (email) {
           await toggleStarred(email.id);
           email.starred = !email.starred;
+          button.classList.toggle("active", !!email.starred);
           showToast(t("toast.star_updated"));
-          updateTopActionStates(email, mailbox);
-          await onRefresh();
         }
+        await onRefresh();
         return;
       }
 
       if (title === t("reading.more")) {
+        const threadId = getThreadId?.();
+        const messageIds = threadId 
+          ? Array.from(document.querySelectorAll(".thread-bubble")).map(b => b.dataset.messageId).filter(Boolean)
+          : [];
+
         const mailbox = getCurrentMailbox?.() || "INBOX";
         const isDraft = email?.mailbox?.toUpperCase().includes("DRAFT") || mailbox.toUpperCase().includes("DRAFT");
         const activeNav = document.querySelector(".sidebar .nav-item.active")?.dataset?.mailbox || "INBOX";
@@ -501,21 +534,20 @@ export function bindReadingActions(getSelected, setSelected, onRefresh, openComp
           {
             label: t("reading.mark_read"),
             onClick: async () => {
-              if (email) {
+              if (threadId && messageIds.length) {
+                const { markThreadRead } = await import("../api.js");
+                await markThreadRead(threadId);
+              } else if (email) {
                 await setEmailReadStatus(email.id, true);
-              } else {
-                const threadId = getThreadId?.();
-                if (threadId) {
-                  const { markThreadRead } = await import("../api.js");
-                  await markThreadRead(threadId);
-                }
               }
             },
           },
           {
             label: t("reading.mark_unread_action"),
             onClick: async () => {
-              if (email) {
+              if (threadId && messageIds.length) {
+                for (const id of messageIds) await setEmailReadStatus(id, false).catch(() => {});
+              } else if (email) {
                 await setEmailReadStatus(email.id, false);
               }
             },
@@ -523,7 +555,11 @@ export function bindReadingActions(getSelected, setSelected, onRefresh, openComp
           {
             label: t("reading.toggle_star"),
             onClick: async () => {
-              if (email) await toggleStarred(email.id);
+              if (threadId && messageIds.length) {
+                for (const id of messageIds) await toggleStarred(id).catch(() => {});
+              } else if (email) {
+                await toggleStarred(email.id);
+              }
             },
           },
           ...(isDraft && email ? [

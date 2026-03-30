@@ -33,7 +33,7 @@ import { openAccountPopover, closeAccountPopover } from "./ui/accounts.js";
 import { checkForUpdates, downloadLatestUpdate, switchAccount } from "./api.js";
 import { getInboxThreads } from "./api.js";
 import {
-    renderThreadList, bindThreadActions,
+    renderThreadList,
     getSelectedThreadId, clearSelectedThread,
 } from "./ui/thread.js";
 import { t, initLang } from "./lib/i18n.js";
@@ -208,6 +208,7 @@ async function loadLocalMailbox(mailbox, animate = false) {
         selectedEmail = null;
         clearSelectedThread();
         isDeepSearchActive = false;
+        setReadingPaneHidden(true); // Hide reading pane on mailbox switch
     }
     currentMailbox = mailbox;
 
@@ -486,10 +487,7 @@ async function initializeConnectedUI() {
     bindComposeSend(async () => { await openMailbox(currentMailbox, false); });
     bindComposeDraftSave(async () => { await openMailbox(currentMailbox, false); });
     bindHotkeys();
-    bindThreadActions(
-        refreshAfterAction,
-        () => refreshCounts().catch(console.error)
-    );
+
 
     const profile = await getUserProfile();
     setUserProfile(profile);
