@@ -201,25 +201,19 @@ fn install_update_sync(path: &str, name: &str) -> Result<(), String> {
     #[cfg(target_os = "linux")]
     {
         if name.ends_with(".pacman") || name.ends_with(".pkg.tar.zst") {
-            let status = std::process::Command::new("pkexec").args(["/usr/bin/pacman", "-U", "--noconfirm", path]).status().map_err(|e| e.to_string())?;
-            if !status.success() { return Err(format!("pacman exited: {}", status)); }
-            return Ok(());
+            return run_elevated_command("/usr/bin/pacman", &["-U", "--noconfirm", path]);
         }
         if name.ends_with(".deb") {
-            let ok = std::process::Command::new("pkexec").args(["apt-get", "install", "-y", path]).status().map(|s| s.success()).unwrap_or(false);
-            if !ok {
-                let s = std::process::Command::new("pkexec").args(["dpkg", "-i", path]).status().map_err(|e| e.to_string())?;
-                if !s.success() { return Err(format!("dpkg exited: {}", s)); }
+            match run_elevated_command("apt-get", &["install", "-y", path]) {
+                Ok(_) => return Ok(()),
+                Err(_) => return run_elevated_command("dpkg", &["-i", path]),
             }
-            return Ok(());
         }
         if name.ends_with(".rpm") {
-            let ok = std::process::Command::new("pkexec").args(["dnf", "install", "-y", path]).status().map(|s| s.success()).unwrap_or(false);
-            if !ok {
-                let s = std::process::Command::new("pkexec").args(["rpm", "-U", path]).status().map_err(|e| e.to_string())?;
-                if !s.success() { return Err(format!("rpm exited: {}", s)); }
+            match run_elevated_command("dnf", &["install", "-y", path]) {
+                Ok(_) => return Ok(()),
+                Err(_) => return run_elevated_command("rpm", &["-U", path]),
             }
-            return Ok(());
         }
         if name.ends_with(".appimage") {
             std::fs::set_permissions(path, std::os::unix::fs::PermissionsExt::from_mode(0o755)).map_err(|e| e.to_string())?;
@@ -238,4 +232,72 @@ fn install_update_sync(path: &str, name: &str) -> Result<(), String> {
         }
     }
     Err(format!("No installer handler for: {}", name))
+}
+
+#[cfg(target_os = "linux")]
+fn run_elevated_command(bin: &str, args: &[&str]) -> Result<(), String> {
+    // If we're already root, just run it directly
+    let is_root = unsafe { libc::getuid() == 0 };
+    if is_root {
+        let status = std::process::Command::new(bin).args(args).status().map_err(|e| e.to_string())?;
+        if status.success() { return Ok(()); }
+        return Err(format!("Command failed even as root: {}", bin));
+    }
+
+    // 1. Try pkexec (system standard for GUI apps)
+    let status = std::process::Command::new("pkexec").arg(bin).args(args).status();
+    if let Ok(s) = status {
+        if s.success() { return Ok(()); }
+    }
+
+    // 2. Terminal Fallback: Try to find a terminal and run sudo
+    let terminals = [
+        ("gnome-terminal", vec!["--", "bash", "-c"]),
+        ("konsole", vec!["-e", "bash", "-c"]),
+        ("xfce4-terminal", vec!["-e", "bash", "-c"]),
+        ("xterm", vec!["-e", "bash", "-c"]),
+        ("alacritty", vec!["-e", "bash", "-c"]),
+        ("kitty", vec!["bash", "-c"]),
+    ];
+
+    let full_cmd = format!("sudo {} {}; echo 'Done. Press Enter to close...'; read", bin, args.join(" "));
+
+    for (term, exec_args) in terminals {
+        let mut cmd = std::process::Command::new(term);
+        for arg in exec_args { cmd.arg(arg); }
+        cmd.arg(&full_cmd);
+        
+        if let Ok(mut child) = cmd.spawn() {
+            let s = child.wait().map_err(|e| e.to_string())?;
+            if s.success() { return Ok(()); }
+        }
+    }
+
+    Err("Could not elevate privileges. Please ensure pkexec is configured or run the app with sudo --update".to_string())
+}
+
+pub async fn handle_cli_update() {
+    println!("Checking for updates...");
+    match check_for_updates(None).await {
+        Ok(info) => {
+            if !info.update_available {
+                println!("Verdant is already up to date (v{}).", info.current_version);
+                return;
+            }
+            println!("New version available: v{} -> v{}", info.current_version, info.latest_version);
+            println!("Downloading {}...", info.download_asset_name);
+            match download_latest_update(None).await {
+                Ok(result) => {
+                    println!("Download complete. Installing...");
+                    if let Err(e) = install_and_relaunch(result.file_path).await {
+                        eprintln!("Error during installation: {}", e);
+                    } else {
+                        println!("Installation successful.");
+                    }
+                }
+                Err(e) => eprintln!("Download error: {}", e),
+            }
+        }
+        Err(e) => eprintln!("Error checking for updates: {}", e),
+    }
 }

@@ -20,6 +20,12 @@ use tokio::sync::Mutex;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let args: Vec<String> = std::env::args().collect();
+    if args.iter().any(|arg| arg == "--update") {
+        tauri::async_runtime::block_on(commands::updater::handle_cli_update());
+        return;
+    }
+
     let _ = dotenvy::from_filename("../.env").or_else(|_| dotenvy::from_filename(".env"));
 
     tauri::Builder::default()

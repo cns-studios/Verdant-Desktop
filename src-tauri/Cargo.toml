@@ -1,6 +1,6 @@
 [package]
 name = "Verdant-Desktop"
-version = "2.2.5"
+version = "2.2.6"
 description = "Verdant - a calm mail experience"
 authors = ["cns-studios"]
 license = ""
@@ -44,3 +44,4 @@ aes-gcm = "0.10"
 rand = "0.8"
 hex = "0.4"
 chrono = { version = "0.4", features = ["serde"] }
+libc = "0.2.183"
