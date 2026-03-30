@@ -453,7 +453,8 @@ export function bindThreadActions(onRefresh, onCountsRefresh) {
         const messageIds = Array.from(document.querySelectorAll(".thread-bubble"))
           .map(b => b.dataset.messageId).filter(Boolean);
           
-        const isTrash = document.querySelector(".sidebar .nav-item.active")?.dataset?.mailbox === "TRASH";
+        const activeNav = document.querySelector(".sidebar .nav-item.active")?.dataset?.mailbox || "";
+        const isTrash = activeNav.toUpperCase() === "TRASH" || activeNav.toUpperCase().includes("TRASH");
 
         const entries = [
           {

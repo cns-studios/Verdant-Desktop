@@ -177,7 +177,7 @@ function renderEmailList(animate = false) {
 
     if (selectedRow && selectedRowEmail) {
         selectedEmail = selectedRowEmail;
-        renderReadingPane(selectedRowEmail);
+        renderReadingPane(selectedRowEmail, currentMailbox);
     } else if (!selectedEmail && emails.length > 0) {
         const first = list.querySelector(".email-item");
         if (first) selectEmail(emails[0], first);
@@ -191,7 +191,7 @@ async function selectEmail(email, row) {
     row.classList.add("active");
     row.classList.remove("unread");
     row.querySelector(".unread-dot")?.remove();
-    renderReadingPane(email);
+    renderReadingPane(email, currentMailbox);
     await markSelectedAsReadIfNeeded();
 }
 

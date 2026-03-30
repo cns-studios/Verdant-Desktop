@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Verdant Desktop",
-  "version": "2.2.4",
+  "version": "2.2.5",
   "identifier": "com.cns-studios.verdant",
   "build": {
     "frontendDist": "../dist",
@@ -21,7 +21,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; img-src 'self' data: https://logo.clearbit.com https://www.google.com; font-src 'self' https://fonts.googleapis.com; style-src 'self' https://fonts.googleapis.com; script-src 'self'; connect-src 'self' https://; frame-src 'self';"
+      "csp": null
     }
   },
   "bundle": {

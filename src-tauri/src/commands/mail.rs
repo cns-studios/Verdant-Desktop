@@ -691,14 +691,19 @@ pub async fn permanent_delete_email(state: State<'_, Arc<DbState>>, email_id: St
             if let Ok(token_info) = ensure_token(&state).await {
                 let client = reqwest::Client::new();
                 let url = format!("https://gmail.googleapis.com/gmail/v1/users/me/messages/{}", gmail_id);
-                let _ = client.delete(url).bearer_auth(&token_info.access_token).send().await;
+                client.delete(url).bearer_auth(&token_info.access_token).send().await
+                    .map_err(|e| format!("Gmail delete error: {}", e))?;
+            } else {
+                return Err("Failed to get Gmail token".to_string());
             }
         } else if acc.provider == "imap" {
             let msg_id = email_id.splitn(2, ':').nth(1).unwrap_or(&email_id).to_string();
             let acc_clone = acc.clone();
-            let _ = tokio::task::spawn_blocking(move || {
+            tokio::task::spawn_blocking(move || {
                 crate::imap_sync::imap_set_flag(&acc_clone, &msg_id, "\\Deleted", true, "TRASH")
-            }).await;
+            }).await
+            .map_err(|e| format!("IMAP task error: {}", e))?
+            .map_err(|e| format!("IMAP delete error: {}", e))?;
         }
     }
 
@@ -725,14 +730,19 @@ pub async fn restore_from_trash(state: State<'_, Arc<DbState>>, email_id: String
             if let Ok(token_info) = ensure_token(&state).await {
                 let client = reqwest::Client::new();
                 let url = format!("https://gmail.googleapis.com/gmail/v1/users/me/messages/{}/untrash", gmail_id);
-                let _ = client.post(url).bearer_auth(&token_info.access_token).send().await;
+                client.post(url).bearer_auth(&token_info.access_token).send().await
+                    .map_err(|e| format!("Gmail untrash error: {}", e))?;
+            } else {
+                return Err("Failed to get Gmail token".to_string());
             }
         } else if acc.provider == "imap" {
             let msg_id = email_id.splitn(2, ':').nth(1).unwrap_or(&email_id).to_string();
             let acc_clone = acc.clone();
-            let _ = tokio::task::spawn_blocking(move || {
+            tokio::task::spawn_blocking(move || {
                 crate::imap_sync::imap_move_to_folder(&acc_clone, &msg_id, "TRASH", "INBOX")
-            }).await;
+            }).await
+            .map_err(|e| format!("IMAP task error: {}", e))?
+            .map_err(|e| format!("IMAP restore error: {}", e))?;
         }
     }
 

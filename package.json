@@ -1,6 +1,6 @@
 {
   "name": "verdant-desktop",
-  "version": "2.2.4",
+  "version": "2.2.5",
   "private": true,
   "type": "module",
   "scripts": {

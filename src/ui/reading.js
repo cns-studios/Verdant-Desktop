@@ -315,7 +315,7 @@ function renderEmailContentSafely(container, htmlContent) {
   iframeDoc.close();
 }
 
-export function renderReadingPane(email) {
+export function renderReadingPane(email, mailbox) {
   const subject = document.querySelector(".reading-subject");
   const from = document.querySelector(".meta-from");
   const date = document.querySelector(".meta-date");
@@ -323,10 +323,8 @@ export function renderReadingPane(email) {
   const metaEl = document.querySelector(".reading-meta");
   const readingBody = document.querySelector(".reading-body");
 
-  // Clear reading body to remove any leftover thread content
   if (readingBody) readingBody.innerHTML = "";
 
-  // Recreate email-body-text element
   let body = document.querySelector(".email-body-text");
   if (!body && readingBody) {
     body = document.createElement("div");
@@ -334,7 +332,6 @@ export function renderReadingPane(email) {
     readingBody.appendChild(body);
   }
 
-  // Ensure meta is visible (may be hidden from thread view)
   if (metaEl) metaEl.style.display = "";
 
   if (subject) subject.textContent = sanitizeUnicodeNoise(email.subject || t("app.no_subject"));
@@ -343,7 +340,6 @@ export function renderReadingPane(email) {
   if (body) {
     const htmlContent = sanitizeUnicodeNoise(email.body_html || "");
     if (!htmlContent) {
-      // Fallback to plain text if no HTML
       body.innerHTML = `<pre>${escapeHtml(sanitizeUnicodeNoise(email.snippet || ""))}</pre>`;
     } else {
       renderEmailContentSafely(body, htmlContent);
@@ -355,16 +351,62 @@ export function renderReadingPane(email) {
   if (avatar) applySenderAvatar(avatar, email.sender || "", email.mailbox || "");
 
   renderRecipientsLine(email);
-  updateTopActionStates(email);
+  updateTopActionStates(email, mailbox || email.mailbox);
 }
 
-export function updateTopActionStates(email) {
+export function updateTopActionStates(email, mailbox) {
   const buttons = Array.from(document.querySelectorAll(".reading-actions .icon-btn"));
+  const currentMailbox = (mailbox || "INBOX").toUpperCase();
+  const activeNav = document.querySelector(".sidebar .nav-item.active")?.dataset?.mailbox || "INBOX";
+  const isDraft = email?.mailbox?.toUpperCase().includes("DRAFT") || currentMailbox.includes("DRAFT") || activeNav.toUpperCase().includes("DRAFT");
+  const isTrash = email?.mailbox?.toUpperCase().includes("TRASH") || currentMailbox.includes("TRASH") || activeNav.toUpperCase().includes("TRASH");
+  const isSent = email?.mailbox?.toUpperCase().includes("SENT") || currentMailbox.includes("SENT") || activeNav.toUpperCase().includes("SENT");
+
   buttons.forEach((btn) => {
-    const title = btn.getAttribute("title") || "";
-    if (title === t("reading.star")) btn.classList.toggle("active", !!email?.starred);
-    if (title === t("reading.delete")) btn.classList.add("danger");
-    if (title === t("reading.label")) btn.style.display = "none";
+    if (!btn.dataset.action) {
+      const initialTitle = btn.getAttribute("title") || "";
+      if (initialTitle === t("reading.archive") || initialTitle === t("reading.restore")) btn.dataset.action = "archive";
+      else if (initialTitle === t("reading.delete") || initialTitle === t("reading.permanent_delete")) btn.dataset.action = "delete";
+      else if (initialTitle === t("reading.mark_unread")) btn.dataset.action = "mark_unread";
+      else if (initialTitle === t("reading.star")) btn.dataset.action = "star";
+      else if (initialTitle === t("reading.more")) btn.dataset.action = "more";
+      else if (initialTitle === t("reading.close")) btn.dataset.action = "close";
+    }
+
+    const action = btn.dataset.action;
+
+    if (action === "star") {
+      btn.style.display = isDraft || isSent || isTrash ? "none" : "";
+      btn.classList.toggle("active", !!email?.starred);
+    }
+
+    if (action === "delete") {
+      btn.style.display = "";
+      btn.classList.add("danger");
+      if (isTrash) {
+        btn.setAttribute("title", t("reading.permanent_delete"));
+        btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/><line x1="9" y1="11" x2="15" y2="17"/><line x1="15" y1="11" x2="9" y2="17"/></svg>`;
+      } else {
+        btn.setAttribute("title", t("reading.delete"));
+        btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>`;
+      }
+    }
+
+    if (action === "archive") {
+      if (isTrash) {
+        btn.style.display = "";
+        btn.setAttribute("title", t("reading.restore"));
+        btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 00-9-9 9 9 0 00-6 2.3L3 13"/></svg>`;
+      } else {
+        btn.style.display = isDraft || isSent ? "none" : "";
+        btn.setAttribute("title", t("reading.archive"));
+        btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>`;
+      }
+    }
+
+    if (action === "mark_unread") {
+      btn.style.display = isSent ? "none" : "";
+    }
   });
 }
 
@@ -376,25 +418,41 @@ export function bindReadingActions(getSelected, setSelected, onRefresh, openComp
   const buttons = Array.from(document.querySelectorAll(".reading-actions .icon-btn"));
 
   for (const button of buttons) {
-    const title = button.getAttribute("title") || "";
-
     button.onclick = async () => {
       const email = getSelected();
+      const mailbox = getCurrentMailbox?.() || "INBOX";
+      const title = button.getAttribute("title") || "";
 
-      if (title === t("reading.archive")) {
-        if (email) {
-          await archiveEmail(email.id);
+      if (title === t("reading.archive") || title === t("reading.restore")) {
+        if (title === t("reading.restore")) {
+          if (email) {
+            const { restoreFromTrash } = await import("../api.js");
+            await restoreFromTrash(email.id);
+          }
+          showToast(t("toast.restored"));
+        } else {
+          if (email) {
+            await archiveEmail(email.id);
+          }
+          showToast(t("toast.archived"));
         }
-        showToast(t("toast.archived"));
         await onRefresh();
         return;
       }
 
-      if (title === t("reading.delete")) {
-        if (email) {
-          await trashEmail(email.id);
+      if (title === t("reading.delete") || title === t("reading.permanent_delete")) {
+        if (title === t("reading.permanent_delete")) {
+          if (email) {
+            const { permanentDeleteEmail } = await import("../api.js");
+            await permanentDeleteEmail(email.id);
+          }
+          showToast(t("toast.permanently_deleted"));
+        } else {
+          if (email) {
+            await trashEmail(email.id);
+          }
+          showToast(t("toast.trashed"));
         }
-        showToast(t("toast.trashed"));
         await onRefresh();
         return;
       }
@@ -427,7 +485,7 @@ export function bindReadingActions(getSelected, setSelected, onRefresh, openComp
           await toggleStarred(email.id);
           email.starred = !email.starred;
           showToast(t("toast.star_updated"));
-          updateTopActionStates(email);
+          updateTopActionStates(email, mailbox);
           await onRefresh();
         }
         return;
@@ -435,8 +493,9 @@ export function bindReadingActions(getSelected, setSelected, onRefresh, openComp
 
       if (title === t("reading.more")) {
         const mailbox = getCurrentMailbox?.() || "INBOX";
-        const isDraft = email?.mailbox === "DRAFT";
-        const isTrash = email?.mailbox === "TRASH" || mailbox === "TRASH";
+        const isDraft = email?.mailbox?.toUpperCase().includes("DRAFT") || mailbox.toUpperCase().includes("DRAFT");
+        const activeNav = document.querySelector(".sidebar .nav-item.active")?.dataset?.mailbox || "INBOX";
+        const isTrash = email?.mailbox?.toUpperCase().includes("TRASH") || mailbox.toUpperCase().includes("TRASH") || activeNav.toUpperCase().includes("TRASH");
 
         const entries = [
           {
