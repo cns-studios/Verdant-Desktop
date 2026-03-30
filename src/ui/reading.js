@@ -237,6 +237,72 @@ function renderReadingAttachments(email) {
   });
 }
 
+function renderEmailContentSafely(container, htmlContent) {
+  if (!container) return;
+  
+  // Clear container
+  container.innerHTML = "";
+  
+  // Create sandboxed iframe
+  const iframe = document.createElement("iframe");
+  iframe.className = "email-sandbox";
+  iframe.setAttribute("sandbox", "allow-same-origin allow-popups");
+  iframe.style.border = "none";
+  iframe.style.width = "100%";
+  iframe.style.height = "100%";
+  
+  container.appendChild(iframe);
+  
+  // Get the iframe's document and inject content
+  const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+  if (!iframeDoc) return;
+  
+  // Create safe HTML with style isolation
+  const safeHtml = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="UTF-8">
+      <style>
+        * { box-sizing: border-box; }
+        body {
+          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+          margin: 0;
+          padding: 16px;
+          background: transparent;
+          color: #1e2119;
+          font-size: 14px;
+          line-height: 1.5;
+          word-wrap: break-word;
+        }
+        img {
+          max-width: 100%;
+          height: auto;
+          display: block;
+        }
+        a {
+          color: #4a5e45;
+          text-decoration: underline;
+        }
+        /* Remove dangerous constructs */
+        script, style { display: none !important; }
+        /* Prevent CSS from breaking layout */
+        body, div, p, span, a, img {
+          all: revert;
+        }
+      </style>
+    </head>
+    <body>
+      ${htmlContent}
+    </body>
+    </html>
+  `;
+  
+  iframeDoc.open();
+  iframeDoc.write(safeHtml);
+  iframeDoc.close();
+}
+
 export function renderReadingPane(email) {
   const subject = document.querySelector(".reading-subject");
   const from = document.querySelector(".meta-from");
@@ -248,8 +314,13 @@ export function renderReadingPane(email) {
   if (from) from.textContent = sanitizeUnicodeNoise(email.sender || t("app.unknown_sender"));
   if (date) date.textContent = formatReadingDate(email.date || "");
   if (body) {
-    const html = sanitizeUnicodeNoise(email.body_html || "");
-    body.innerHTML = html || `<pre>${escapeHtml(sanitizeUnicodeNoise(email.snippet || ""))}</pre>`;
+    const htmlContent = sanitizeUnicodeNoise(email.body_html || "");
+    if (!htmlContent) {
+      // Fallback to plain text if no HTML
+      body.innerHTML = `<pre>${escapeHtml(sanitizeUnicodeNoise(email.snippet || ""))}</pre>`;
+    } else {
+      renderEmailContentSafely(body, htmlContent);
+    }
   }
 
   renderReadingAttachments(email);

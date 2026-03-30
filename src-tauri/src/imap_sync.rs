@@ -107,6 +107,12 @@ fn imap_folder_for_mailbox(mailbox: &str, folders: &[String]) -> Option<String> 
 }
 
 fn parse_body(parsed: &mailparse::ParsedMail) -> String {
+    let embedded_images = collect_embedded_images(parsed);
+    let html = extract_html(parsed);
+    replace_cid_with_data_uris(&html, &embedded_images)
+}
+
+fn extract_html(parsed: &mailparse::ParsedMail) -> String {
     if parsed.subparts.is_empty() {
         let ct = parsed.ctype.mimetype.to_lowercase();
         if ct == "text/html" {
@@ -128,13 +134,58 @@ fn parse_body(parsed: &mailparse::ParsedMail) -> String {
                 plain_result = Some(format!("<pre>{}</pre>", html_escape(&body)));
             }
         } else if ct.starts_with("multipart/") {
-            let nested = parse_body(part);
+            let nested = extract_html(part);
             if !nested.is_empty() && html_result.is_none() {
                 html_result = Some(nested);
             }
         }
     }
     html_result.or(plain_result).unwrap_or_default()
+}
+
+fn collect_embedded_images(parsed: &mailparse::ParsedMail) -> std::collections::HashMap<String, String> {
+    let mut images = std::collections::HashMap::new();
+    collect_images_recursive(parsed, &mut images);
+    images
+}
+
+fn collect_images_recursive(parsed: &mailparse::ParsedMail, images: &mut std::collections::HashMap<String, String>) {
+    for part in &parsed.subparts {
+        let ct = part.ctype.mimetype.to_lowercase();
+        
+        // Look for Content-ID header
+        if let Some(content_id) = part.headers.get_first_value("Content-ID") {
+            // Remove angle brackets if present
+            let cid = content_id.trim().trim_matches('<').trim_matches('>').to_string();
+            
+            // Check if this is an image
+            if ct.starts_with("image/") {
+                if let Ok(body) = part.get_body_raw() {
+                    use base64::Engine as _;
+                    let base64_data = base64::engine::general_purpose::STANDARD.encode(&body);
+                    images.insert(cid, format!("data:{};base64,{}", ct, base64_data));
+                }
+            }
+        }
+        
+        // Recursively check subparts
+        if !part.subparts.is_empty() {
+            collect_images_recursive(part, images);
+        }
+    }
+}
+
+fn replace_cid_with_data_uris(html: &str, images: &std::collections::HashMap<String, String>) -> String {
+    let mut result = html.to_string();
+    
+    for (cid, data_uri) in images.iter() {
+        // Replace cid:name references with data URIs
+        let cid_ref = format!("cid:{}", cid);
+        // Use a simple regex-like replacement
+        result = result.replace(&cid_ref, data_uri);
+    }
+    
+    result
 }
 
 fn html_escape(input: &str) -> String {
