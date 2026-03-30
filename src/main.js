@@ -30,6 +30,7 @@ import {
     updatePrefs,
 } from "./ui/settings.js";
 import { openAccountPopover, closeAccountPopover } from "./ui/accounts.js";
+import { appPrefs } from "./ui/settings.js";
 import { checkForUpdates, downloadLatestUpdate, switchAccount } from "./api.js";
 import { getInboxThreads } from "./api.js";
 import {
@@ -510,7 +511,8 @@ async function initializeConnectedUI() {
 
     const inboxNow = await getEmails("INBOX");
     ingestContactsFromEmails(inboxNow);
-    setKnownInboxIds(new Set((inboxNow || []).map((m) => m.id)));
+    const { notifyNewEmails } = await import("./lib/sync.js");
+    await notifyNewEmails(inboxNow);
 
     await openMailbox("INBOX", true);
     startPeriodicSync(onSynced);
@@ -521,6 +523,12 @@ async function initializeConnectedUI() {
 
 document.addEventListener("DOMContentLoaded", async () => {
     initLang();
+    
+    // Sync app preferences (background run, etc.) to Rust on start
+    const { invoke } = await import("@tauri-apps/api/core");
+    invoke("update_app_config", { config: { run_in_background: appPrefs.runInBackground } })
+        .catch(err => console.error("Initial app config sync failed", err));
+
     await ensureContactsLoaded().catch(() => {});
 
     try {

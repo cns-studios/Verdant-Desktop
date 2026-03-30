@@ -16,6 +16,8 @@
       "store:allow-save",
       "store:allow-get",
       "process:allow-restart",
-      "process:allow-exit"
+      "process:allow-exit",
+      "notification:default",
+      "autostart:default"
   ]
 }

@@ -16,7 +16,10 @@ use db::init_db;
 use rusqlite::Connection;
 use state::DbState;
 use tauri::Manager;
+use tauri::{tray::{TrayIconBuilder, TrayIconEvent}, menu::{MenuBuilder, MenuItemBuilder}};
 use tokio::sync::Mutex;
+
+use commands::app_config::{AppConfig, AppConfigState, update_app_config};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -31,6 +34,8 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, Some(vec!["--autostart"])))
+        .plugin(tauri_plugin_notification::init())
         .setup(|app| {
             let data_dir = app
                 .path()
@@ -57,6 +62,7 @@ pub fn run() {
             });
 
             app.manage(state.clone());
+            app.manage(AppConfigState(Mutex::new(AppConfig { run_in_background: true })));
 
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -71,10 +77,54 @@ pub fn run() {
             tauri::async_runtime::spawn(async move {
                 background_sync::start_all_sync_tasks(state_for_sync).await;
             });
+            
+            // Tray
+            let quit_i = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
+            let show_i = MenuItemBuilder::with_id("show", "Show Verdant").build(app)?;
+            let menu = MenuBuilder::new(app)
+                .item(&show_i)
+                .item(&quit_i)
+                .build()?;
+            
+            let _tray = TrayIconBuilder::new()
+                .icon(app.default_window_icon().unwrap().clone())
+                .menu(&menu)
+                .on_menu_event(|app: &tauri::AppHandle, event| {
+                    match event.id.as_ref() {
+                        "quit" => { app.exit(0); }
+                        "show" => { if let Some(w) = app.get_webview_window("main") { let _ = w.show().unwrap(); let _ = w.set_focus().unwrap(); } }
+                        _ => {}
+                    }
+                })
+                .on_tray_icon_event(|tray: &tauri::tray::TrayIcon, event| {
+                    if let TrayIconEvent::Click { .. } = event {
+                        let app = tray.app_handle();
+                        if let Some(w) = app.get_webview_window("main") {
+                            let _ = w.show().unwrap();
+                            let _ = w.set_focus().unwrap();
+                        }
+                    }
+                })
+                .build(app)?;
 
             Ok(())
         })
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                let state = window.state::<AppConfigState>();
+                let run_in_background = tauri::async_runtime::block_on(async {
+                    let s = state.0.lock().await;
+                    s.run_in_background
+                });
+
+                if run_in_background && window.label() == "main" {
+                    window.hide().unwrap();
+                    api.prevent_close();
+                }
+            }
+        })
         .invoke_handler(tauri::generate_handler![
+            update_app_config,
             
             commands::auth::connect_gmail,
             commands::auth::auth_status,

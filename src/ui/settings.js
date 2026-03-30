@@ -11,6 +11,10 @@ const UPDATE_PREFS_KEY = "verdant.updatePrefs";
 const defaultUpdatePrefs = { autoCheck: true, autoDownload: false, channel: "stable" };
 export let updatePrefs = loadUpdatePrefs();
 
+const APP_PREFS_KEY = "verdant.appPrefs";
+const defaultAppPrefs = { runInBackground: true, autostart: false, showNotifications: true };
+export let appPrefs = loadAppPrefs();
+
 function loadUpdatePrefs() {
   try {
     const raw = localStorage.getItem(UPDATE_PREFS_KEY);
@@ -26,6 +30,26 @@ export function saveUpdatePrefs(next) {
   updatePrefs = { ...defaultUpdatePrefs, ...next };
   updatePrefs.channel = updatePrefs.channel === "nightly" ? "nightly" : "stable";
   localStorage.setItem(UPDATE_PREFS_KEY, JSON.stringify(updatePrefs));
+}
+
+function loadAppPrefs() {
+  try {
+    const raw = localStorage.getItem(APP_PREFS_KEY);
+    return raw ? { ...defaultAppPrefs, ...JSON.parse(raw) } : { ...defaultAppPrefs };
+  } catch {
+    return { ...defaultAppPrefs };
+  }
+}
+
+export function saveAppPrefs(next) {
+  appPrefs = { ...defaultAppPrefs, ...next };
+  localStorage.setItem(APP_PREFS_KEY, JSON.stringify(appPrefs));
+  
+  // Sync to Rust
+  import("@tauri-apps/api/core").then(({ invoke }) => {
+    invoke("update_app_config", { config: { run_in_background: appPrefs.runInBackground } })
+      .catch(err => console.error("Failed to sync app config to Rust", err));
+  });
 }
 
 function setUpdateStatus(message, isError = false) {
@@ -207,7 +231,30 @@ export async function openSettingsModal(profile, currentMailbox, onLogout, onSyn
     <!-- App tab -->
     <section class="settings-pane" data-pane="app">
 
-      <div class="settings-section-label">${escapeHtml(t("settings.version"))}</div>
+      <!-- General Section -->
+      <div class="settings-section-label">${escapeHtml(t("settings.app.general"))}</div>
+      <div class="settings-card">
+        <label class="settings-switch">
+          <input type="checkbox" id="app-autostart" ${appPrefs.autostart ? "checked" : ""}>
+          ${escapeHtml(t("settings.app.autostart"))}
+        </label>
+        <label class="settings-switch">
+          <input type="checkbox" id="app-run-background" ${appPrefs.runInBackground ? "checked" : ""}>
+          ${escapeHtml(t("settings.app.run_in_background"))}
+        </label>
+      </div>
+
+      <!-- Notifications Section -->
+      <div class="settings-section-label">${escapeHtml(t("settings.app.notifications_title"))}</div>
+      <div class="settings-card">
+        <label class="settings-switch">
+          <input type="checkbox" id="app-show-notifications" ${appPrefs.showNotifications ? "checked" : ""}>
+          ${escapeHtml(t("settings.app.show_notifications"))}
+        </label>
+      </div>
+
+      <!-- Updates Section -->
+      <div class="settings-section-label">${escapeHtml(t("settings.app.updates_title"))}</div>
       <div class="settings-card">
         <div class="settings-info-row">
           <span>${escapeHtml(t("settings.app.installed_version"))}</span>
@@ -217,10 +264,7 @@ export async function openSettingsModal(profile, currentMailbox, onLogout, onSyn
           <span>${escapeHtml(t("settings.app.update_status"))}</span>
           <strong id="settings-update-status">${escapeHtml(t("settings.app.update_not_checked"))}</strong>
         </div>
-      </div>
-
-      <div class="settings-section-label">${escapeHtml(t("settings.app.update_channel"))}</div>
-      <div class="settings-card">
+        <hr class="settings-divider" />
         <div class="settings-row">
           <span>${escapeHtml(t("settings.app.update_channel"))}</span>
           <select id="update-channel">
@@ -241,7 +285,8 @@ export async function openSettingsModal(profile, currentMailbox, onLogout, onSyn
         <button class="verdant-btn" id="settings-check-update">${escapeHtml(t("settings.app.check_update"))}</button>
       </div>
 
-      <div class="settings-section-label">${escapeHtml(t("settings.tab.account"))}</div>
+      <!-- Data Section -->
+      <div class="settings-section-label">${escapeHtml(t("settings.app.data_title"))}</div>
       <div class="settings-card">
         <div class="settings-help">${escapeHtml(t("settings.app.cache_info"))}</div>
       </div>
@@ -308,6 +353,27 @@ export async function openSettingsModal(profile, currentMailbox, onLogout, onSyn
 
   panel.querySelector("#update-auto-download")?.addEventListener("change", (e) => {
     saveUpdatePrefs({ ...updatePrefs, autoDownload: !!e.target?.checked });
+  });
+
+  panel.querySelector("#app-run-background")?.addEventListener("change", (e) => {
+    saveAppPrefs({ ...appPrefs, runInBackground: !!e.target?.checked });
+  });
+
+  panel.querySelector("#app-autostart")?.addEventListener("change", async (e) => {
+    const enabled = !!e.target?.checked;
+    saveAppPrefs({ ...appPrefs, autostart: enabled });
+    try {
+      const { enable, disable } = await import("@tauri-apps/plugin-autostart");
+      if (enabled) await enable();
+      else await disable();
+    } catch (err) {
+      console.error("Failed to toggle autostart", err);
+      showToast(t("settings.app.check_failed"), "error");
+    }
+  });
+
+  panel.querySelector("#app-show-notifications")?.addEventListener("change", (e) => {
+    saveAppPrefs({ ...appPrefs, showNotifications: !!e.target?.checked });
   });
 
   panel.querySelector("#settings-check-update")?.addEventListener("click", async () => {

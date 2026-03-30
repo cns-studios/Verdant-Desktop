@@ -1,6 +1,6 @@
 {
   "name": "verdant-desktop",
-  "version": "2.2.8",
+  "version": "2.2.9",
   "private": true,
   "type": "module",
   "scripts": {
@@ -19,6 +19,8 @@
   },
   "dependencies": {
     "@tauri-apps/api": "^2.10.1",
+    "@tauri-apps/plugin-autostart": "^2.5.1",
+    "@tauri-apps/plugin-notification": "^2.3.3",
     "@tauri-apps/plugin-process": "^2.3.1",
     "@tauri-apps/plugin-store": "^2.4.2"
   }
