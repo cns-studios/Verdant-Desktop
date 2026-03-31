@@ -314,6 +314,7 @@ fn map_email_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Email> {
         mailbox: row.get(15)?,
         labels: row.get(16)?,
         internal_ts: row.get(17)?,
+        notified: row.get::<_, i32>(18)? != 0,
     })
 }
 
@@ -329,18 +330,18 @@ pub async fn get_emails(
     let emails = if box_name == "STARRED" {
         let mut stmt = conn.prepare(
             "SELECT id,account_id,draft_id,thread_id,subject,sender,to_recipients,cc_recipients,
-                    snippet,body_html,attachments_json,has_attachments,date,is_read,starred,mailbox,labels,internal_ts
-             FROM emails WHERE starred=1 AND account_id=?1 ORDER BY internal_ts DESC, rowid DESC LIMIT 500"
-        ).map_err(|e| e.to_string())?;
+                    snippet,body_html,attachments_json,has_attachments,date,is_read,starred,mailbox,labels,internal_ts,notified
+     FROM emails WHERE starred=1 AND account_id=?1 ORDER BY internal_ts DESC, rowid DESC LIMIT 500"
+).map_err(|e| e.to_string())?;
         let x = stmt.query_map([account_id], map_email_row).map_err(|e| e.to_string())?
             .filter_map(Result::ok).collect(); x
     } else {
         let mut stmt = conn.prepare(
             "SELECT id,account_id,draft_id,thread_id,subject,sender,to_recipients,cc_recipients,
-                    snippet,body_html,attachments_json,has_attachments,date,is_read,starred,mailbox,labels,internal_ts
-             FROM emails WHERE mailbox=?1 AND account_id=?2 ORDER BY internal_ts DESC, rowid DESC LIMIT 500"
-        ).map_err(|e| e.to_string())?;
-        let x = stmt.query_map(rusqlite::params![box_name, account_id], map_email_row)
+                    snippet,body_html,attachments_json,has_attachments,date,is_read,starred,mailbox,labels,internal_ts,notified
+     FROM emails WHERE mailbox=?1 AND account_id=?2 ORDER BY internal_ts DESC, rowid DESC LIMIT 500"
+).map_err(|e| e.to_string())?;
+let x = stmt.query_map(rusqlite::params![box_name, account_id], map_email_row)
             .map_err(|e| e.to_string())?.filter_map(Result::ok).collect(); x
     };
 
@@ -374,7 +375,7 @@ pub async fn deep_search_emails(
                     let pattern = format!("%{}%", query);
                     let mut stmt = conn.prepare(
                         "SELECT id,account_id,draft_id,thread_id,subject,sender,to_recipients,cc_recipients,
-                                snippet,body_html,attachments_json,has_attachments,date,is_read,starred,mailbox,labels,internal_ts
+                                snippet,body_html,attachments_json,has_attachments,date,is_read,starred,mailbox,labels,internal_ts,notified
                          FROM emails WHERE account_id=?1 AND (subject LIKE ?2 OR sender LIKE ?2 OR snippet LIKE ?2)
                          ORDER BY internal_ts DESC LIMIT 100"
                     ).map_err(|e| e.to_string())?;
@@ -442,6 +443,7 @@ pub async fn deep_search_emails(
             mailbox: mailbox_from_labels(&labels),
             labels,
             internal_ts,
+            notified: false,
         });
     }
 
@@ -796,7 +798,7 @@ pub async fn get_thread_messages(
 
     let mut stmt = conn.prepare(
         "SELECT id,account_id,draft_id,thread_id,subject,sender,to_recipients,cc_recipients,
-                snippet,body_html,attachments_json,has_attachments,date,is_read,starred,mailbox,labels,internal_ts
+                snippet,body_html,attachments_json,has_attachments,date,is_read,starred,mailbox,labels,internal_ts,notified
          FROM emails WHERE thread_id=?1 AND account_id=?2 ORDER BY internal_ts ASC, rowid ASC"
     ).map_err(|e| e.to_string())?;
 

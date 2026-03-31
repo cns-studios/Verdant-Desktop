@@ -107,18 +107,39 @@ async fn sync_gmail_account(app: &tauri::AppHandle, state: &DbState, account: &A
     
     let unread_emails = {
         let conn = state.conn.lock().await;
-        let mut stmt = conn.prepare("SELECT id, subject, sender FROM emails WHERE account_id=?1 AND mailbox='INBOX' AND is_read=0 AND internal_ts > (strftime('%s','now') - 300) LIMIT 5").unwrap();
-        let rows = stmt.query_map([account.id], |r| Ok((r.get::<_, String>(1)?, r.get::<_, String>(2)?))).unwrap();
+        let mut stmt = conn.prepare("SELECT id, subject, sender FROM emails WHERE account_id=?1 AND mailbox='INBOX' AND is_read=0 AND notified=0 AND internal_ts > (strftime('%s','now') - 3600) LIMIT 50").unwrap();
+        let rows = stmt.query_map([account.id], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?))).unwrap();
         rows.filter_map(Result::ok).collect::<Vec<_>>()
     };
 
     if !unread_emails.is_empty() {
         use tauri_plugin_notification::NotificationExt;
-        let (subj, send) = &unread_emails[0];
+        
+        let count = unread_emails.len();
+        let acc_name = account.display_name.as_deref().unwrap_or(&account.email);
+        
+        let title = if count == 1 {
+            format!("New Email - {}", acc_name)
+        } else {
+            format!("{} New Emails - {}", count, acc_name)
+        };
+
+        let body = if count == 1 {
+            let (_, subj, send) = &unread_emails[0];
+            format!("From: {}\n{}", send, subj)
+        } else {
+            format!("You have {} new messages in your inbox.", count)
+        };
+
         let _ = app.notification().builder()
-            .title("New Email")
-            .body(format!("From: {}\n{}", send, subj))
+            .title(title)
+            .body(body)
             .show();
+
+        let conn = state.conn.lock().await;
+        for (id, _, _) in unread_emails {
+             let _ = conn.execute("UPDATE emails SET notified=1 WHERE id=?1 AND account_id=?2", rusqlite::params![id, account.id]);
+        }
     }
     
     use tauri::Emitter;
@@ -156,18 +177,39 @@ async fn sync_imap_account(app: &tauri::AppHandle, state: &DbState, account: &Ac
     
     let unread_emails = {
         let conn = state.conn.lock().await;
-        let mut stmt = conn.prepare("SELECT id, subject, sender FROM emails WHERE account_id=?1 AND mailbox='INBOX' AND is_read=0 AND internal_ts > (strftime('%s','now') - 300) LIMIT 5").unwrap();
-        let rows = stmt.query_map([account_id], |r| Ok((r.get::<_, String>(1)?, r.get::<_, String>(2)?))).unwrap();
+        let mut stmt = conn.prepare("SELECT id, subject, sender FROM emails WHERE account_id=?1 AND mailbox='INBOX' AND is_read=0 AND notified=0 AND internal_ts > (strftime('%s','now') - 3600) LIMIT 50").unwrap();
+        let rows = stmt.query_map([account_id], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?))).unwrap();
         rows.filter_map(Result::ok).collect::<Vec<_>>()
     };
 
     if !unread_emails.is_empty() {
         use tauri_plugin_notification::NotificationExt;
-        let (subj, send) = &unread_emails[0];
+
+        let count = unread_emails.len();
+        let acc_name = account.display_name.as_deref().unwrap_or(&account.email);
+
+        let title = if count == 1 {
+            format!("New Email - {}", acc_name)
+        } else {
+            format!("{} New Emails - {}", count, acc_name)
+        };
+
+        let body = if count == 1 {
+            let (_, subj, send) = &unread_emails[0];
+            format!("From: {}\n{}", send, subj)
+        } else {
+            format!("You have {} new messages in your inbox.", count)
+        };
+
         let _ = app.notification().builder()
-            .title("New Email")
-            .body(format!("From: {}\n{}", send, subj))
+            .title(title)
+            .body(body)
             .show();
+
+        let conn = state.conn.lock().await;
+        for (id, _, _) in unread_emails {
+             let _ = conn.execute("UPDATE emails SET notified=1 WHERE id=?1 AND account_id=?2", rusqlite::params![id, account_id]);
+        }
     }
 
     use tauri::Emitter;

@@ -328,6 +328,7 @@ pub fn sync_imap_mailbox(
             mailbox: mailbox_label.to_string(),
             labels: mailbox_label.to_string(),
             internal_ts,
+            notified: false,
         });
     }
 
@@ -489,6 +490,7 @@ pub fn imap_search_emails(
             mailbox: "INBOX".to_string(),
             labels: "INBOX".to_string(),
             internal_ts,
+            notified: false,
         });
     }
 
@@ -665,6 +667,7 @@ pub fn sync_imap_mailbox_page(
             mailbox: mailbox_label.to_string(),
             labels: mailbox_label.to_string(),
             internal_ts,
+            notified: false,
         });
     }
 
