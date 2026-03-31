@@ -20,9 +20,9 @@ pub struct UserProfile {
 
 
 #[tauri::command]
-pub async fn connect_gmail(state: State<'_, Arc<DbState>>) -> Result<(), String> {
+pub async fn connect_gmail(app: tauri::AppHandle, state: State<'_, Arc<DbState>>) -> Result<(), String> {
     use crate::commands::accounts::add_gmail_account;
-    add_gmail_account(state).await.map(|_| ())
+    add_gmail_account(app, state).await.map(|_| ())
 }
 
 #[tauri::command]

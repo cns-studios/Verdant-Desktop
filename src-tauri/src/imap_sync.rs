@@ -266,7 +266,7 @@ pub fn sync_imap_mailbox(
 
     let start = if total > max_messages { total - max_messages + 1 } else { 1 };
     let messages = session
-        .fetch(&format!("{}:{}", start, total), "(RFC822 FLAGS UID)")
+        .fetch(&format!("{}:{}", start, total), "(BODY.PEEK[] FLAGS UID)")
         .map_err(|e| format!("IMAP FETCH error: {}", e))?;
 
     let mut emails = Vec::new();
@@ -437,7 +437,7 @@ pub fn imap_search_emails(
     uid_list.truncate(max_results as usize);
 
     let uid_set = uid_list.iter().map(|u| u.to_string()).collect::<Vec<_>>().join(",");
-    let messages = session.fetch(&uid_set, "(RFC822 FLAGS UID)")
+    let messages = session.fetch(&uid_set, "(BODY.PEEK[] FLAGS UID)")
         .map_err(|e| format!("IMAP FETCH error: {}", e))?;
 
     let mut emails = Vec::new();
@@ -610,7 +610,7 @@ pub fn sync_imap_mailbox_page(
     let start = if end > count { end - count + 1 } else { 1 };
 
     let messages = session
-        .fetch(&format!("{}:{}", start, end), "(RFC822 FLAGS UID)")
+        .fetch(&format!("{}:{}", start, end), "(BODY.PEEK[] FLAGS UID)")
         .map_err(|e| format!("IMAP FETCH error: {}", e))?;
 
     let mut emails = Vec::new();

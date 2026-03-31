@@ -10,19 +10,19 @@ const IMAP_SYNC_INTERVAL_SECS: u64 = 12;
 const IMAP_MAILBOXES: &[&str] = &["INBOX", "SENT", "DRAFT", "TRASH"];
 
 
-pub async fn start_all_sync_tasks(state: Arc<DbState>) {
+pub async fn start_all_sync_tasks(app: tauri::AppHandle, state: Arc<DbState>) {
     let accounts = {
         let conn = state.conn.lock().await;
         get_all_accounts(&conn).unwrap_or_default()
     };
 
     for account in accounts {
-        start_account_sync(state.clone(), account).await;
+        start_account_sync(app.clone(), state.clone(), account).await;
     }
 }
 
 
-pub async fn start_account_sync(state: Arc<DbState>, account: Account) {
+pub async fn start_account_sync(app: tauri::AppHandle, state: Arc<DbState>, account: Account) {
     let account_id = account.id;
 
     
@@ -37,7 +37,7 @@ pub async fn start_account_sync(state: Arc<DbState>, account: Account) {
 
     let state_clone = state.clone();
     tokio::spawn(async move {
-        run_sync_loop(state_clone, account, rx).await;
+        run_sync_loop(app, state_clone, account, rx).await;
     });
 }
 
@@ -50,12 +50,13 @@ pub async fn stop_account_sync(state: &DbState, account_id: i64) {
 }
 
 async fn run_sync_loop(
+    app: tauri::AppHandle,
     state: Arc<DbState>,
     account: Account,
     mut shutdown: oneshot::Receiver<()>,
 ) {
     
-    sync_account(&state, &account).await;
+    sync_account(&app, &state, &account).await;
 
     let interval = if account.provider == "imap" { IMAP_SYNC_INTERVAL_SECS } else { SYNC_INTERVAL_SECS };
 
@@ -70,7 +71,7 @@ async fn run_sync_loop(
                         .flatten()
                 };
                 if let Some(acc) = fresh_account {
-                    sync_account(&state, &acc).await;
+                    sync_account(&app, &state, &acc).await;
                 } else {
                     
                     break;
@@ -83,30 +84,53 @@ async fn run_sync_loop(
     }
 }
 
-async fn sync_account(state: &DbState, account: &Account) {
+async fn sync_account(app: &tauri::AppHandle, state: &DbState, account: &Account) {
     match account.provider.as_str() {
-        "gmail" => sync_gmail_account(state, account).await,
-        "imap" => sync_imap_account(state, account).await,
+        "gmail" => sync_gmail_account(app, state, account).await,
+        "imap" => sync_imap_account(app, state, account).await,
         _ => {}
     }
 }
 
-async fn sync_gmail_account(state: &DbState, account: &Account) {
+async fn sync_gmail_account(app: &tauri::AppHandle, state: &DbState, account: &Account) {
     use crate::commands::mail::sync_mailbox_internal_for;
 
     let mailboxes = ["INBOX", "SENT", "DRAFT", "TRASH"];
+    let mut total_new_unread = 0;
+
     for mailbox in &mailboxes {
         if let Err(e) = sync_mailbox_internal_for(state, account.id, mailbox).await {
             log::error!("Gmail sync error account={} mailbox={}: {}", account.id, mailbox, e);
         }
     }
+
+    
+    let unread_emails = {
+        let conn = state.conn.lock().await;
+        let mut stmt = conn.prepare("SELECT id, subject, sender FROM emails WHERE account_id=?1 AND mailbox='INBOX' AND is_read=0 AND internal_ts > (strftime('%s','now') - 300) LIMIT 5").unwrap();
+        let rows = stmt.query_map([account.id], |r| Ok((r.get::<_, String>(1)?, r.get::<_, String>(2)?))).unwrap();
+        rows.filter_map(Result::ok).collect::<Vec<_>>()
+    };
+
+    if !unread_emails.is_empty() {
+        use tauri_plugin_notification::NotificationExt;
+        let (subj, send) = &unread_emails[0];
+        let _ = app.notification().builder()
+            .title("New Email")
+            .body(format!("From: {}\n{}", send, subj))
+            .show();
+    }
+    
+    use tauri::Emitter;
+    let _ = app.emit("emails-synced", ());
 }
 
-async fn sync_imap_account(state: &DbState, account: &Account) {
+async fn sync_imap_account(app: &tauri::AppHandle, state: &DbState, account: &Account) {
     use crate::imap_sync::sync_imap_mailbox;
 
     let account_clone = account.clone();
     let account_id = account.id;
+    let app_clone = app.clone();
 
     for mailbox in IMAP_MAILBOXES {
         let acc = account_clone.clone();
@@ -128,6 +152,26 @@ async fn sync_imap_account(state: &DbState, account: &Account) {
             }
         }
     }
+
+    
+    let unread_emails = {
+        let conn = state.conn.lock().await;
+        let mut stmt = conn.prepare("SELECT id, subject, sender FROM emails WHERE account_id=?1 AND mailbox='INBOX' AND is_read=0 AND internal_ts > (strftime('%s','now') - 300) LIMIT 5").unwrap();
+        let rows = stmt.query_map([account_id], |r| Ok((r.get::<_, String>(1)?, r.get::<_, String>(2)?))).unwrap();
+        rows.filter_map(Result::ok).collect::<Vec<_>>()
+    };
+
+    if !unread_emails.is_empty() {
+        use tauri_plugin_notification::NotificationExt;
+        let (subj, send) = &unread_emails[0];
+        let _ = app.notification().builder()
+            .title("New Email")
+            .body(format!("From: {}\n{}", send, subj))
+            .show();
+    }
+
+    use tauri::Emitter;
+    let _ = app.emit("emails-synced", ());
 }
 
 async fn upsert_emails(state: &DbState, account_id: i64, emails: Vec<crate::db::Email>, mailbox: &str) {

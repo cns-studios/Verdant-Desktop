@@ -1,6 +1,7 @@
 use std::sync::Arc;
 use serde_json::{json, Value};
 use tauri::State;
+use futures::StreamExt;
 
 use crate::db::{clear_account_emails, Email};
 use crate::gmail::{
@@ -76,98 +77,115 @@ pub async fn sync_mailbox_page_internal_for(
         }).unwrap_or_default()
     };
 
-    for (id, draft_id) in message_refs {
-        if id.is_empty() { continue; }
+    let fetch_concurrency = 10;
+    let stream = futures::stream::iter(message_refs.into_iter().map(|(id, draft_id)| {
+        let client = client.clone();
+        let token = token.clone();
+        let mailbox = mailbox.to_string();
+        let state = state;
+        
+        async move {
+            if id.is_empty() { return Ok(()); }
 
-        let composite_id = format!("{}:{}", account_id, id);
+            let composite_id = format!("{}:{}", account_id, id);
 
-        let detail_url = if mailbox == "DRAFT" {
-            format!("https://gmail.googleapis.com/gmail/v1/users/me/drafts/{}?format=full", draft_id.clone().unwrap_or_default())
-        } else {
-            format!("https://gmail.googleapis.com/gmail/v1/users/me/messages/{}?format=full", id)
-        };
+            let detail_url = if mailbox == "DRAFT" {
+                format!("https://gmail.googleapis.com/gmail/v1/users/me/drafts/{}?format=full", draft_id.clone().unwrap_or_default())
+            } else {
+                format!("https://gmail.googleapis.com/gmail/v1/users/me/messages/{}?format=full", id)
+            };
 
-        let detail = client.get(detail_url).bearer_auth(&token).send().await.map_err(|e| e.to_string())?;
-        if !detail.status().is_success() { continue; }
+            let detail = client.get(detail_url).bearer_auth(&token).send().await.map_err(|e| e.to_string())?;
+            if !detail.status().is_success() { return Ok(()); }
 
-        let raw_detail = detail.json::<Value>().await.map_err(|e| e.to_string())?;
-        let detail_json = if mailbox == "DRAFT" {
-            raw_detail.get("message").cloned().unwrap_or_else(|| json!({}))
-        } else {
-            raw_detail.clone()
-        };
+            let raw_detail = detail.json::<Value>().await.map_err(|e| e.to_string())?;
+            let detail_json = if mailbox == "DRAFT" {
+                raw_detail.get("message").cloned().unwrap_or_else(|| json!({}))
+            } else {
+                raw_detail.clone()
+            };
 
-        let resolved_draft_id = if mailbox == "DRAFT" {
-            draft_id.clone().or_else(|| raw_detail.get("id").and_then(Value::as_str).map(str::to_string))
-        } else {
-            None
-        };
+            let resolved_draft_id = if mailbox == "DRAFT" {
+                draft_id.clone().or_else(|| raw_detail.get("id").and_then(Value::as_str).map(str::to_string))
+            } else {
+                None
+            };
 
-        let thread_id = detail_json.get("threadId").and_then(Value::as_str).unwrap_or_default().to_string();
-        let snippet = strip_confusable_chars(detail_json.get("snippet").and_then(Value::as_str).unwrap_or_default());
+            let thread_id = detail_json.get("threadId").and_then(Value::as_str).unwrap_or_default().to_string();
+            let snippet = strip_confusable_chars(detail_json.get("snippet").and_then(Value::as_str).unwrap_or_default());
 
-        let headers = detail_json.get("payload").and_then(|p| p.get("headers")).and_then(Value::as_array).cloned().unwrap_or_default();
-        let subject = strip_confusable_chars(&header_value(&headers, "Subject").unwrap_or_else(|| "(No Subject)".to_string()));
-        let sender = strip_confusable_chars(&header_value(&headers, "From").unwrap_or_else(|| "Unknown Sender".to_string()));
-        let to_recipients = strip_confusable_chars(&header_value(&headers, "To").unwrap_or_default());
-        let cc_recipients = strip_confusable_chars(&header_value(&headers, "Cc").unwrap_or_default());
-        let date = header_value(&headers, "Date").unwrap_or_else(|| "Unknown Date".to_string());
-        let internal_ts = detail_json.get("internalDate").and_then(Value::as_str).and_then(|s| s.parse::<i64>().ok()).unwrap_or(0);
+            let headers = detail_json.get("payload").and_then(|p| p.get("headers")).and_then(Value::as_array).cloned().unwrap_or_default();
+            let subject = strip_confusable_chars(&header_value(&headers, "Subject").unwrap_or_else(|| "(No Subject)".to_string()));
+            let sender = strip_confusable_chars(&header_value(&headers, "From").unwrap_or_else(|| "Unknown Sender".to_string()));
+            let to_recipients = strip_confusable_chars(&header_value(&headers, "To").unwrap_or_default());
+            let cc_recipients = strip_confusable_chars(&header_value(&headers, "Cc").unwrap_or_default());
+            let date = header_value(&headers, "Date").unwrap_or_else(|| "Unknown Date".to_string());
+            let internal_ts = detail_json.get("internalDate").and_then(Value::as_str).and_then(|s| s.parse::<i64>().ok()).unwrap_or(0);
 
-        let (existing_body, existing_attachments) = {
+            let (existing_body, existing_attachments) = {
+                let conn = state.conn.lock().await;
+                let body = conn.query_row("SELECT body_html FROM emails WHERE id = ?1 AND account_id = ?2", [composite_id.as_str(), &account_id.to_string()], |r| r.get::<_, String>(0)).ok();
+                let att = conn.query_row("SELECT attachments_json FROM emails WHERE id = ?1 AND account_id = ?2", [composite_id.as_str(), &account_id.to_string()], |r| r.get::<_, String>(0)).ok();
+                (body, att)
+            };
+
+            let body_html = detail_json.get("payload").and_then(extract_body)
+                .or(existing_body)
+                .unwrap_or_else(|| format!("<pre>{}</pre>", snippet));
+
+            let mut attachments: Vec<AttachmentMeta> = Vec::new();
+            if let Some(payload) = detail_json.get("payload") {
+                collect_attachments(payload, &mut attachments);
+            }
+            let attachments_json = if attachments.is_empty() {
+                existing_attachments.unwrap_or_else(|| "[]".to_string())
+            } else {
+                serde_json::to_string(&attachments).unwrap_or_else(|_| "[]".to_string())
+            };
+            let has_attachments = !attachments_json.trim().is_empty() && attachments_json.trim() != "[]";
+
+            let labels = detail_json.get("labelIds").and_then(Value::as_array).map(|a| {
+                a.iter().filter_map(Value::as_str).collect::<Vec<_>>().join(",")
+            }).unwrap_or_default();
+            let is_read = !labels.split(',').any(|l| l == "UNREAD");
+
             let conn = state.conn.lock().await;
-            let body = conn.query_row("SELECT body_html FROM emails WHERE id = ?1 AND account_id = ?2", [composite_id.as_str(), &account_id.to_string()], |r| r.get::<_, String>(0)).ok();
-            let att = conn.query_row("SELECT attachments_json FROM emails WHERE id = ?1 AND account_id = ?2", [composite_id.as_str(), &account_id.to_string()], |r| r.get::<_, String>(0)).ok();
-            (body, att)
-        };
-
-        let body_html = detail_json.get("payload").and_then(extract_body)
-            .or(existing_body)
-            .unwrap_or_else(|| format!("<pre>{}</pre>", snippet));
-
-        let mut attachments: Vec<AttachmentMeta> = Vec::new();
-        if let Some(payload) = detail_json.get("payload") {
-            collect_attachments(payload, &mut attachments);
+            conn.execute(
+                "INSERT INTO emails (id, account_id, draft_id, thread_id, subject, sender, to_recipients, cc_recipients,
+                                     snippet, body_html, attachments_json, has_attachments, date, is_read, mailbox, labels, internal_ts)
+                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17)
+                 ON CONFLICT(id, account_id) DO UPDATE SET
+                    draft_id = excluded.draft_id,
+                    thread_id = excluded.thread_id,
+                    subject = excluded.subject,
+                    sender = excluded.sender,
+                    to_recipients = excluded.to_recipients,
+                    cc_recipients = excluded.cc_recipients,
+                    snippet = excluded.snippet,
+                    body_html = excluded.body_html,
+                    attachments_json = excluded.attachments_json,
+                    has_attachments = excluded.has_attachments,
+                    date = excluded.date,
+                    mailbox = excluded.mailbox,
+                    labels = excluded.labels,
+                    internal_ts = excluded.internal_ts",
+                rusqlite::params![
+                    composite_id, account_id, resolved_draft_id, thread_id,
+                    subject, sender, to_recipients, cc_recipients,
+                    snippet, body_html, attachments_json, has_attachments as i32,
+                    date, is_read as i32, mailbox, labels, internal_ts
+                ],
+            ).map_err(|e| e.to_string())?;
+            
+            Ok::<(), String>(())
         }
-        let attachments_json = if attachments.is_empty() {
-            existing_attachments.unwrap_or_else(|| "[]".to_string())
-        } else {
-            serde_json::to_string(&attachments).unwrap_or_else(|_| "[]".to_string())
-        };
-        let has_attachments = !attachments_json.trim().is_empty() && attachments_json.trim() != "[]";
+    }));
 
-        let labels = detail_json.get("labelIds").and_then(Value::as_array).map(|a| {
-            a.iter().filter_map(Value::as_str).collect::<Vec<_>>().join(",")
-        }).unwrap_or_default();
-        let is_read = !labels.split(',').any(|l| l == "UNREAD");
-
-        let conn = state.conn.lock().await;
-        conn.execute(
-            "INSERT INTO emails (id, account_id, draft_id, thread_id, subject, sender, to_recipients, cc_recipients,
-                                 snippet, body_html, attachments_json, has_attachments, date, is_read, mailbox, labels, internal_ts)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17)
-             ON CONFLICT(id, account_id) DO UPDATE SET
-                draft_id = excluded.draft_id,
-                thread_id = excluded.thread_id,
-                subject = excluded.subject,
-                sender = excluded.sender,
-                to_recipients = excluded.to_recipients,
-                cc_recipients = excluded.cc_recipients,
-                snippet = excluded.snippet,
-                body_html = excluded.body_html,
-                attachments_json = excluded.attachments_json,
-                has_attachments = excluded.has_attachments,
-                date = excluded.date,
-                mailbox = excluded.mailbox,
-                labels = excluded.labels,
-                internal_ts = excluded.internal_ts",
-            rusqlite::params![
-                composite_id, account_id, resolved_draft_id, thread_id,
-                subject, sender, to_recipients, cc_recipients,
-                snippet, body_html, attachments_json, has_attachments as i32,
-                date, is_read as i32, mailbox, labels, internal_ts
-            ],
-        ).map_err(|e| e.to_string())?;
+    let results: Vec<Result<(), String>> = stream.buffer_unordered(fetch_concurrency).collect().await;
+    for res in results {
+        if let Err(e) = res {
+            log::error!("Gmail fetch error: {}", e);
+        }
     }
 
     Ok(next_page_token)

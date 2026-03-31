@@ -519,7 +519,14 @@ async function initializeConnectedUI() {
     await notifyNewEmails(inboxNow);
 
     await openMailbox("INBOX", true);
-    startPeriodicSync(onSynced);
+    
+    
+    const { listen } = await import("@tauri-apps/api/event");
+    await listen("emails-synced", async () => {
+        console.log("Backend synced emails, refreshing UI...");
+        await loadLocalMailbox(currentMailbox, false);
+    });
+
     runStartupUpdateCheck().catch(() => {});
 }
 

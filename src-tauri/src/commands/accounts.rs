@@ -72,6 +72,7 @@ pub async fn remove_account(
 
 #[tauri::command]
 pub async fn add_gmail_account(
+    app: tauri::AppHandle,
     state: State<'_, Arc<DbState>>,
 ) -> Result<AccountPublic, String> {
     let token = auth::login_interactive().await?;
@@ -127,7 +128,7 @@ pub async fn add_gmail_account(
             .ok_or_else(|| "Account not found after insert".to_string())?
     };
 
-    start_account_sync((*state).clone().into(), account).await;
+    start_account_sync(app, state.inner().clone(), account).await;
 
     let conn = state.conn.lock().await;
     let acc = get_account_by_id(&conn, account_id)
@@ -168,6 +169,7 @@ pub async fn test_imap_credentials(payload: ImapAccountPayload) -> Result<String
 
 #[tauri::command]
 pub async fn add_imap_account(
+    app: tauri::AppHandle,
     state: State<'_, Arc<DbState>>,
     payload: ImapAccountPayload,
 ) -> Result<AccountPublic, String> {
@@ -212,7 +214,7 @@ pub async fn add_imap_account(
     };
 
     
-    start_account_sync((*state).clone().into(), account.clone()).await;
+    start_account_sync(app, state.inner().clone(), account.clone()).await;
 
     Ok(AccountPublic::from(account))
 }
@@ -228,6 +230,7 @@ pub struct GmxAccountPayload {
 
 #[tauri::command]
 pub async fn add_gmx_account(
+    app: tauri::AppHandle,
     state: State<'_, Arc<DbState>>,
     payload: GmxAccountPayload,
 ) -> Result<AccountPublic, String> {
@@ -242,7 +245,7 @@ pub async fn add_gmx_account(
         password: payload.password,
     };
     
-    add_imap_account(state, imap_payload).await
+    add_imap_account(app, state, imap_payload).await
 }
 
 

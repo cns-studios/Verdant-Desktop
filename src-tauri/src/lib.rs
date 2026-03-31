@@ -74,8 +74,9 @@ pub fn run() {
 
             
             let state_for_sync = state.clone();
+            let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
-                background_sync::start_all_sync_tasks(state_for_sync).await;
+                background_sync::start_all_sync_tasks(app_handle, state_for_sync).await;
             });
             
             let quit_i = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
