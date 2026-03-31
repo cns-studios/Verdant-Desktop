@@ -25,10 +25,26 @@ export const getEmails = (mailbox) => invoke("get_emails", { mailbox });
 export const deepSearchEmails = (query) => invoke("deep_search_emails", { query });
 export const setEmailReadStatus = (emailId, isRead) => invoke("set_email_read_status", { emailId, isRead });
 export const toggleStarred = (emailId) => invoke("toggle_starred", { emailId });
-export async function archiveEmail(emailId) { return invoke("archive_email", { emailId }); }
-export async function trashEmail(emailId) { return invoke("trash_email", { emailId }); }
-export async function permanentDeleteEmail(emailId) { return invoke("permanent_delete_email", { emailId }); }
-export async function restoreFromTrash(emailId) { return invoke("restore_from_trash", { emailId }); }
+export async function archiveEmail(emailId) {
+    return invoke("archive_email", { emailId }).catch(e => {
+        throw e;
+    });
+}
+export async function trashEmail(emailId) {
+    return invoke("trash_email", { emailId }).catch(e => {
+        throw e;
+    });
+}
+export async function permanentDeleteEmail(emailId) {
+    return invoke("permanent_delete_email", { emailId }).catch(e => {
+        throw e;
+    });
+}
+export async function restoreFromTrash(emailId) {
+    return invoke("restore_from_trash", { emailId }).catch(e => {
+        throw e;
+    });
+}
 export const getMailboxCounts = () => invoke("get_mailbox_counts");
 export const clearLocalData = () => invoke("clear_local_data");
 

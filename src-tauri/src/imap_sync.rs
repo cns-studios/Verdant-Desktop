@@ -153,12 +153,9 @@ fn collect_images_recursive(parsed: &mailparse::ParsedMail, images: &mut std::co
     for part in &parsed.subparts {
         let ct = part.ctype.mimetype.to_lowercase();
         
-        // Look for Content-ID header
         if let Some(content_id) = part.headers.get_first_value("Content-ID") {
-            // Remove angle brackets if present
             let cid = content_id.trim().trim_matches('<').trim_matches('>').to_string();
             
-            // Check if this is an image
             if ct.starts_with("image/") {
                 if let Ok(body) = part.get_body_raw() {
                     use base64::Engine as _;
@@ -168,7 +165,6 @@ fn collect_images_recursive(parsed: &mailparse::ParsedMail, images: &mut std::co
             }
         }
         
-        // Recursively check subparts
         if !part.subparts.is_empty() {
             collect_images_recursive(part, images);
         }
@@ -179,9 +175,7 @@ fn replace_cid_with_data_uris(html: &str, images: &std::collections::HashMap<Str
     let mut result = html.to_string();
     
     for (cid, data_uri) in images.iter() {
-        // Replace cid:name references with data URIs
         let cid_ref = format!("cid:{}", cid);
-        // Use a simple regex-like replacement
         result = result.replace(&cid_ref, data_uri);
     }
     
@@ -219,11 +213,9 @@ fn collect_imap_attachments(parsed: &mailparse::ParsedMail, uid: &str) -> Vec<se
 
 fn rfc2822_to_epoch(date_str: &str) -> i64 {
     use chrono::DateTime;
-    // 1. Standard RFC2822
     if let Ok(dt) = DateTime::parse_from_rfc2822(date_str) {
         return dt.timestamp();
     }
-    // 2. Common variations
     let patterns = [
         "%d %b %Y %H:%M:%S %z",
         "%a, %d %b %Y %H:%M:%S %z",
@@ -236,7 +228,6 @@ fn rfc2822_to_epoch(date_str: &str) -> i64 {
             return dt.timestamp();
         }
     }
-    // 3. mailparse's robust dateparse as final fallback
     if let Ok(ts) = mailparse::dateparse(date_str) {
         return ts;
     }
@@ -534,6 +525,9 @@ pub fn imap_set_flag(
         if add {
             session.store(&seq_set, format!("+FLAGS ({})", flag))
                 .map_err(|e| format!("IMAP STORE error: {}", e))?;
+            if flag == "\\Deleted" {
+                let _ = session.expunge();
+            }
         } else {
             session.store(&seq_set, format!("-FLAGS ({})", flag))
                 .map_err(|e| format!("IMAP STORE error: {}", e))?;

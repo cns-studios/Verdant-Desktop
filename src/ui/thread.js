@@ -53,7 +53,9 @@ export function renderThreadList(threads, activeFilter, searchQuery) {
       const isPromo = labels.some(l =>
         ["SPAM", "TRASH", "CATEGORY_PROMOTIONS"].includes(l.trim())
       );
-      if (isPromo) return false;
+      if (isPromo) {
+         return false; 
+      }
     }
     if (activeFilter === "Unread" && thread.is_read) return false;
     if (activeFilter === "Attachments" && !thread.has_attachments) return false;
@@ -373,7 +375,6 @@ function updateThreadActionStates(thread) {
   const buttons = Array.from(document.querySelectorAll(".reading-actions .icon-btn"));
   
   buttons.forEach(btn => {
-    // Ensure we have the action stored
     if (!btn.dataset.action) {
       const initialTitle = btn.getAttribute("title") || "";
       if (initialTitle === t("reading.archive") || initialTitle === t("reading.restore")) btn.dataset.action = "archive";
@@ -386,7 +387,6 @@ function updateThreadActionStates(thread) {
 
     const action = btn.dataset.action;
 
-    // In Inbox threads, we always want the standard icons/titles (Archive, Delete, etc.)
     if (action === "archive") {
       btn.style.display = "";
       btn.setAttribute("title", t("reading.archive"));

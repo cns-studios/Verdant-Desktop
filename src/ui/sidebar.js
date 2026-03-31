@@ -42,7 +42,6 @@ function setBadge(navItem, value, mailbox) {
     }
     badge.textContent = String(value);
     
-    // Apply subtle style for non-INBOX mailboxes
     if (mailbox === "INBOX") {
         badge.classList.remove("subtle");
     } else {

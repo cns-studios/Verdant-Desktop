@@ -123,7 +123,11 @@ function isImportant(email) {
 }
 
 function emailMatchesFilter(email) {
-    if (activeFilter === "Important" && !isImportant(email)) return false;
+    if (activeFilter === "Important") {
+        if (currentMailbox !== "TRASH" && currentMailbox !== "SPAM") {
+            if (!isImportant(email)) return false;
+        }
+    }
     if (activeFilter === "Unread" && email.is_read) return false;
     if (activeFilter === "Attachments" && !hasEmailAttachments(email)) return false;
     if (searchQuery) {
@@ -209,7 +213,7 @@ async function loadLocalMailbox(mailbox, animate = false) {
         selectedEmail = null;
         clearSelectedThread();
         isDeepSearchActive = false;
-        setReadingPaneHidden(true); // Hide reading pane on mailbox switch
+        setReadingPaneHidden(true);
     }
     currentMailbox = mailbox;
 
@@ -524,7 +528,6 @@ async function initializeConnectedUI() {
 document.addEventListener("DOMContentLoaded", async () => {
     initLang();
     
-    // Sync app preferences (background run, etc.) to Rust on start
     const { invoke } = await import("@tauri-apps/api/core");
     invoke("update_app_config", { config: { run_in_background: appPrefs.runInBackground } })
         .catch(err => console.error("Initial app config sync failed", err));

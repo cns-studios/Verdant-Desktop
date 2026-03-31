@@ -236,7 +236,6 @@ fn install_update_sync(path: &str, name: &str) -> Result<(), String> {
 
 #[cfg(target_os = "linux")]
 fn run_elevated_command(bin: &str, args: &[&str]) -> Result<(), String> {
-    // If we're already root, just run it directly
     let is_root = unsafe { libc::getuid() == 0 };
     if is_root {
         let status = std::process::Command::new(bin).args(args).status().map_err(|e| e.to_string())?;
@@ -244,13 +243,11 @@ fn run_elevated_command(bin: &str, args: &[&str]) -> Result<(), String> {
         return Err(format!("Command failed even as root: {}", bin));
     }
 
-    // 1. Try pkexec (system standard for GUI apps)
     let status = std::process::Command::new("pkexec").arg(bin).args(args).status();
     if let Ok(s) = status {
         if s.success() { return Ok(()); }
     }
 
-    // 2. Terminal Fallback: Try to find a terminal and run sudo
     let terminals = [
         ("gnome-terminal", vec!["--", "bash", "-c"]),
         ("konsole", vec!["-e", "bash", "-c"]),

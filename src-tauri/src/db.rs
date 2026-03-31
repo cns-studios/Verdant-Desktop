@@ -112,9 +112,6 @@ pub fn init_db(conn: &Connection) -> Result<()> {
             PRIMARY KEY (id, account_id)
         );
     ")?;
-
-    // Legacy oauth_tokens migration — runs once, then the table is left in place
-    // but the placeholder account is cleaned up immediately after.
     let legacy_exists: bool = conn.query_row(
         "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='oauth_tokens'",
         [],
@@ -145,8 +142,6 @@ pub fn init_db(conn: &Connection) -> Result<()> {
         let _ = conn.execute("ALTER TABLE emails ADD COLUMN account_id INTEGER NOT NULL DEFAULT 1", []);
     }
 
-    // Always clean up the placeholder migration account if no real emails are
-    // associated with it — it only existed as a token carrier and is no longer needed.
     let _ = conn.execute(
         "DELETE FROM accounts WHERE email = 'migrated@gmail.com' AND NOT EXISTS (
             SELECT 1 FROM emails WHERE account_id = accounts.id
@@ -154,7 +149,6 @@ pub fn init_db(conn: &Connection) -> Result<()> {
         [],
     );
 
-    // Idempotent column additions (safe to fail if column already exists)
     let _ = conn.execute("ALTER TABLE emails ADD COLUMN account_id INTEGER NOT NULL DEFAULT 1", []);
     let _ = conn.execute("ALTER TABLE emails ADD COLUMN snippet TEXT NOT NULL DEFAULT ''", []);
     let _ = conn.execute("ALTER TABLE emails ADD COLUMN to_recipients TEXT NOT NULL DEFAULT ''", []);
@@ -167,7 +161,6 @@ pub fn init_db(conn: &Connection) -> Result<()> {
     let _ = conn.execute("ALTER TABLE emails ADD COLUMN attachments_json TEXT NOT NULL DEFAULT '[]'", []);
     let _ = conn.execute("ALTER TABLE emails ADD COLUMN has_attachments INTEGER NOT NULL DEFAULT 0", []);
 
-    // Clean up seed/test data
     let _ = conn.execute(
         "DELETE FROM emails WHERE subject = 'Welcome to Verdant' AND sender = 'foo@example.com'",
         [],

@@ -201,6 +201,8 @@ pub fn mailbox_label(mailbox: &str) -> Option<&'static str> {
         "INBOX" => Some("INBOX"),
         "SENT" => Some("SENT"),
         "DRAFT" => Some("DRAFT"),
+        "TRASH" => Some("TRASH"),
+        "SPAM" => Some("SPAM"),
         _ => None,
     }
 }
@@ -211,6 +213,10 @@ pub fn mailbox_from_labels(labels: &str) -> String {
         "SENT".to_string()
     } else if parts.contains(&"DRAFT") {
         "DRAFT".to_string()
+    } else if parts.contains(&"TRASH") {
+        "TRASH".to_string()
+    } else if parts.contains(&"SPAM") {
+        "SPAM".to_string()
     } else if parts.contains(&"INBOX") {
         "INBOX".to_string()
     } else {

@@ -107,22 +107,22 @@ export function renderShell() {
       <div class="reading-pane">
         <div class="reading-header">
           <div class="reading-actions">
-            <button class="icon-btn" title="${t("reading.archive")}">
+            <button class="icon-btn" data-action="archive" title="${t("reading.archive")}">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>
             </button>
-            <button class="icon-btn" title="${t("reading.delete")}">
+            <button class="icon-btn" data-action="delete" title="${t("reading.delete")}">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
             </button>
-            <button class="icon-btn" title="${t("reading.mark_unread")}">
+            <button class="icon-btn" data-action="mark_unread" title="${t("reading.mark_unread")}">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
             </button>
-            <button class="icon-btn" title="${t("reading.star")}">
+            <button class="icon-btn" data-action="star" title="${t("reading.star")}">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
             </button>
-            <button class="icon-btn" title="${t("reading.more")}" style="margin-left:auto">
+            <button class="icon-btn" data-action="more" title="${t("reading.more")}" style="margin-left:auto">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
             </button>
-            <button class="icon-btn" title="${t("reading.close")}" aria-label="${t("reading.close")}">
+            <button class="icon-btn" data-action="close" title="${t("reading.close")}" aria-label="${t("reading.close")}">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
             </button>
           </div>

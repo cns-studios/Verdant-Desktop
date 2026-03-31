@@ -103,7 +103,6 @@ pub async fn send_email(
             crate::imap_sync::append_to_sent(&account_clone, &to_c, &cc_c, &subject_c, &body_c, html_c.as_deref())
         }).await.map_err(|e| e.to_string())??;
 
-        // Kick off background SENT sync for IMAP — fire and forget, don't surface errors
         let state_arc = (*state).clone();
         tokio::spawn(async move {
             let _ = sync_mailbox_internal_for(&state_arc, account_id, "SENT").await;
@@ -112,7 +111,6 @@ pub async fn send_email(
         return Ok(());
     }
 
-    // Gmail path - check for blocked file types
     check_gmail_attachments(&attachments)?;
 
     let token = ensure_token(&state).await?.access_token;
@@ -187,7 +185,6 @@ pub async fn save_draft(
         return Ok(DraftSaveResult { draft_id });
     }
 
-    // Gmail path
     let token = ensure_token(&state).await?.access_token;
     let encoded = build_raw_mime_message(to, cc, subject, body, mode, body_html, attachments)?;
     let payload = json!({ "message": { "raw": encoded } });

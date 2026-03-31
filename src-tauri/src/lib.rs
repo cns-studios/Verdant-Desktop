@@ -78,7 +78,6 @@ pub fn run() {
                 background_sync::start_all_sync_tasks(state_for_sync).await;
             });
             
-            // Tray
             let quit_i = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
             let show_i = MenuItemBuilder::with_id("show", "Show Verdant").build(app)?;
             let menu = MenuBuilder::new(app)

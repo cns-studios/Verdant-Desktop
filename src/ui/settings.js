@@ -45,7 +45,6 @@ export function saveAppPrefs(next) {
   appPrefs = { ...defaultAppPrefs, ...next };
   localStorage.setItem(APP_PREFS_KEY, JSON.stringify(appPrefs));
   
-  // Sync to Rust
   import("@tauri-apps/api/core").then(({ invoke }) => {
     invoke("update_app_config", { config: { run_in_background: appPrefs.runInBackground } })
       .catch(err => console.error("Failed to sync app config to Rust", err));
@@ -190,7 +189,6 @@ export async function openSettingsModal(profile, currentMailbox, onLogout, onSyn
       <button class="settings-tab" data-tab="app">${escapeHtml(t("settings.tab.app"))}</button>
     </div>
 
-    <!-- Account tab -->
     <section class="settings-pane active" data-pane="account">
       <div class="settings-card">
         <div class="settings-info-row"><span>${escapeHtml(t("settings.account.name"))}</span><strong>${escapeHtml(profile.name || t("settings.user_fallback"))}</strong></div>
@@ -211,7 +209,6 @@ export async function openSettingsModal(profile, currentMailbox, onLogout, onSyn
       </div>
     </section>
 
-    <!-- Shortcuts tab -->
     <section class="settings-pane" data-pane="shortcuts">
       <label class="settings-switch">
         <input type="checkbox" id="hk-enabled" ${hotkeys.enabled ? "checked" : ""}>
@@ -228,10 +225,8 @@ export async function openSettingsModal(profile, currentMailbox, onLogout, onSyn
       </div>
     </section>
 
-    <!-- App tab -->
     <section class="settings-pane" data-pane="app">
 
-      <!-- General Section -->
       <div class="settings-section-label">${escapeHtml(t("settings.app.general"))}</div>
       <div class="settings-card">
         <label class="settings-switch">
@@ -244,7 +239,6 @@ export async function openSettingsModal(profile, currentMailbox, onLogout, onSyn
         </label>
       </div>
 
-      <!-- Notifications Section -->
       <div class="settings-section-label">${escapeHtml(t("settings.app.notifications_title"))}</div>
       <div class="settings-card">
         <label class="settings-switch">
@@ -253,7 +247,6 @@ export async function openSettingsModal(profile, currentMailbox, onLogout, onSyn
         </label>
       </div>
 
-      <!-- Updates Section -->
       <div class="settings-section-label">${escapeHtml(t("settings.app.updates_title"))}</div>
       <div class="settings-card">
         <div class="settings-info-row">
@@ -285,7 +278,6 @@ export async function openSettingsModal(profile, currentMailbox, onLogout, onSyn
         <button class="verdant-btn" id="settings-check-update">${escapeHtml(t("settings.app.check_update"))}</button>
       </div>
 
-      <!-- Data Section -->
       <div class="settings-section-label">${escapeHtml(t("settings.app.data_title"))}</div>
       <div class="settings-card">
         <div class="settings-help">${escapeHtml(t("settings.app.cache_info"))}</div>

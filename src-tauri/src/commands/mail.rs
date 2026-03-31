@@ -174,7 +174,82 @@ pub async fn sync_mailbox_page_internal_for(
 }
 
 pub async fn sync_mailbox_internal_for(state: &DbState, account_id: i64, mailbox: &str) -> Result<(), String> {
-    sync_mailbox_page_internal_for(state, account_id, mailbox, None).await.map(|_| ())
+    let mut synced_ids = Vec::new();
+    let mut current_token: Option<String> = None;
+    let mut first_page = true;
+
+    for _ in 0..2 {
+        if !first_page && current_token.is_none() { break; }
+        
+        let Some(label) = crate::gmail::mailbox_label(mailbox) else { break; };
+        let client = reqwest::Client::new();
+        let token = ensure_token_for(state, account_id).await?.access_token;
+
+        let mut list_url = if mailbox == "DRAFT" {
+            "https://gmail.googleapis.com/gmail/v1/users/me/drafts?maxResults=50".to_string()
+        } else {
+            format!("https://gmail.googleapis.com/gmail/v1/users/me/messages?labelIds={}&maxResults=50", label)
+        };
+        if let Some(ref pt) = current_token {
+            list_url.push_str("&pageToken=");
+            list_url.push_str(pt);
+        }
+
+        let res = client.get(&list_url).bearer_auth(&token).send().await.map_err(|e| e.to_string())?;
+        if !res.status().is_success() { break; }
+
+        let json = res.json::<Value>().await.map_err(|e| e.to_string())?;
+        current_token = json.get("nextPageToken").and_then(Value::as_str).map(str::to_string);
+        first_page = false;
+
+        let message_refs: Vec<String> = if mailbox == "DRAFT" {
+            json.get("drafts").and_then(Value::as_array).map(|drafts| {
+                drafts.iter().filter_map(|draft| draft.get("message")?.get("id")?.as_str()).map(str::to_string).collect()
+            }).unwrap_or_default()
+        } else {
+            json.get("messages").and_then(Value::as_array).map(|messages| {
+                messages.iter().filter_map(|msg| msg.get("id")?.as_str()).map(str::to_string).collect()
+            }).unwrap_or_default()
+        };
+
+        for id in message_refs {
+            synced_ids.push(format!("{}:{}", account_id, id));
+        }
+
+        let _ = sync_mailbox_page_internal_for(state, account_id, mailbox, current_token.clone()).await;
+    }
+
+    if !synced_ids.is_empty() {
+        let conn = state.conn.lock().await;
+        
+        let mut placeholders = String::new();
+        for i in 0..synced_ids.len() {
+            if i > 0 { placeholders.push_str(","); }
+            placeholders.push_str("?");
+        }
+
+        let mut stmt = conn.prepare(&format!("SELECT MIN(internal_ts) FROM emails WHERE id IN ({})", placeholders)).map_err(|e| e.to_string())?;
+        let oldest_ts: i64 = stmt.query_row(rusqlite::params_from_iter(synced_ids.iter()), |r| r.get(0)).unwrap_or(0);
+
+        let sql = format!(
+            "UPDATE emails SET mailbox='OTHER' 
+             WHERE account_id=?1 AND mailbox=?2 AND internal_ts >= ?3 AND id NOT IN ({})",
+            placeholders
+        );
+
+        let mut params: Vec<rusqlite::types::Value> = vec![
+            rusqlite::types::Value::Integer(account_id),
+            rusqlite::types::Value::Text(mailbox.to_string()),
+            rusqlite::types::Value::Integer(oldest_ts),
+        ];
+        for id in synced_ids {
+            params.push(rusqlite::types::Value::Text(id));
+        }
+
+        let _ = conn.execute(&sql, rusqlite::params_from_iter(params));
+    }
+
+    Ok(())
 }
 
 
@@ -277,7 +352,6 @@ pub async fn deep_search_emails(
             return match result {
                 Ok(Ok(emails)) => Ok(emails),
                 Ok(Err(_e)) => {
-                    // Fallback to local DB search on IMAP error
                     let conn = state.conn.lock().await;
                     let pattern = format!("%{}%", query);
                     let mut stmt = conn.prepare(
@@ -458,32 +532,31 @@ pub async fn toggle_starred(state: State<'_, Arc<DbState>>, email_id: String) ->
 pub async fn archive_email(state: State<'_, Arc<DbState>>, email_id: String) -> Result<(), String> {
     let account_id = get_active_id(&state).await;
 
+    log::info!("[DEBUG] Archiving email {} (account {})", email_id, account_id);
     
-    let is_gmail = {
+    let account = {
         let conn = state.conn.lock().await;
-        crate::db::get_account_by_id(&conn, account_id)
-            .ok().flatten()
-            .map(|a| a.provider == "gmail")
-            .unwrap_or(false)
+        crate::db::get_account_by_id(&conn, account_id).ok().flatten()
     };
+    let is_gmail = account.clone().map(|a| a.provider == "gmail").unwrap_or(false);
 
     if is_gmail {
-        
         let gmail_id = email_id.splitn(2, ':').nth(1).unwrap_or(&email_id).to_string();
-        let token = ensure_token(&state).await?.access_token;
+        let token = ensure_token(&state).await.map_err(|e| {
+            e
+        })?.access_token;
         let client = reqwest::Client::new();
         let url = format!("https://gmail.googleapis.com/gmail/v1/users/me/messages/{}/modify", gmail_id);
         let res = client.post(url).bearer_auth(&token)
             .json(&json!({"removeLabelIds": ["INBOX"]}))
-            .send().await.map_err(|e| e.to_string())?;
+            .send().await.map_err(|e| {
+                e.to_string()
+            })?;
         if !res.status().is_success() {
-            return Err(format!("Archive failed: {}", res.status()));
+            let err = format!("Archive failed: {}", res.status());
+            return Err(err);
         }
     } else {
-        let account = {
-            let conn = state.conn.lock().await;
-            crate::db::get_account_by_id(&conn, account_id).ok().flatten()
-        };
         if let Some(acc) = account {
             if acc.provider == "imap" {
                 let msg_id = email_id.splitn(2, ':').nth(1).unwrap_or(&email_id).to_string();
@@ -501,6 +574,23 @@ pub async fn archive_email(state: State<'_, Arc<DbState>>, email_id: String) -> 
     }
 
     let conn = state.conn.lock().await;
+    
+    if is_gmail {
+         let thread_id: Option<String> = conn.query_row(
+            "SELECT thread_id FROM emails WHERE id=?1 AND account_id=?2",
+            rusqlite::params![email_id, account_id],
+            |r| r.get(0)
+        ).ok();
+        
+        if let Some(tid) = thread_id {
+            let _ = conn.execute(
+                "UPDATE emails SET mailbox='OTHER', labels=replace(replace(','||labels||',', ',INBOX,', ','), ',,', ',') 
+                 WHERE thread_id=?1 AND account_id=?2 AND mailbox='INBOX'",
+                rusqlite::params![tid, account_id],
+            );
+        }
+    }
+
     conn.execute(
         "UPDATE emails SET mailbox='ARCHIVE' WHERE id=?1 AND account_id=?2",
         rusqlite::params![email_id, account_id],
@@ -520,12 +610,20 @@ pub async fn trash_email(state: State<'_, Arc<DbState>>, email_id: String) -> Re
     if let Some(ref acc) = account {
         if acc.provider == "gmail" {
             let gmail_id = email_id.splitn(2, ':').nth(1).unwrap_or(&email_id).to_string();
-            let token = ensure_token(&state).await?.access_token;
+            let token = ensure_token(&state).await.map_err(|e| {
+                e
+            })?.access_token;
             let client = reqwest::Client::new();
             let url = format!("https://gmail.googleapis.com/gmail/v1/users/me/messages/{}/trash", gmail_id);
-            let res = client.post(url).bearer_auth(&token).send().await.map_err(|e| e.to_string())?;
+            let res = client.post(url)
+                .bearer_auth(&token)
+                .header(reqwest::header::CONTENT_LENGTH, 0)
+                .send().await.map_err(|e| {
+                    e.to_string()
+                })?;
             if !res.status().is_success() {
-                return Err(format!("Trash failed: {}", res.status()));
+                let err = format!("Trash failed: {}", res.status());
+                return Err(err);
             }
         } else if acc.provider == "imap" {
             let msg_id = email_id.splitn(2, ':').nth(1).unwrap_or(&email_id).to_string();
@@ -542,8 +640,32 @@ pub async fn trash_email(state: State<'_, Arc<DbState>>, email_id: String) -> Re
     }
 
     let conn = state.conn.lock().await;
+
+    let is_gmail = account.map(|a| a.provider == "gmail").unwrap_or(false);
+    if is_gmail {
+        let thread_id: Option<String> = conn.query_row(
+            "SELECT thread_id FROM emails WHERE id=?1 AND account_id=?2",
+            rusqlite::params![email_id, account_id],
+            |r| r.get(0)
+        ).ok();
+        
+        if let Some(tid) = thread_id {
+             let _ = conn.execute(
+                "UPDATE emails SET mailbox='OTHER', labels=replace(replace(','||labels||',', ',INBOX,', ','), ',,', ',') 
+                 WHERE thread_id=?1 AND account_id=?2 AND mailbox='INBOX' AND id != ?3",
+                rusqlite::params![tid, account_id, email_id],
+            );
+        }
+    }
+
     conn.execute(
-        "UPDATE emails SET mailbox='TRASH' WHERE id=?1 AND account_id=?2",
+        "UPDATE emails SET mailbox='TRASH', labels=(
+            CASE WHEN instr(','||labels||',', ',INBOX,') > 0 THEN 
+                trim(replace(','||labels||',', ',INBOX,', ','), ',') || ',TRASH'
+            ELSE 
+                CASE WHEN labels IS NULL OR labels = '' THEN 'TRASH' ELSE labels || ',TRASH' END
+            END
+        ) WHERE id=?1 AND account_id=?2",
         rusqlite::params![email_id, account_id],
     ).map_err(|e| e.to_string())?;
     Ok(())
@@ -727,13 +849,22 @@ pub async fn restore_from_trash(state: State<'_, Arc<DbState>>, email_id: String
     if let Some(ref acc) = account {
         if acc.provider == "gmail" {
             let gmail_id = email_id.splitn(2, ':').nth(1).unwrap_or(&email_id).to_string();
-            if let Ok(token_info) = ensure_token(&state).await {
-                let client = reqwest::Client::new();
-                let url = format!("https://gmail.googleapis.com/gmail/v1/users/me/messages/{}/untrash", gmail_id);
-                client.post(url).bearer_auth(&token_info.access_token).send().await
-                    .map_err(|e| format!("Gmail untrash error: {}", e))?;
-            } else {
-                return Err("Failed to get Gmail token".to_string());
+            let token = ensure_token(&state).await.map_err(|e| {
+                e
+            })?.access_token;
+            let client = reqwest::Client::new();
+            let url = format!("https://gmail.googleapis.com/gmail/v1/users/me/messages/{}/modify", gmail_id);
+            let res = client.post(url).bearer_auth(&token)
+                .json(&json!({
+                    "addLabelIds": ["INBOX"],
+                    "removeLabelIds": ["TRASH"]
+                }))
+                .send().await.map_err(|e| {
+                    e.to_string()
+                })?;
+            if !res.status().is_success() {
+                let err = format!("Restore failed: {}", res.status());
+                return Err(err);
             }
         } else if acc.provider == "imap" {
             let msg_id = email_id.splitn(2, ':').nth(1).unwrap_or(&email_id).to_string();
@@ -748,7 +879,13 @@ pub async fn restore_from_trash(state: State<'_, Arc<DbState>>, email_id: String
 
     let conn = state.conn.lock().await;
     conn.execute(
-        "UPDATE emails SET mailbox='INBOX' WHERE id=?1 AND account_id=?2",
+        "UPDATE emails SET mailbox='INBOX', labels=(
+            CASE WHEN instr(','||labels||',', ',TRASH,') > 0 THEN 
+                trim(replace(','||labels||',', ',TRASH,', ','), ',') || ',INBOX'
+            ELSE 
+                CASE WHEN labels IS NULL OR labels = '' THEN 'INBOX' ELSE labels || ',INBOX' END
+            END
+        ) WHERE id=?1 AND account_id=?2",
         rusqlite::params![email_id, account_id],
     ).map_err(|e| e.to_string())?;
     Ok(())

@@ -94,7 +94,7 @@ async fn sync_account(state: &DbState, account: &Account) {
 async fn sync_gmail_account(state: &DbState, account: &Account) {
     use crate::commands::mail::sync_mailbox_internal_for;
 
-    let mailboxes = ["INBOX", "SENT", "DRAFT"];
+    let mailboxes = ["INBOX", "SENT", "DRAFT", "TRASH"];
     for mailbox in &mailboxes {
         if let Err(e) = sync_mailbox_internal_for(state, account.id, mailbox).await {
             log::error!("Gmail sync error account={} mailbox={}: {}", account.id, mailbox, e);
@@ -118,7 +118,7 @@ async fn sync_imap_account(state: &DbState, account: &Account) {
 
         match result {
             Ok(Ok(emails)) => {
-                upsert_emails(state, account_id, emails).await;
+                upsert_emails(state, account_id, emails, mailbox).await;
             }
             Ok(Err(e)) => {
                 log::error!("IMAP sync error account={} mailbox={}: {}", account_id, mailbox, e);
@@ -130,31 +130,34 @@ async fn sync_imap_account(state: &DbState, account: &Account) {
     }
 }
 
-async fn upsert_emails(state: &DbState, _account_id: i64, emails: Vec<crate::db::Email>) {
+async fn upsert_emails(state: &DbState, account_id: i64, emails: Vec<crate::db::Email>, mailbox: &str) {
+    let mut synced_ids = Vec::new();
     let conn = state.conn.lock().await;
-    for email in emails {
+
+    for email in &emails {
+        synced_ids.push(email.id.clone());
+
         let _ = conn.execute(
             "INSERT INTO emails (id, account_id, draft_id, thread_id, subject, sender, to_recipients, cc_recipients,
                                  snippet, body_html, attachments_json, has_attachments, date, is_read, starred,
                                  mailbox, labels, internal_ts)
              VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18)
-            ON CONFLICT(id, account_id) DO UPDATE SET
-                snippet = excluded.snippet,
-                body_html = excluded.body_html,
-                is_read = excluded.is_read,
-                mailbox = excluded.mailbox,
-                labels = excluded.labels,
-                internal_ts = excluded.internal_ts,
-                attachments_json = CASE 
-                    WHEN excluded.attachments_json = '[]' OR excluded.attachments_json = '' 
-                    THEN emails.attachments_json 
-                    ELSE excluded.attachments_json 
-                END,
-                has_attachments = CASE
-                    WHEN excluded.attachments_json = '[]' OR excluded.attachments_json = ''
-                    THEN emails.has_attachments
-                    ELSE excluded.has_attachments
-                END",
+            ON CONFLICT(id) DO UPDATE SET
+                thread_id=excluded.thread_id,
+                subject=excluded.subject,
+                sender=excluded.sender,
+                to_recipients=excluded.to_recipients,
+                cc_recipients=excluded.cc_recipients,
+                snippet=excluded.snippet,
+                body_html=excluded.body_html,
+                attachments_json=excluded.attachments_json,
+                has_attachments=excluded.has_attachments,
+                date=excluded.date,
+                is_read=excluded.is_read,
+                starred=excluded.starred,
+                mailbox=excluded.mailbox,
+                labels=excluded.labels,
+                internal_ts=excluded.internal_ts",
             rusqlite::params![
                 email.id, email.account_id, email.draft_id, email.thread_id,
                 email.subject, email.sender, email.to_recipients, email.cc_recipients,
@@ -163,5 +166,35 @@ async fn upsert_emails(state: &DbState, _account_id: i64, emails: Vec<crate::db:
                 email.starred as i32, email.mailbox, email.labels, email.internal_ts
             ],
         );
+    }
+
+    if !synced_ids.is_empty() {
+        let mut oldest_ts = i64::MAX;
+        for email in &emails {
+            if email.internal_ts < oldest_ts { oldest_ts = email.internal_ts; }
+        }
+
+        let mut placeholders = String::new();
+        for i in 0..synced_ids.len() {
+            if i > 0 { placeholders.push_str(","); }
+            placeholders.push_str("?");
+        }
+
+        let sql = format!(
+            "UPDATE emails SET mailbox='OTHER' 
+             WHERE account_id=?1 AND mailbox=?2 AND internal_ts >= ?3 AND id NOT IN ({})",
+            placeholders
+        );
+
+        let mut params: Vec<rusqlite::types::Value> = vec![
+            rusqlite::types::Value::Integer(account_id),
+            rusqlite::types::Value::Text(mailbox.to_string()),
+            rusqlite::types::Value::Integer(oldest_ts),
+        ];
+        for id in synced_ids {
+            params.push(rusqlite::types::Value::Text(id));
+        }
+
+        let _ = conn.execute(&sql, rusqlite::params_from_iter(params));
     }
 }

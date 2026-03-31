@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Verdant Desktop",
-  "version": "2.2.9",
+  "version": "2.2.10",
   "identifier": "com.cns-studios.verdant",
   "build": {
     "frontendDist": "../dist",
@@ -23,6 +23,9 @@
     "security": {
       "csp": null
     }
+  },
+  "plugins": {
+    "notification": null
   },
   "bundle": {
     "active": true,

@@ -91,13 +91,11 @@ function renderRecipientsLine(email) {
     ccList.length ? `${t("compose.cc")}: ${ccList.join(", ")}` : "",
   ].filter(Boolean).join(" | ");
 
-  // Reset to collapsed state
   metaTo.textContent = collapsed;
   metaTo.dataset.isExpanded = "false";
   metaTo.style.cursor = "pointer";
   metaTo.title = t("reading.expand_recipients");
 
-  // Remove old click handler and add new one
   metaTo.onclick = null;
   metaTo.onclick = () => {
     const isExpanded = metaTo.dataset.isExpanded === "true";
@@ -252,10 +250,8 @@ function renderReadingAttachments(email) {
 function renderEmailContentSafely(container, htmlContent) {
   if (!container) return;
   
-  // Clear container
   container.innerHTML = "";
   
-  // Create sandboxed iframe
   const iframe = document.createElement("iframe");
   iframe.className = "email-sandbox";
   iframe.setAttribute("sandbox", "allow-same-origin allow-popups");
@@ -265,11 +261,9 @@ function renderEmailContentSafely(container, htmlContent) {
   
   container.appendChild(iframe);
   
-  // Get the iframe's document and inject content
   const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
   if (!iframeDoc) return;
   
-  // Create safe HTML with style isolation
   const safeHtml = `
     <!DOCTYPE html>
     <html>
@@ -296,9 +290,7 @@ function renderEmailContentSafely(container, htmlContent) {
           color: #4a5e45;
           text-decoration: underline;
         }
-        /* Remove dangerous constructs */
         script, style { display: none !important; }
-        /* Prevent CSS from breaking layout */
         body, div, p, span, a, img {
           all: revert;
         }
@@ -363,16 +355,6 @@ export function updateTopActionStates(email, mailbox) {
   const isSent = email?.mailbox?.toUpperCase().includes("SENT") || currentMailbox.includes("SENT") || activeNav.toUpperCase().includes("SENT");
 
   buttons.forEach((btn) => {
-    if (!btn.dataset.action) {
-      const initialTitle = btn.getAttribute("title") || "";
-      if (initialTitle === t("reading.archive") || initialTitle === t("reading.restore")) btn.dataset.action = "archive";
-      else if (initialTitle === t("reading.delete") || initialTitle === t("reading.permanent_delete")) btn.dataset.action = "delete";
-      else if (initialTitle === t("reading.mark_unread")) btn.dataset.action = "mark_unread";
-      else if (initialTitle === t("reading.star")) btn.dataset.action = "star";
-      else if (initialTitle === t("reading.more")) btn.dataset.action = "more";
-      else if (initialTitle === t("reading.close")) btn.dataset.action = "close";
-    }
-
     const action = btn.dataset.action;
 
     if (action === "star") {
@@ -420,21 +402,22 @@ export function bindReadingActions(getSelected, setSelected, onRefresh, openComp
   for (const button of buttons) {
     button.onclick = async () => {
       const email = getSelected();
-      const mailbox = getCurrentMailbox?.() || "INBOX";
+      const currentBox = (getCurrentMailbox?.() || "INBOX").toUpperCase();
+      const action = button.dataset.action || "";
       const title = button.getAttribute("title") || "";
+      const threadId = getThreadId?.();
+      const messageIds = threadId 
+        ? Array.from(document.querySelectorAll(".thread-bubble")).map(b => b.dataset.messageId).filter(Boolean)
+        : [];
 
-      if (title === t("reading.archive") || title === t("reading.restore")) {
-        const threadId = getThreadId?.();
-        const messageIds = threadId 
-          ? Array.from(document.querySelectorAll(".thread-bubble")).map(b => b.dataset.messageId).filter(Boolean)
-          : [];
+      console.log(`[UI] Action clicked: ${action}. title: ${title}. threadId: ${threadId}. messageIds count: ${messageIds.length}. selectedEmailId: ${email?.id}`);
 
+      if (action === "archive") {
         if (title === t("reading.restore")) {
+          const { restoreFromTrash } = await import("../api.js");
           if (threadId && messageIds.length) {
-            const { restoreFromTrash } = await import("../api.js");
             for (const id of messageIds) await restoreFromTrash(id).catch(() => {});
           } else if (email) {
-            const { restoreFromTrash } = await import("../api.js");
             await restoreFromTrash(email.id);
           }
           showToast(t("toast.restored"));
@@ -450,7 +433,7 @@ export function bindReadingActions(getSelected, setSelected, onRefresh, openComp
         return;
       }
 
-      if (title === t("reading.delete") || title === t("reading.permanent_delete")) {
+      if (action === "delete") {
         const threadId = getThreadId?.();
         const messageIds = threadId 
           ? Array.from(document.querySelectorAll(".thread-bubble")).map(b => b.dataset.messageId).filter(Boolean)
@@ -469,6 +452,8 @@ export function bindReadingActions(getSelected, setSelected, onRefresh, openComp
             for (const id of messageIds) await trashEmail(id).catch(() => {});
           } else if (email) {
             await trashEmail(email.id);
+          } else {
+            console.warn("Trash clicked but no message IDs found.");
           }
           showToast(t("toast.trashed"));
         }
@@ -476,10 +461,9 @@ export function bindReadingActions(getSelected, setSelected, onRefresh, openComp
         return;
       }
 
-      if (title === t("reading.mark_unread")) {
+      if (action === "mark_unread") {
         const threadId = getThreadId?.();
         if (threadId) {
-          const { markThreadRead } = await import("../api.js");
           const messages = Array.from(document.querySelectorAll(".thread-bubble"))
             .map(b => b.dataset.messageId).filter(Boolean);
           for (const id of messages) {
@@ -499,7 +483,7 @@ export function bindReadingActions(getSelected, setSelected, onRefresh, openComp
         return;
       }
 
-      if (title === t("reading.star")) {
+      if (action === "star") {
         const threadId = getThreadId?.();
         const messageIds = threadId 
           ? Array.from(document.querySelectorAll(".thread-bubble")).map(b => b.dataset.messageId).filter(Boolean)
@@ -519,16 +503,14 @@ export function bindReadingActions(getSelected, setSelected, onRefresh, openComp
         return;
       }
 
-      if (title === t("reading.more")) {
+      if (action === "more") {
         const threadId = getThreadId?.();
         const messageIds = threadId 
           ? Array.from(document.querySelectorAll(".thread-bubble")).map(b => b.dataset.messageId).filter(Boolean)
           : [];
 
-        const mailbox = getCurrentMailbox?.() || "INBOX";
-        const isDraft = email?.mailbox?.toUpperCase().includes("DRAFT") || mailbox.toUpperCase().includes("DRAFT");
-        const activeNav = document.querySelector(".sidebar .nav-item.active")?.dataset?.mailbox || "INBOX";
-        const isTrash = email?.mailbox?.toUpperCase().includes("TRASH") || mailbox.toUpperCase().includes("TRASH") || activeNav.toUpperCase().includes("TRASH");
+        const isDraft = email?.mailbox?.toUpperCase().includes("DRAFT") || currentBox.includes("DRAFT");
+        const isTrash = email?.mailbox?.toUpperCase().includes("TRASH") || currentBox.includes("TRASH");
 
         const entries = [
           {
@@ -601,7 +583,7 @@ export function bindReadingActions(getSelected, setSelected, onRefresh, openComp
         return;
       }
 
-      if (title === t("reading.close")) {
+      if (action === "close") {
         setSelected(null);
         document.querySelectorAll(".email-item").forEach((el) => el.classList.remove("active"));
         setReadingPaneHidden(true);
