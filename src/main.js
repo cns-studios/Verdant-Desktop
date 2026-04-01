@@ -27,7 +27,7 @@ import {
 } from "./ui/compose.js";
 import {
     openSettingsModal, isSettingsOpen, closeOverlay,
-    updatePrefs, hydratePrefsFromBackend,
+    updatePrefs, hydratePrefsFromBackend, runAutomaticUpdateFlow,
 } from "./ui/settings.js";
 import { openAccountPopover, closeAccountPopover } from "./ui/accounts.js";
 import { appPrefs } from "./ui/settings.js";
@@ -39,6 +39,8 @@ import {
 } from "./ui/thread.js";
 import { t, initLang } from "./lib/i18n.js";
 
+const PERIODIC_UPDATE_CHECK_INTERVAL_MS = 30 * 60 * 1000;
+
 
 let currentMailbox = "INBOX";
 let currentEmails = [];
@@ -47,6 +49,7 @@ let activeFilter = "Important";
 let searchQuery = "";
 let isDeepSearchActive = false;
 let isFetchingMore = false;
+let isSyncing = false;
 let hotkeys = loadHotkeys();
 
 
@@ -115,6 +118,18 @@ async function runStartupUpdateCheck() {
     } catch {}
 }
 
+function startPeriodicUpdateCheck() {
+
+    setInterval(async () => {
+        if (updatePrefs.autoCheck) {
+            try {
+                await runAutomaticUpdateFlow();
+            } catch (err) {
+                console.error("Periodic update check failed:", err);
+            }
+        }
+    }, PERIODIC_UPDATE_CHECK_INTERVAL_MS);
+}
 
 
 function isImportant(email) {
@@ -429,8 +444,14 @@ function bindHotkeys() {
         if (combo === hotkeys.refresh) {
             event.preventDefault();
             if (!canRunHotkey("refresh")) return;
+            if (isSyncing) return;
+            isSyncing = true;
             showToast(t("toast.fetching"));
-            await syncMailboxInBackground(currentMailbox, true, onSynced);
+            try {
+                await syncMailboxInBackground(currentMailbox, true, onSynced);
+            } finally {
+                isSyncing = false;
+            }
             return;
         }
 
@@ -528,6 +549,7 @@ async function initializeConnectedUI() {
     });
 
     runStartupUpdateCheck().catch(() => {});
+    startPeriodicUpdateCheck();
 }
 
 

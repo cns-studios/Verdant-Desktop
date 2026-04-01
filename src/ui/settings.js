@@ -431,10 +431,17 @@ export async function openSettingsModal(profile, currentMailbox, onLogout, onSyn
     if (btn) btn.disabled = false;
   });
 
+  let isSyncingSettings = false;
   panel.querySelector("#settings-sync")?.addEventListener("click", async () => {
+    if (isSyncingSettings) return;
+    isSyncingSettings = true;
     showToast(t("toast.fetching"));
-    await onSync();
-    showToast(t("toast.sync_complete"));
+    try {
+      await onSync();
+      showToast(t("toast.sync_complete"));
+    } finally {
+      isSyncingSettings = false;
+    }
   });
 
   panel.querySelector("#settings-clear")?.addEventListener("click", async () => {
