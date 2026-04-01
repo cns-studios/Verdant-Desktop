@@ -250,6 +250,7 @@ export async function openSettingsModal(profile, currentMailbox, onLogout, onSyn
       <div class="settings-row"><span>${escapeHtml(t("settings.shortcuts.settings"))}</span><input id="hk-settings" value="${escapeHtml(hotkeys.settings)}" /></div>
       <div class="settings-row"><span>${escapeHtml(t("settings.shortcuts.search"))}</span><input id="hk-search" value="${escapeHtml(hotkeys.search)}" /></div>
       <div class="settings-row"><span>${escapeHtml(t("settings.shortcuts.send"))}</span><input id="hk-send" value="${escapeHtml(hotkeys.send)}" /></div>
+      <div class="settings-row"><span>${escapeHtml(t("settings.shortcuts.switch_account"))}</span><input id="hk-switch-account" value="${escapeHtml(hotkeys.switchNextAccount)}" /></div>
       <div class="settings-actions">
         <button class="verdant-btn" id="settings-save">${escapeHtml(t("settings.shortcuts.save"))}</button>
       </div>
@@ -354,6 +355,7 @@ export async function openSettingsModal(profile, currentMailbox, onLogout, onSyn
       settings: normalizeCombo(panel.querySelector("#hk-settings")?.value || defaultHotkeys.settings),
       search: normalizeCombo(panel.querySelector("#hk-search")?.value || defaultHotkeys.search),
       send: normalizeCombo(panel.querySelector("#hk-send")?.value || defaultHotkeys.send),
+      switchNextAccount: normalizeCombo(panel.querySelector("#hk-switch-account")?.value || defaultHotkeys.switchNextAccount),
       close: "escape",
     };
     saveHotkeys(hotkeys);

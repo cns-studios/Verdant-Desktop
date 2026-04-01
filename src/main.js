@@ -34,7 +34,7 @@ import {
 import { openAccountPopover, closeAccountPopover } from "./ui/accounts.js";
 import { openWhatsNewModal } from "./ui/whatsnew.js";
 import { appPrefs } from "./ui/settings.js";
-import { checkForUpdates, downloadLatestUpdate, switchAccount } from "./api.js";
+import { checkForUpdates, downloadLatestUpdate, switchAccount, listAccounts } from "./api.js";
 import { getInboxThreads } from "./api.js";
 import {
     renderThreadList,
@@ -492,6 +492,39 @@ function bindHotkeys() {
             event.preventDefault();
             if (!canRunHotkey("search")) return;
             document.getElementById("search-input")?.focus();
+        }
+
+        if (combo === hotkeys.switchNextAccount) {
+            event.preventDefault();
+            if (!canRunHotkey("switchNextAccount")) return;
+            (async () => {
+                try {
+                    const accounts = await listAccounts();
+                    if (!accounts || accounts.length === 0) {
+                        showToast(t("accounts.switch_none"));
+                        return;
+                    }
+                    if (accounts.length === 1) {
+                        showToast(t("accounts.switch_single"));
+                        return;
+                    }
+
+                    const currentIndex = accounts.findIndex(acc => acc.is_active);
+                    const nextIndex = (currentIndex + 1) % accounts.length;
+                    const nextAccount = accounts[nextIndex];
+
+                    const accountLabel = nextAccount.display_name || nextAccount.email;
+                    showToast(t("accounts.switched", { account: accountLabel }));
+                    
+                    await switchAccount(nextAccount.id);
+                    const profile = await getUserProfile();
+                    setUserProfile(profile);
+                    await openMailbox("INBOX", true);
+                    await refreshCounts();
+                } catch (err) {
+                    showToast(String(err), "error");
+                }
+            })();
         }
     });
 }

@@ -210,3 +210,51 @@
 .whatsnew-dismiss-btn:active {
     transform: scale(0.98);
 }
+
+.whatsnew-blockquote {
+    margin: 12px 0;
+    padding: 12px 16px;
+    border-left: 3px solid var(--green);
+    background: rgba(76, 175, 80, 0.08);
+    border-radius: 6px;
+}
+
+.whatsnew-blockquote p {
+    margin: 8px 0;
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13.5px;
+    line-height: 1.6;
+    font-style: italic;
+}
+
+.whatsnew-blockquote p:first-child {
+    margin-top: 0;
+}
+
+.whatsnew-blockquote p:last-child {
+    margin-bottom: 0;
+}
+
+.whatsnew-changes code,
+.whatsnew-blockquote code {
+    background: var(--surface2);
+    color: var(--green);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: 'Fira Code', monospace;
+    font-size: 12px;
+    font-weight: 500;
+    border: 1px solid var(--border);
+}
+
+.whatsnew-changes strong,
+.whatsnew-blockquote strong {
+    color: var(--text);
+    font-weight: 600;
+}
+
+.whatsnew-changes em,
+.whatsnew-blockquote em {
+    color: var(--text);
+}

@@ -5,6 +5,10 @@
 - Improved Database performance
 - Improved Updating logic by extending limits of the update server 
 - Links found in emails now open in the Browser
+- Added a new Hotkey 
+> You can now switch between mailboxes with `CTRL + TAB`
+> If you want to change this, visit `Settings` to change this hotkey
+
 
 ## [2.2.14]
 - Single Instance - fixed isssue spawning multiple instances 

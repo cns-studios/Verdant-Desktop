@@ -5,6 +5,7 @@ const HOTKEY_COOLDOWN_MS = {
   settings: 1200,
   search: 250,
   send: 1000,
+  switchNextAccount: 500,
 };
 
 export const defaultHotkeys = {
@@ -16,6 +17,7 @@ export const defaultHotkeys = {
   search: "ctrl+k",
   send: "ctrl+enter",
   close: "escape",
+  switchNextAccount: "ctrl+tab",
 };
 
 const lastHotkeyAt = new Map();

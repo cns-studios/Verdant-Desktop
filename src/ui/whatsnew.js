@@ -86,6 +86,17 @@ export function isWhatsNewOpen() {
     return _whatsNewOpen;
 }
 
+function parseMarkdown(text) {
+    const escape = str => str.replace(/[&<>"]/g, tag => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'
+    }[tag]));
+    
+    return text
+        .replace(/\*\*(.+?)\*\*|__(.+?)__/g, '<strong>$1$2</strong>')
+        .replace(/\*(.+?)\*|_(.+?)_/g, '<em>$1$2</em>')
+        .replace(/`(.+?)`/g, '<code>$1</code>');
+}
+
 export async function openWhatsNewModal(version) {
     if (_whatsNewOpen) return;
     
@@ -131,10 +142,25 @@ export async function openWhatsNewModal(version) {
         const changesList = document.createElement("ul");
         changesList.className = "whatsnew-changes";
         
+        let currentBlockquote = null;
+        
         response.content.split('\n').forEach(line => {
-            if (line.trim().startsWith('- ')) {
+            const trimmed = line.trim();
+            
+            if (trimmed.startsWith('> ')) {
+                if (!currentBlockquote) {
+                    currentBlockquote = document.createElement('blockquote');
+                    currentBlockquote.className = 'whatsnew-blockquote';
+                    changesList.appendChild(currentBlockquote);
+                }
+                const p = document.createElement('p');
+                p.innerHTML = parseMarkdown(trimmed.substring(2).trim());
+                currentBlockquote.appendChild(p);
+            }
+            else if (trimmed.startsWith('- ')) {
+                currentBlockquote = null;
                 const li = document.createElement('li');
-                li.textContent = line.substring(2).trim();
+                li.innerHTML = parseMarkdown(trimmed.substring(2).trim());
                 changesList.appendChild(li);
             }
         });
