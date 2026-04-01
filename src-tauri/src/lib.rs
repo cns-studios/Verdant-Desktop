@@ -44,6 +44,7 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, Some(vec!["--autostart"])))
         .plugin(tauri_plugin_notification::init())
         .setup(move |app| {
@@ -185,6 +186,7 @@ pub fn run() {
             commands::updater::download_latest_update,
             commands::updater::install_and_relaunch,
             commands::updater::get_changelog,
+            commands::shell::open_external_url,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -1,10 +1,10 @@
 # Changelog
 
 ## [2.2.15]
-- Added Changelog view
+- Added Changelog view (Yes, this one)
 - Improved Database performance
-- Improved Updating logic (higher ratelimiting)
-- Links of emails now open in Browser
+- Improved Updating logic by extending limits of the update server 
+- Links found in emails now open in the Browser
 
 ## [2.2.14]
 - Single Instance - fixed isssue spawning multiple instances 

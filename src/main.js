@@ -1,5 +1,6 @@
 import { authStatus, getUserProfile, getEmails, syncMailboxPage } from "./api.js";
 import { setEmailReadStatus } from "./api.js";
+import { openExternalUrl } from "./api.js";
 import { ingestContactsFromEmails, ensureContactsLoaded } from "./lib/contacts.js";
 import { loadHotkeys, saveHotkeys, normalizeCombo, eventCombo, canRunHotkey } from "./lib/hotkeys.js";
 import { showToast } from "./lib/toast.js";
@@ -495,6 +496,25 @@ function bindHotkeys() {
     });
 }
 
+function bindGlobalExternalLinkInterception() {
+    document.addEventListener("click", async (event) => {
+        const target = event.target instanceof Element ? event.target : event.target?.parentElement;
+        const anchor = target?.closest?.("a[href]");
+        if (!anchor) return;
+
+        const href = anchor.getAttribute("href") || "";
+        if (!(href.startsWith("http://") || href.startsWith("https://"))) return;
+
+        event.preventDefault();
+        event.stopPropagation();
+        try {
+            await openExternalUrl(href);
+        } catch (error) {
+            console.error("Global external link interception failed", error);
+        }
+    }, true);
+}
+
 async function onSync() {
     await syncMailboxInBackground(currentMailbox, true, onSynced);
     await refreshCounts();
@@ -537,6 +557,7 @@ async function initializeConnectedUI() {
     bindComposeSend(async () => { await openMailbox(currentMailbox, false); });
     bindComposeDraftSave(async () => { await openMailbox(currentMailbox, false); });
     bindHotkeys();
+    bindGlobalExternalLinkInterception();
 
 
     const profile = await getUserProfile();

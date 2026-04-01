@@ -66,3 +66,5 @@ export const installAndRelaunch = (filePath) => invoke("install_and_relaunch", {
 export const getInboxThreads = () => invoke("get_inbox_threads");
 export const getThreadMessages = (threadId) => invoke("get_thread_messages", { threadId });
 export const markThreadRead = (threadId) => invoke("mark_thread_read", { threadId });
+
+export const openExternalUrl = (url) => invoke("open_external_url", { url });

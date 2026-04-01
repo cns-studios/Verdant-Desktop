@@ -6,18 +6,19 @@
     "main"
   ],
   "permissions": [
-      "core:default",
-      "core:window:allow-start-dragging",
-      "core:window:allow-minimize",
-      "core:window:allow-toggle-maximize",
-      "core:window:allow-close",
-      "store:allow-load",
-      "store:allow-set",
-      "store:allow-save",
-      "store:allow-get",
-      "process:allow-restart",
-      "process:allow-exit",
-      "notification:default",
-      "autostart:default"
+    "core:default",
+    "core:window:allow-start-dragging",
+    "core:window:allow-minimize",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-close",
+    "store:allow-load",
+    "store:allow-set",
+    "store:allow-save",
+    "store:allow-get",
+    "process:allow-restart",
+    "process:allow-exit",
+    "shell:allow-open",
+    "notification:default",
+    "autostart:default"
   ]
 }

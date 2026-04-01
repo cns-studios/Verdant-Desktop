@@ -2,6 +2,7 @@ import { setEmailReadStatus, toggleStarred, archiveEmail, trashEmail } from "../
 import { escapeHtml, sanitizeUnicodeNoise, formatReadingDate, formatAttachmentSize } from "../lib/format.js";
 import { showToast } from "../lib/toast.js";
 import { downloadAttachment } from "../api.js";
+import { openExternalUrl } from "../api.js";
 import { t } from "../lib/i18n.js";
 
 function senderInitials(sender) {
@@ -254,7 +255,7 @@ function renderEmailContentSafely(container, htmlContent) {
   
   const iframe = document.createElement("iframe");
   iframe.className = "email-sandbox";
-  iframe.setAttribute("sandbox", "allow-same-origin allow-popups");
+  iframe.setAttribute("sandbox", "allow-same-origin");
   iframe.style.border = "none";
   iframe.style.width = "100%";
   iframe.style.height = "100%";
@@ -305,6 +306,43 @@ function renderEmailContentSafely(container, htmlContent) {
   iframeDoc.open();
   iframeDoc.write(safeHtml);
   iframeDoc.close();
+
+  iframeDoc.querySelectorAll("a[href]").forEach((a) => {
+    const originalHref = a.getAttribute("href") || "";
+    a.setAttribute("data-verdant-href", originalHref);
+    a.setAttribute("href", "#");
+    a.setAttribute("target", "_self");
+    a.setAttribute("rel", "noopener noreferrer");
+  });
+
+  const handleIframeLinkIntent = async (e) => {
+    const rawTarget = e.target;
+    const target = rawTarget instanceof Element ? rawTarget : rawTarget?.parentElement;
+    const a = target?.closest?.("a[href]");
+    if (!a) return;
+
+    const href = a.getAttribute("data-verdant-href") || a.getAttribute("href");
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (!(href && (href.startsWith("http://") || href.startsWith("https://")))) {
+      return;
+    }
+
+    try {
+      await openExternalUrl(href);
+    } catch (error) {
+      console.error("External link open failed", error);
+    }
+  };
+
+  iframeDoc.addEventListener("click", handleIframeLinkIntent, true);
+  iframeDoc.addEventListener("auxclick", handleIframeLinkIntent, true);
+  iframeDoc.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter") return;
+    void handleIframeLinkIntent(e);
+  }, true);
 }
 
 export function renderReadingPane(email, mailbox) {
