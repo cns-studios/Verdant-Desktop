@@ -2,6 +2,7 @@ import {
     listAccounts, switchAccount, removeAccount,
     addGmailAccount, addImapAccount, addGmxAccount, testImapCredentials,
 } from "../api.js";
+import { openWhatsNewModal } from "./whatsnew.js";
 import { escapeHtml } from "../lib/format.js";
 import { showToast } from "../lib/toast.js";
 import { t } from "../lib/i18n.js";
@@ -122,6 +123,28 @@ export async function openAccountPopover(onSwitch, onAddAccount) {
         window.dispatchEvent(new CustomEvent("verdant-open-settings"));
     };
     actSection.appendChild(settingsBtn);
+
+    const whatsNewBtn = document.createElement("div");
+    whatsNewBtn.className = "account-popover-action";
+    whatsNewBtn.innerHTML = `
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/>
+            <polyline points="12 6 12 12 16 14"/>
+        </svg>
+        ${t("whatsnew.title")}
+    `;
+    whatsNewBtn.onclick = async () => {
+        closeAccountPopover();
+        try {
+            const { invoke } = await import("@tauri-apps/api/core");
+            const updateInfo = await invoke("check_for_updates");
+            await openWhatsNewModal(updateInfo.currentVersion);
+        } catch (err) {
+            showToast(String(err), "error");
+        }
+    };
+    actSection.appendChild(whatsNewBtn);
+    
     pop.appendChild(actSection);
 
     document.body.appendChild(pop);

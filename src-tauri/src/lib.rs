@@ -184,6 +184,7 @@ pub fn run() {
             commands::updater::check_for_updates,
             commands::updater::download_latest_update,
             commands::updater::install_and_relaunch,
+            commands::updater::get_changelog,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

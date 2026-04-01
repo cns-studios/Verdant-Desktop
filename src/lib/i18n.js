@@ -224,6 +224,9 @@ const translations = {
     "accounts.connected_toast": "Connected {email}",
     "settings.version": "Version",
     "settings.user_fallback": "User",
+
+    "whatsnew.title": "What's New",
+    "whatsnew.dismiss": "Cool!",
   },
 
   de: {
@@ -451,6 +454,9 @@ const translations = {
     "accounts.connected_toast": "{email} verbunden",
     "settings.version": "Version",
     "settings.user_fallback": "Benutzer",
+
+    "whatsnew.title": "Neuerungen",
+    "whatsnew.dismiss": "Super!",
   },
 };
 

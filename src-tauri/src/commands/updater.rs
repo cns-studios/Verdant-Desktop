@@ -92,10 +92,15 @@ fn downloads_dir() -> Result<PathBuf, String> {
 async fn fetch_latest_release() -> Result<Value, String> {
     let url = format!("https://api.github.com/repos/{}/{}/releases/latest", updater_repo_owner(), updater_repo_name());
     let client = reqwest::Client::new();
-    let response = client.get(url)
+    let mut request = client.get(url)
         .header(reqwest::header::USER_AGENT, "verdant-desktop-updater")
-        .header(reqwest::header::ACCEPT, "application/vnd.github+json")
-        .send().await.map_err(|e| e.to_string())?;
+        .header(reqwest::header::ACCEPT, "application/vnd.github+json");
+    
+    if let Ok(token) = env::var("GH_TOKEN") {
+        request = request.header("Authorization", format!("token {}", token));
+    }
+    
+    let response = request.send().await.map_err(|e| e.to_string())?;
     if !response.status().is_success() {
         return Err(format!("GitHub release lookup failed: {}", response.status()));
     }
@@ -105,10 +110,15 @@ async fn fetch_latest_release() -> Result<Value, String> {
 async fn fetch_latest_nightly_release() -> Result<Value, String> {
     let url = format!("https://api.github.com/repos/{}/{}/releases?per_page=30", updater_repo_owner(), updater_repo_name());
     let client = reqwest::Client::new();
-    let response = client.get(url)
+    let mut request = client.get(url)
         .header(reqwest::header::USER_AGENT, "verdant-desktop-updater")
-        .header(reqwest::header::ACCEPT, "application/vnd.github+json")
-        .send().await.map_err(|e| e.to_string())?;
+        .header(reqwest::header::ACCEPT, "application/vnd.github+json");
+    
+    if let Ok(token) = env::var("GH_TOKEN") {
+        request = request.header("Authorization", format!("token {}", token));
+    }
+    
+    let response = request.send().await.map_err(|e| e.to_string())?;
     if !response.status().is_success() {
         return Err(format!("GitHub nightly lookup failed: {}", response.status()));
     }
@@ -271,6 +281,54 @@ fn run_elevated_command(bin: &str, args: &[&str]) -> Result<(), String> {
     }
 
     Err("Could not elevate privileges. Please ensure pkexec is configured or run the app with sudo --update".to_string())
+}
+
+#[derive(serde::Serialize)]
+pub struct ChangelogEntry {
+    pub version: String,
+    pub content: String,
+}
+
+fn extract_changelog_for_version(changelog: &str, version: &str) -> Option<String> {
+    let lines: Vec<&str> = changelog.lines().collect();
+    let mut in_section = false;
+    let mut content = Vec::new();
+    let target = format!("## [{}]", version);
+
+    for line in lines {
+        if line.starts_with(&target) {
+            in_section = true;
+            continue;
+        }
+
+        if in_section {
+            if line.starts_with("## [") {
+                break;
+            }
+            if !line.is_empty() {
+                content.push(line);
+            }
+        }
+    }
+
+    if content.is_empty() {
+        None
+    } else {
+        Some(content.join("\n").trim().to_string())
+    }
+}
+
+#[tauri::command]
+pub fn get_changelog(version: String) -> Result<ChangelogEntry, String> {
+    let changelog_content = include_str!("../../../CHANGELOG.md");
+    
+    let changelog_text = extract_changelog_for_version(changelog_content, &version)
+        .ok_or_else(|| format!("No changelog entry found for version {}", version))?;
+
+    Ok(ChangelogEntry {
+        version,
+        content: changelog_text,
+    })
 }
 
 pub async fn handle_cli_update() {

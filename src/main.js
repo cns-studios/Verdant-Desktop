@@ -10,6 +10,7 @@ import "./ui/styles/shell.css";
 import "./ui/styles/onboarding.css";
 import "./ui/styles/accounts.css";
 import "./ui/styles/updates.css";
+import "./ui/styles/whatsnew.css";
 import { renderShell } from "./ui/shell.js";
 import { showOnboarding } from "./ui/onboarding.js";
 import {
@@ -30,6 +31,7 @@ import {
     updatePrefs, hydratePrefsFromBackend, runAutomaticUpdateFlow,
 } from "./ui/settings.js";
 import { openAccountPopover, closeAccountPopover } from "./ui/accounts.js";
+import { openWhatsNewModal } from "./ui/whatsnew.js";
 import { appPrefs } from "./ui/settings.js";
 import { checkForUpdates, downloadLatestUpdate, switchAccount } from "./api.js";
 import { getInboxThreads } from "./api.js";
@@ -129,6 +131,28 @@ function startPeriodicUpdateCheck() {
             }
         }
     }, PERIODIC_UPDATE_CHECK_INTERVAL_MS);
+}
+
+
+async function checkAndShowWhatsNewModal() {
+    try {
+        const { Store } = await import("@tauri-apps/plugin-store");
+        const store = new Store("verdant.json");
+        
+        const { invoke } = await import("@tauri-apps/api/core");
+        const updateInfo = await invoke("check_for_updates");
+        const currentVersion = updateInfo.currentVersion;
+        
+        const lastSeenVersion = await store.get("lastSeenVersion");
+        
+        if (lastSeenVersion !== currentVersion) {
+            await openWhatsNewModal(currentVersion);
+            await store.set("lastSeenVersion", currentVersion);
+            await store.save();
+        }
+    } catch (err) {
+        console.error("Failed to check for What's New:", err);
+    }
 }
 
 
@@ -541,6 +565,7 @@ async function initializeConnectedUI() {
 
     await openMailbox("INBOX", true);
     
+    checkAndShowWhatsNewModal().catch(() => {});
     
     const { listen } = await import("@tauri-apps/api/event");
     await listen("emails-synced", async () => {
