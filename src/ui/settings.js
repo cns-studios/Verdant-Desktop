@@ -15,11 +15,16 @@ const APP_PREFS_KEY = "verdant.appPrefs";
 const defaultAppPrefs = { runInBackground: true, autostart: false, showNotifications: true };
 export let appPrefs = loadAppPrefs();
 
+function normalizeUpdateChannel(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  return normalized === "nightly" || normalized === "beta" ? "nightly" : "stable";
+}
+
 function loadUpdatePrefs() {
   try {
     const raw = localStorage.getItem(UPDATE_PREFS_KEY);
     const parsed = raw ? { ...defaultUpdatePrefs, ...JSON.parse(raw) } : { ...defaultUpdatePrefs };
-    parsed.channel = parsed.channel === "nightly" ? "nightly" : "stable";
+    parsed.channel = normalizeUpdateChannel(parsed.channel);
     return parsed;
   } catch {
     return { ...defaultUpdatePrefs };
@@ -28,8 +33,13 @@ function loadUpdatePrefs() {
 
 export function saveUpdatePrefs(next) {
   updatePrefs = { ...defaultUpdatePrefs, ...next };
-  updatePrefs.channel = updatePrefs.channel === "nightly" ? "nightly" : "stable";
+  updatePrefs.channel = normalizeUpdateChannel(updatePrefs.channel);
   localStorage.setItem(UPDATE_PREFS_KEY, JSON.stringify(updatePrefs));
+
+  import("@tauri-apps/api/core").then(({ invoke }) => {
+    invoke("update_app_config", { config: { update_channel: updatePrefs.channel } })
+      .catch(err => console.error("Failed to sync update config to Rust", err));
+  });
 }
 
 function loadAppPrefs() {
@@ -49,6 +59,26 @@ export function saveAppPrefs(next) {
     invoke("update_app_config", { config: { run_in_background: appPrefs.runInBackground } })
       .catch(err => console.error("Failed to sync app config to Rust", err));
   });
+}
+
+export async function hydratePrefsFromBackend() {
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    const config = await invoke("get_app_config");
+    if (!config || typeof config !== "object") return;
+
+    if (typeof config.run_in_background === "boolean") {
+      appPrefs = { ...appPrefs, runInBackground: config.run_in_background };
+      localStorage.setItem(APP_PREFS_KEY, JSON.stringify(appPrefs));
+    }
+
+    if (typeof config.update_channel === "string") {
+      updatePrefs = { ...updatePrefs, channel: normalizeUpdateChannel(config.update_channel) };
+      localStorage.setItem(UPDATE_PREFS_KEY, JSON.stringify(updatePrefs));
+    }
+  } catch (err) {
+    console.error("Failed to hydrate prefs from backend config", err);
+  }
 }
 
 function setUpdateStatus(message, isError = false) {
@@ -331,7 +361,7 @@ export async function openSettingsModal(profile, currentMailbox, onLogout, onSyn
   });
 
   panel.querySelector("#update-channel")?.addEventListener("change", (e) => {
-    const value = e.target?.value === "nightly" ? "nightly" : "stable";
+    const value = normalizeUpdateChannel(e.target?.value);
     saveUpdatePrefs({ ...updatePrefs, channel: value });
     const label = value === "nightly" ? t("settings.app.channel.nightly") : t("settings.app.channel.stable");
     setUpdateStatus(t("settings.app.channel_set", { channel: label }));

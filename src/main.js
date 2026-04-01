@@ -27,7 +27,7 @@ import {
 } from "./ui/compose.js";
 import {
     openSettingsModal, isSettingsOpen, closeOverlay,
-    updatePrefs,
+    updatePrefs, hydratePrefsFromBackend,
 } from "./ui/settings.js";
 import { openAccountPopover, closeAccountPopover } from "./ui/accounts.js";
 import { appPrefs } from "./ui/settings.js";
@@ -536,7 +536,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     initLang();
     
     const { invoke } = await import("@tauri-apps/api/core");
-    invoke("update_app_config", { config: { run_in_background: appPrefs.runInBackground } })
+    await hydratePrefsFromBackend();
+    invoke("update_app_config", { config: { run_in_background: appPrefs.runInBackground, update_channel: updatePrefs.channel } })
         .catch(err => console.error("Initial app config sync failed", err));
 
     await ensureContactsLoaded().catch(() => {});

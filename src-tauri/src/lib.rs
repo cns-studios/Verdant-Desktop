@@ -19,7 +19,7 @@ use tauri::Manager;
 use tauri::{tray::{TrayIconBuilder, TrayIconEvent}, menu::{MenuBuilder, MenuItemBuilder}};
 use tokio::sync::Mutex;
 
-use commands::app_config::{AppConfig, AppConfigState, update_app_config};
+use commands::app_config::{AppConfigState, get_app_config, load_app_config, update_app_config};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -31,12 +31,22 @@ pub fn run() {
 
     let _ = dotenvy::from_filename("../.env").or_else(|_| dotenvy::from_filename(".env"));
 
+    let args: Vec<String> = std::env::args().collect();
+    let is_autostart = args.iter().any(|arg| arg == "--autostart");
+
     tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.show();
+                let _ = window.unminimize();
+                let _ = window.set_focus();
+            }
+        }))
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, Some(vec!["--autostart"])))
         .plugin(tauri_plugin_notification::init())
-        .setup(|app| {
+        .setup(move |app| {
             let data_dir = app
                 .path()
                 .app_data_dir()
@@ -62,7 +72,13 @@ pub fn run() {
             });
 
             app.manage(state.clone());
-            app.manage(AppConfigState(Mutex::new(AppConfig { run_in_background: true })));
+            app.manage(AppConfigState(Mutex::new(load_app_config(&app.handle().clone()))));
+
+            if is_autostart {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.hide();
+                }
+            }
 
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -125,6 +141,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             update_app_config,
+            get_app_config,
             
             commands::auth::connect_gmail,
             commands::auth::auth_status,
