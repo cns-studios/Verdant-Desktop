@@ -167,6 +167,8 @@ const translations = {
     "settings.app.downloading": "Downloading update...",
     "settings.app.download_failed": "Download failed",
     "settings.app.channel_set": "Channel set to {channel}",
+    "settings.app.colorscheme": "Colorscheme",
+    "settings.app.use_dark_mode": "Use dark mode",
     "settings.language": "Language",
 
     "update.title": "Update available — v{version}",
@@ -401,6 +403,8 @@ const translations = {
     "settings.app.downloading": "Update wird heruntergeladen...",
     "settings.app.download_failed": "Download fehlgeschlagen",
     "settings.app.channel_set": "Kanal auf {channel} gesetzt",
+    "settings.app.colorscheme": "Farbenschema",
+    "settings.app.use_dark_mode": "Dunklen Modus verwenden",
     "settings.language": "Sprache",
 
     "update.title": "Update verfügbar — v{version}",

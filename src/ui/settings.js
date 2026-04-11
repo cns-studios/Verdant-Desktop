@@ -270,6 +270,14 @@ export async function openSettingsModal(profile, currentMailbox, onLogout, onSyn
         </label>
       </div>
 
+      <div class="settings-section-label">${escapeHtml(t("settings.app.colorscheme"))}</div>
+      <div class="settings-card">
+        <label class="settings-switch">
+          <input type="checkbox" id="app-use-dark-mode" ${appPrefs.useDarkMode ? "checked" : ""}>
+          ${escapeHtml(t("settings.app.use_dark_mode"))}
+        </label>
+      </div>
+
       <div class="settings-section-label">${escapeHtml(t("settings.app.notifications_title"))}</div>
       <div class="settings-card">
         <label class="settings-switch">
@@ -398,6 +406,13 @@ export async function openSettingsModal(profile, currentMailbox, onLogout, onSyn
 
   panel.querySelector("#app-show-notifications")?.addEventListener("change", (e) => {
     saveAppPrefs({ ...appPrefs, showNotifications: !!e.target?.checked });
+  });
+
+  panel.querySelector("#app-use-dark-mode")?.addEventListener("change", (e) => {
+    const isDarkMode = !!e.target?.checked;
+    saveAppPrefs({ ...appPrefs, useDarkMode: isDarkMode });
+    const targetFile = isDarkMode ? "index-dark.html" : "index.html";
+    window.location.href = `/${targetFile}`;
   });
 
   panel.querySelector("#settings-check-update")?.addEventListener("click", async () => {
