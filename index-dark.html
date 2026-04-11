@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Verdant Mail</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;1,9..144,300&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:          #1f1c18;
+    --surface:     #2a2622;
+    --surface2:    #353026;
+    --border:      #4a4640;
+    --green:       #608158;
+    --green-mid:   #5c7356;
+    --green-light: #7a9470;
+    --green-muted: #5c6e5a;
+    --green-pale:  #2e362c;
+    --text:        #f0ebe3;
+    --text-mid:    #dad2c5;
+    --text-muted:  #b5ac9d;
+    --white:       #2a2622;
+    --accent:      #5b6d55;
+    --shadow-lg:   0 8px 32px rgba(30,33,25,0.28), 0 2px 8px rgba(30,33,25,0.12);
+  }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  #root {
+    width: 100%;
+    height: 100%;
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="module" src="/src/main.js"></script>
+</body>
+</html>
