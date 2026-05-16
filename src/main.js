@@ -138,7 +138,7 @@ function startPeriodicUpdateCheck() {
 async function checkAndShowWhatsNewModal() {
     try {
         const { Store } = await import("@tauri-apps/plugin-store");
-        const store = new Store("verdant.json");
+        const store = await Store.load("verdant.json");
         
         const { invoke } = await import("@tauri-apps/api/core");
         const updateInfo = await invoke("check_for_updates");
