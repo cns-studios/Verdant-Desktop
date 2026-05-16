@@ -169,6 +169,8 @@ const translations = {
     "settings.app.channel_set": "Channel set to {channel}",
     "settings.app.colorscheme": "Colorscheme",
     "settings.app.use_dark_mode": "Use dark mode",
+    "settings.app.light_mode": "Light mode",
+    "settings.app.dark_mode": "Dark mode",
     "settings.language": "Language",
 
     "update.title": "Update available — v{version}",
@@ -405,6 +407,8 @@ const translations = {
     "settings.app.channel_set": "Kanal auf {channel} gesetzt",
     "settings.app.colorscheme": "Farbenschema",
     "settings.app.use_dark_mode": "Dunklen Modus verwenden",
+    "settings.app.light_mode": "Heller Modus",
+    "settings.app.dark_mode": "Dunkler Modus",
     "settings.language": "Sprache",
 
     "update.title": "Update verfügbar — v{version}",

@@ -2,14 +2,9 @@
   const APP_PREFS_KEY = "verdant.appPrefs";
   try {
     const appPrefsRaw = localStorage.getItem(APP_PREFS_KEY);
-    const appPrefs = localStorage.getItem(APP_PREFS_KEY) ? JSON.parse(appPrefsRaw) : {};
-    const isDarkPage = window.location.pathname.includes("index-dark.html");
-    const DarkmodeStatus = appPrefs.useDarkMode === true;
-    
-    if (DarkmodeStatus && !isDarkPage) {
-      window.location.href = "/index-dark.html";
-    } else if (!DarkmodeStatus && isDarkPage) {
-      window.location.href = "/index.html";
+    const appPrefs = appPrefsRaw ? JSON.parse(appPrefsRaw) : {};
+    if (appPrefs.useDarkMode === true) {
+      document.documentElement.classList.add("dark");
     }
   } catch (err) {
     console.error("Theme preference check failed:", err);

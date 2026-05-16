@@ -272,10 +272,16 @@ export async function openSettingsModal(profile, currentMailbox, onLogout, onSyn
 
       <div class="settings-section-label">${escapeHtml(t("settings.app.colorscheme"))}</div>
       <div class="settings-card">
-        <label class="settings-switch">
-          <input type="checkbox" id="app-use-dark-mode" ${appPrefs.useDarkMode ? "checked" : ""}>
-          ${escapeHtml(t("settings.app.use_dark_mode"))}
-        </label>
+        <div class="colorscheme-options">
+          <label class="colorscheme-option">
+            <input type="radio" name="colorscheme" value="light" ${!appPrefs.useDarkMode ? "checked" : ""}>
+            <span class="colorscheme-label">${escapeHtml(t("settings.app.light_mode"))}</span>
+          </label>
+          <label class="colorscheme-option">
+            <input type="radio" name="colorscheme" value="dark" ${appPrefs.useDarkMode ? "checked" : ""}>
+            <span class="colorscheme-label">${escapeHtml(t("settings.app.dark_mode"))}</span>
+          </label>
+        </div>
       </div>
 
       <div class="settings-section-label">${escapeHtml(t("settings.app.notifications_title"))}</div>
@@ -408,11 +414,12 @@ export async function openSettingsModal(profile, currentMailbox, onLogout, onSyn
     saveAppPrefs({ ...appPrefs, showNotifications: !!e.target?.checked });
   });
 
-  panel.querySelector("#app-use-dark-mode")?.addEventListener("change", (e) => {
-    const isDarkMode = !!e.target?.checked;
-    saveAppPrefs({ ...appPrefs, useDarkMode: isDarkMode });
-    const targetFile = isDarkMode ? "index-dark.html" : "index.html";
-    window.location.href = `/${targetFile}`;
+  panel.querySelectorAll('input[name="colorscheme"]').forEach((radio) => {
+    radio.addEventListener("change", (e) => {
+      const isDarkMode = e.target.value === "dark";
+      saveAppPrefs({ ...appPrefs, useDarkMode: isDarkMode });
+      document.documentElement.classList.toggle("dark", isDarkMode);
+    });
   });
 
   panel.querySelector("#settings-check-update")?.addEventListener("click", async () => {

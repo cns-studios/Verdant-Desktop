@@ -26,6 +26,13 @@
 .settings-row { display:grid; grid-template-columns: 1fr 160px; align-items:center; gap:10px; }
 .settings-row input, .settings-row select { height:34px; border-radius:8px; border:1px solid var(--border); background: var(--bg); padding:0 10px; font:400 12px 'DM Sans', sans-serif; }
 .settings-switch { display:flex; align-items:center; gap:8px; font:400 12px 'DM Sans', sans-serif; color:var(--text); }
+.colorscheme-options { display:flex; flex-direction:column; gap:10px; }
+.colorscheme-option { display:flex; align-items:center; gap:10px; cursor:pointer; font:400 12px 'DM Sans', sans-serif; color:var(--text); }
+.colorscheme-option input[type="radio"] { appearance:none; -webkit-appearance:none; width:18px; height:18px; border:2px solid var(--border); border-radius:50%; background:var(--surface2); position:relative; cursor:pointer; transition:all 0.15s ease; flex-shrink:0; }
+.colorscheme-option input[type="radio"]:checked { border-color:var(--green); background:var(--green-pale); }
+.colorscheme-option input[type="radio"]:checked::after { content:''; position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); width:8px; height:8px; border-radius:50%; background:var(--green); }
+.colorscheme-option input[type="radio"]:hover { border-color:var(--green-muted); }
+.colorscheme-label { user-select:none; }
 .settings-tabs { display:flex; gap:8px; margin-top:10px; border-bottom:1px solid var(--border); padding-bottom:10px; }
 .settings-tab { border:1px solid var(--border); background: var(--surface2); color:var(--text-mid); border-radius:999px; padding:6px 12px; font:500 12px 'DM Sans', sans-serif; cursor:pointer; }
 .settings-tab.active { background: var(--green-pale); border-color: var(--green-muted); color: var(--green); }

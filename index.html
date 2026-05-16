@@ -26,12 +26,34 @@
     --shadow-lg:   0 8px 32px rgba(30,33,25,0.14), 0 2px 8px rgba(30,33,25,0.06);
   }
 
+  :root.dark {
+    --bg:          #1f1c18;
+    --surface:     #2a2622;
+    --surface2:    #353026;
+    --border:      #4a4640;
+    --green:       #608158;
+    --green-mid:   #5c7356;
+    --green-light: #7a9470;
+    --green-muted: #5c6e5a;
+    --green-pale:  #2e362c;
+    --text:        #f0ebe3;
+    --text-mid:    #dad2c5;
+    --text-muted:  #b5ac9d;
+    --white:       #2a2622;
+    --accent:      #5b6d55;
+    --shadow-lg:   0 8px 32px rgba(30,33,25,0.28), 0 2px 8px rgba(30,33,25,0.12);
+  }
+
   body {
     font-family: 'DM Sans', sans-serif;
     background: var(--bg);
     color: var(--text);
     height: 100vh;
     overflow: hidden;
+  }
+
+  body, body *, body *::before, body *::after {
+    transition: background-color 0.35s ease, color 0.35s ease, border-color 0.35s ease, box-shadow 0.35s ease;
   }
 
   #root {
