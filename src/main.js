@@ -261,7 +261,7 @@ async function loadLocalMailbox(mailbox, animate = false) {
         setListTitle(mailbox, 0);
         const threads = await getInboxThreads();
         ingestContactsFromEmails([]);
-        renderThreadList(threads, activeFilter, searchQuery);
+        renderThreadList(threads, activeFilter, searchQuery, animate);
     } else {
         currentEmails = await getEmails(mailbox);
         ingestContactsFromEmails(currentEmails);
@@ -284,12 +284,16 @@ function onSynced(mailbox, latestEmails) {
     if (mailbox === "INBOX") {
       setTimeout(() => {
         getInboxThreads().then(threads => {
-          renderThreadList(threads, activeFilter, searchQuery);
+          renderThreadList(threads, activeFilter, searchQuery, false);
         }).catch(console.error);
       }, 300);
     } else {
-      currentEmails = latestEmails;
-      renderEmailList(false);
+      setTimeout(() => {
+        currentEmails = latestEmails;
+        renderEmailList(false);
+        refreshCounts().catch(console.error);
+      }, 300);
+      return;
     }
     refreshCounts().catch(console.error);
   }
@@ -421,7 +425,7 @@ function bindSearch() {
         searchQuery = input.value || "";
         if (!searchQuery.trim()) isDeepSearchActive = false;
         if (currentMailbox === "INBOX") {
-            getInboxThreads().then(threads => renderThreadList(threads, activeFilter, searchQuery)).catch(console.error);
+                getInboxThreads().then(threads => renderThreadList(threads, activeFilter, searchQuery, false)).catch(console.error);
         } else {
             renderEmailList(false);
         }
@@ -439,7 +443,7 @@ function bindFilterChips() {
             chip.classList.add("active");
             activeFilter = chip.dataset.filter || "All";
             if (currentMailbox === "INBOX") {
-                getInboxThreads().then(threads => renderThreadList(threads, activeFilter, searchQuery)).catch(console.error);
+            getInboxThreads().then(threads => renderThreadList(threads, activeFilter, searchQuery, false)).catch(console.error);
             } else {
                 renderEmailList(false);
             }
@@ -485,6 +489,7 @@ function bindHotkeys() {
             isSyncing = true;
             showToast(t("toast.fetching"));
             try {
+                await loadLocalMailbox(currentMailbox, true);
                 await syncMailboxInBackground(currentMailbox, true, onSynced);
             } finally {
                 isSyncing = false;

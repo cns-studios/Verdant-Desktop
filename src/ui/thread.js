@@ -40,12 +40,13 @@ function formatParticipants(rawSenders, maxDisplay = 3) {
 }
 
 
-export function renderThreadList(threads, activeFilter, searchQuery) {
+export function renderThreadList(threads, activeFilter, searchQuery, animate = false) {
   currentThreads = threads || [];
   const list = document.getElementById("email-list");
   if (!list) return;
 
   list.innerHTML = "";
+  list.classList.toggle("suppress-anim", !animate);
 
   const visible = currentThreads.filter(thread => {
     if (activeFilter === "Important") {
