@@ -24,7 +24,7 @@
 .action-menu button:hover { background: var(--surface2); }
 .settings-grid { display:grid; gap:10px; margin-top:12px; }
 .settings-row { display:grid; grid-template-columns: 1fr 160px; align-items:center; gap:10px; }
-.settings-row input, .settings-row select { height:34px; border-radius:8px; border:1px solid var(--border); background: var(--bg); padding:0 10px; font:400 12px 'DM Sans', sans-serif; }
+.settings-row input, .settings-row select { height:34px; border-radius:8px; border:1px solid var(--border); background: var(--bg); padding:0 10px; font:400 12px 'DM Sans', sans-serif; -webkit-user-select:text; user-select:text; }
 .settings-switch { display:flex; align-items:center; gap:8px; font:400 12px 'DM Sans', sans-serif; color:var(--text); }
 .settings-tabs { display:flex; gap:8px; margin-top:10px; border-bottom:1px solid var(--border); padding-bottom:10px; }
 .settings-tab { border:1px solid var(--border); background: var(--surface2); color:var(--text-mid); border-radius:999px; padding:6px 12px; font:500 12px 'DM Sans', sans-serif; cursor:pointer; }
@@ -223,6 +223,8 @@ body.reading-pane-hidden .email-list-pane { flex:1 1 auto !important; width:auto
   color: var(--text-mid);
   max-width: 580px;
   overflow-x: auto;
+  -webkit-user-select: text;
+  user-select: text;
 }
 .thread-bubble-content p { margin-bottom: 12px; }
 .thread-bubble-content p:last-child { margin-bottom: 0; }

@@ -44,6 +44,27 @@ import { t, initLang } from "./lib/i18n.js";
 
 const PERIODIC_UPDATE_CHECK_INTERVAL_MS = 30 * 60 * 1000;
 
+let profileRetryTimeout = null;
+
+async function retryUserProfile(attempt = 0) {
+    if (profileRetryTimeout) clearTimeout(profileRetryTimeout);
+    if (attempt >= 8) return;
+
+    const delay = Math.min(1000 * Math.pow(2, attempt), 60000);
+    profileRetryTimeout = setTimeout(async () => {
+        try {
+            const profile = await getUserProfile();
+            if (profile.degraded) {
+                retryUserProfile(attempt + 1);
+            } else {
+                setUserProfile(profile);
+            }
+        } catch {
+            retryUserProfile(attempt + 1);
+        }
+    }, delay);
+}
+
 
 let currentMailbox = "INBOX";
 let currentEmails = [];
@@ -612,6 +633,11 @@ async function initializeConnectedUI() {
 
     const profile = await getUserProfile();
     setUserProfile(profile);
+
+    if (profile.degraded) {
+        showToast(t("toast.rate_limited"));
+        retryUserProfile();
+    }
 
     
     bindUserRow(() => {
