@@ -1,5 +1,9 @@
 # Changelog
 
+## [2.2.16]
+- Emails now correctly fetch for non-Gmail Inboxes, if a rare edge case occurs
+- Minor Bug fixes and performance improvements
+
 ## [2.2.15]
 - Added Changelog view (Yes, this one)
 - Improved Database performance

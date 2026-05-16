@@ -1,4 +1,4 @@
-import { authStatus, getUserProfile, getEmails, syncMailboxPage } from "./api.js";
+import { authStatus, getUserProfile, getEmails, syncMailboxPage, syncImapMailboxPage } from "./api.js";
 import { setEmailReadStatus } from "./api.js";
 import { openExternalUrl } from "./api.js";
 import { ingestContactsFromEmails, ensureContactsLoaded } from "./lib/contacts.js";
@@ -349,8 +349,20 @@ async function fetchMoreCurrentMailbox() {
     isFetchingMore = true;
     setListFetchIndicator(t("list.loading_more"));
     try {
-        const next = await syncMailboxPage(currentMailbox, token);
-        mailboxNextPageToken.set(currentMailbox, next || null);
+        const { getActiveAccountInfo } = await import("./api.js");
+        const info = await getActiveAccountInfo();
+        let next;
+        if (info?.provider === "imap") {
+            next = await syncImapMailboxPage(currentMailbox, token);
+            if (next) {
+                mailboxNextPageToken.set(currentMailbox, token + 50);
+            } else {
+                mailboxNextPageToken.set(currentMailbox, null);
+            }
+        } else {
+            next = await syncMailboxPage(currentMailbox, token);
+            mailboxNextPageToken.set(currentMailbox, next || null);
+        }
         currentEmails = await getEmails(currentMailbox);
         renderEmailList(false);
         if (!next) {
