@@ -6,7 +6,7 @@
   padding: 0 10px 0 12px; gap: 12px;
 }
 .app-header-left { display:flex; align-items:center; gap:9px; min-width:0; }
-.app-dot { width:9px; height:9px; border-radius:50%; background:var(--green); box-shadow:0 0 0 3px var(--green-pale); flex-shrink:0; }
+.app-dot { width:9px; height:9px; border-radius:50%; background:var(--green); flex-shrink:0; }
 .app-title { font:500 13px 'Fraunces', serif; color:var(--text); letter-spacing:-0.2px; white-space:nowrap; }
 .app-subtitle { font:400 11px 'DM Sans', sans-serif; color:var(--text-muted); white-space:nowrap; }
 .app-header-controls { display:flex; align-items:center; gap:6px; }
