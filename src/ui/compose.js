@@ -731,6 +731,7 @@ export function bindComposeSend(onAfterSend) {
       parseContactsFromHeader(payload.cc).forEach((c) => upsertContact(c.email, c.name));
       showToast(t("toast.sent"));
       localStorage.removeItem("verdant.localDraft");
+      resetComposeState();
       closeCompose();
       await onAfterSend();
     } catch (err) {
