@@ -2,7 +2,7 @@ import { authStatus, getUserProfile, getEmails, syncMailboxPage, syncImapMailbox
 import { setEmailReadStatus } from "./api.js";
 import { openExternalUrl } from "./api.js";
 import { ingestContactsFromEmails, ensureContactsLoaded } from "./lib/contacts.js";
-import { loadHotkeys, saveHotkeys, normalizeCombo, eventCombo, canRunHotkey } from "./lib/hotkeys.js";
+import { getHotkeys, normalizeCombo, eventCombo, canRunHotkey } from "./lib/hotkeys.js";
 import { showToast } from "./lib/toast.js";
 import { escapeHtml, sanitizeUnicodeNoise, formatListDate, mailboxTitle } from "./lib/format.js";
 import { syncMailboxInBackground, startPeriodicSync, mailboxNextPageToken, knownInboxIds, setKnownInboxIds } from "./lib/sync.js";
@@ -74,8 +74,6 @@ let searchQuery = "";
 let isDeepSearchActive = false;
 let isFetchingMore = false;
 let isSyncing = false;
-let hotkeys = loadHotkeys();
-
 
 
 
@@ -476,6 +474,7 @@ function bindFilterChips() {
 
 function bindHotkeys() {
     document.addEventListener("keydown", async (event) => {
+        const hotkeys = getHotkeys();
         const combo = normalizeCombo(eventCombo(event));
 
         if (combo === hotkeys.close) {

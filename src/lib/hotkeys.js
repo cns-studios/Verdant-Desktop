@@ -22,7 +22,14 @@ export const defaultHotkeys = {
 
 const lastHotkeyAt = new Map();
 
-export function loadHotkeys() {
+let _hotkeys = null;
+
+function ensureHotkeys() {
+  if (!_hotkeys) _hotkeys = loadFromStorage();
+  return _hotkeys;
+}
+
+function loadFromStorage() {
   try {
     const raw = localStorage.getItem("verdant.hotkeys");
     return raw ? { ...defaultHotkeys, ...JSON.parse(raw) } : { ...defaultHotkeys };
@@ -31,8 +38,17 @@ export function loadHotkeys() {
   }
 }
 
+export function getHotkeys() {
+  return ensureHotkeys();
+}
+
+export function loadHotkeys() {
+  return { ...ensureHotkeys() };
+}
+
 export function saveHotkeys(next) {
-  localStorage.setItem("verdant.hotkeys", JSON.stringify(next));
+  _hotkeys = { ...defaultHotkeys, ...next };
+  localStorage.setItem("verdant.hotkeys", JSON.stringify(_hotkeys));
 }
 
 export function normalizeCombo(input) {
