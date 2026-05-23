@@ -130,8 +130,12 @@ async function selectThread(thread, row) {
     renderThreadPane(thread, messages);
 
     if (!thread.is_read) {
-      await markThreadRead(thread.thread_id);
       thread.is_read = true;
+      const expanded = messages[messages.length - 1];
+      if (expanded && !expanded.is_read) {
+        expanded.is_read = true;
+        setEmailReadStatus(expanded.id, true).catch(() => {});
+      }
       if (onCountsRefreshCallback) onCountsRefreshCallback();
     }
   } catch (err) {

@@ -1,5 +1,10 @@
 # Changelog
 
+## [2.2.17]
+- Read/Unread status of mails are synced to the mail provider
+> That means, if you read a mail in Verdant, its marked as "Read" in your other mail clients
+- Minor Bug fixes and quality-of-life changes
+
 ## [2.2.16]
 - Emails now correctly fetch for non-Gmail Inboxes, if a rare edge case occurs
 - Minor Bug fixes and performance improvements
