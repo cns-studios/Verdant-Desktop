@@ -182,6 +182,8 @@ body.reading-pane-hidden .email-list-pane { flex:1 1 auto !important; width:auto
   color: var(--text);
   white-space: nowrap;
   flex-shrink: 0;
+  -webkit-user-select: text;
+  user-select: text;
 }
 .thread-bubble-preview {
   font: 400 13px 'DM Sans', sans-serif;
@@ -212,10 +214,16 @@ body.reading-pane-hidden .email-list-pane { flex:1 1 auto !important; width:auto
 .thread-bubble-to {
   font: 400 11px 'DM Sans', sans-serif;
   color: var(--text-muted);
+  -webkit-user-select: text;
+  user-select: text;
 }
 .thread-bubble-body {
   padding: 4px 16px 16px 54px;
   border-top: 1px solid var(--surface2);
+}
+.thread-bubble-content, .thread-bubble-content * {
+  -webkit-user-select: text;
+  user-select: text;
 }
 .thread-bubble-content {
   font-size: 13.5px;
@@ -223,8 +231,6 @@ body.reading-pane-hidden .email-list-pane { flex:1 1 auto !important; width:auto
   color: var(--text-mid);
   max-width: 580px;
   overflow-x: auto;
-  -webkit-user-select: text;
-  user-select: text;
 }
 .thread-bubble-content p { margin-bottom: 12px; }
 .thread-bubble-content p:last-child { margin-bottom: 0; }

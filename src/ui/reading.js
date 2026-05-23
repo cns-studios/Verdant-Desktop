@@ -271,7 +271,7 @@ function renderEmailContentSafely(container, htmlContent) {
     <head>
       <meta charset="UTF-8">
       <style>
-        * { box-sizing: border-box; }
+        * { box-sizing: border-box; -webkit-user-select: text; user-select: text; }
         body {
           font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
           margin: 0;
@@ -281,6 +281,8 @@ function renderEmailContentSafely(container, htmlContent) {
           font-size: 14px;
           line-height: 1.5;
           word-wrap: break-word;
+          -webkit-user-select: text;
+          user-select: text;
         }
         img {
           max-width: 100%;
