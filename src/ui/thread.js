@@ -339,20 +339,23 @@ function bindBubbleButtons(bubble, message, allMessages) {
           attachment.filename || "attachment",
           attachment.mime_type || "application/octet-stream"
         );
-        const binary = atob(response.data_base64 || "");
+        const base64 = response.data_base64 || "";
+        const binary = atob(base64);
         const bytes = new Uint8Array(binary.length);
         for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-        const blob = new Blob([bytes], { type: response.content_type || attachment.mime_type });
+
+        const blob = new Blob([bytes], { type: response.content_type || attachment.mime_type || "application/octet-stream" });
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
-        a.download = response.filename || attachment.filename;
+        a.download = response.filename || attachment.filename || "attachment";
         document.body.appendChild(a);
         a.click();
         a.remove();
         URL.revokeObjectURL(url);
-        showToast(t("app.attachment_downloaded", { name: response.filename || attachment.filename }));
-      } catch {
+        showToast(t("app.attachment_downloaded", { name: response.filename || attachment.filename || "attachment" }));
+      } catch (err) {
+        console.error("Attachment download error:", err);
         showToast(t("toast.attachment_failed"), "error");
       } finally {
         btn.disabled = false;

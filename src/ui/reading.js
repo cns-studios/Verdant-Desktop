@@ -183,7 +183,8 @@ async function handleAttachmentDownload(emailId, attachment) {
       attachment.filename || "attachment",
       attachment.mime_type || "application/octet-stream"
     );
-    const bytes = base64ToBytes(response.data_base64 || "");
+    const base64 = response.data_base64 || "";
+    const bytes = base64ToBytes(base64);
     const blob = new Blob([bytes], { type: response.content_type || attachment.mime_type || "application/octet-stream" });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
@@ -194,6 +195,9 @@ async function handleAttachmentDownload(emailId, attachment) {
     anchor.remove();
     URL.revokeObjectURL(url);
     await showAttachmentDownloadSuccess(response.filename || attachment.filename || "attachment");
+  } catch (err) {
+    console.error("Attachment download error:", err);
+    throw err;
   } finally {
     hideAttachmentDownloadModal();
   }
