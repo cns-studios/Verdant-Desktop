@@ -537,7 +537,6 @@ export function bindComposeFormatting() {
     });
   });
 
-  // Track active formatting state
   const editor = document.getElementById("compose-body");
   if (editor) {
     editor.addEventListener("input", () => updateFormatToolbarState());

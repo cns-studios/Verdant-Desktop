@@ -17,7 +17,6 @@ pub async fn autostart_is_enabled(app: tauri::AppHandle) -> Result<bool, String>
     is_enabled_impl(&app)
 }
 
-// ── Shared helpers ─────────────────────────────────────────────────
 
 fn target_exe(app: &tauri::AppHandle) -> Result<String, String> {
     #[cfg(target_os = "linux")]
@@ -34,71 +33,113 @@ fn target_exe(app: &tauri::AppHandle) -> Result<String, String> {
         .map_err(|e| format!("Failed to resolve binary path: {e}"))
 }
 
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 fn app_key() -> &'static str {
     "Verdant-Desktop"
 }
 
-// ── Linux (XDG autostart .desktop file) ────────────────────────────
 
 #[cfg(target_os = "linux")]
 fn enable_impl(app: &tauri::AppHandle) -> Result<(), String> {
-    let dir = autostart_dir()?;
-    fs::create_dir_all(&dir).map_err(|e| format!("Failed to create autostart dir: {e}"))?;
-
     let exe = target_exe(app)?;
-    let path = dir.join(format!("{}.desktop", app_key()));
+    let dir = systemd_user_dir()?;
+    fs::create_dir_all(&dir).map_err(|e| format!("Failed to create systemd user dir: {e}"))?;
 
+    let path = service_path()?;
     let content = format!(
-        "[Desktop Entry]\n\
-        Type=Application\n\
-        Name=Verdant Desktop\n\
-        Comment=Verdant startup script\n\
-        Exec={} --autostart\n\
-        StartupNotify=false\n\
-        Terminal=false",
+        "[Unit]\n\
+        Description=Verdant Desktop\n\
+        After=graphical-session.target\n\
+        PartOf=graphical-session.target\n\
+        \n\
+        [Service]\n\
+        ExecStart={} --autostart\n\
+        Restart=on-failure\n\
+        RestartSec=5\n\
+        \n\
+        [Install]\n\
+        WantedBy=default.target",
         exe
     );
 
-    fs::write(&path, &content).map_err(|e| format!("Failed to write desktop file: {e}"))?;
-    set_executable(&path)?;
+    fs::write(&path, &content).map_err(|e| format!("Failed to write service file: {e}"))?;
+
+    cleanup_old_desktop_file();
+
+    run_systemctl(&["--user", "daemon-reload"])?;
+    run_systemctl(&["--user", "enable", "verdant-desktop.service"])?;
+    run_systemctl(&["--user", "start", "--no-block", "verdant-desktop.service"])?;
     Ok(())
 }
 
 #[cfg(target_os = "linux")]
 fn disable_impl(_app: &tauri::AppHandle) -> Result<(), String> {
-    let path = autostart_dir()?.join(format!("{}.desktop", app_key()));
+    let _ = run_systemctl(&["--user", "disable", "--now", "verdant-desktop.service"]);
+
+    let path = service_path()?;
     if path.exists() {
-        fs::remove_file(&path).map_err(|e| format!("Failed to remove desktop file: {e}"))?;
+        fs::remove_file(&path).map_err(|e| format!("Failed to remove service file: {e}"))?;
     }
+
+    run_systemctl(&["--user", "daemon-reload"])?;
     Ok(())
 }
 
 #[cfg(target_os = "linux")]
 fn is_enabled_impl(_app: &tauri::AppHandle) -> Result<bool, String> {
-    Ok(autostart_dir()?.join(format!("{}.desktop", app_key())).exists())
+    match run_systemctl(&["--user", "is-enabled", "verdant-desktop.service"]) {
+        Ok(out) => Ok(out.trim() == "enabled"),
+        Err(_) => Ok(service_path().map_or(false, |p| p.exists())),
+    }
 }
 
 #[cfg(target_os = "linux")]
-fn autostart_dir() -> Result<PathBuf, String> {
+fn systemd_user_dir() -> Result<PathBuf, String> {
     if let Ok(config) = std::env::var("XDG_CONFIG_HOME") {
-        Ok(PathBuf::from(config).join("autostart"))
+        Ok(PathBuf::from(config).join("systemd").join("user"))
     } else if let Ok(home) = std::env::var("HOME") {
-        Ok(PathBuf::from(home).join(".config").join("autostart"))
+        Ok(PathBuf::from(home).join(".config").join("systemd").join("user"))
     } else {
         Err("Cannot determine home directory; $HOME is not set".to_string())
     }
 }
 
 #[cfg(target_os = "linux")]
-fn set_executable(path: &std::path::Path) -> Result<(), String> {
-    use std::os::unix::fs::PermissionsExt;
-    let mut perms =
-        fs::metadata(path).map_err(|e| format!("Failed to read file permissions: {e}"))?.permissions();
-    perms.set_mode(0o755);
-    fs::set_permissions(path, perms).map_err(|e| format!("Failed to set executable bit: {e}"))
+fn service_path() -> Result<PathBuf, String> {
+    Ok(systemd_user_dir()?.join("verdant-desktop.service"))
 }
 
-// ── macOS (LaunchAgent plist) ──────────────────────────────────────
+#[cfg(target_os = "linux")]
+fn cleanup_old_desktop_file() {
+    let old_dir = if let Ok(config) = std::env::var("XDG_CONFIG_HOME") {
+        PathBuf::from(config).join("autostart")
+    } else if let Ok(home) = std::env::var("HOME") {
+        PathBuf::from(home).join(".config").join("autostart")
+    } else {
+        return;
+    };
+    let old_path = old_dir.join("Verdant-Desktop.desktop");
+    if old_path.exists() {
+        let _ = fs::remove_file(&old_path);
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn run_systemctl(args: &[&str]) -> Result<String, String> {
+    let out = std::process::Command::new("systemctl")
+        .args(args)
+        .output()
+        .map_err(|e| format!("Failed to run systemctl: {e}"))?;
+
+    if !out.status.success() {
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        return Err(format!("systemctl {} failed: {}", args.join(" "), stderr.trim()));
+    }
+
+    Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
+}
+
+
 
 #[cfg(target_os = "macos")]
 fn enable_impl(app: &tauri::AppHandle) -> Result<(), String> {
@@ -168,7 +209,6 @@ fn launch_agents_dir() -> Result<PathBuf, String> {
     Ok(PathBuf::from(home).join("Library").join("LaunchAgents"))
 }
 
-// ── Windows (Registry Run key) ─────────────────────────────────────
 
 #[cfg(target_os = "windows")]
 fn enable_impl(app: &tauri::AppHandle) -> Result<(), String> {
@@ -220,7 +260,6 @@ fn is_enabled_impl(_app: &tauri::AppHandle) -> Result<bool, String> {
     Ok(key.get_value::<String, _>(app_key()).is_ok())
 }
 
-// ── Unsupported platform fallback ──────────────────────────────────
 
 #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
 fn enable_impl(_app: &tauri::AppHandle) -> Result<(), String> {
