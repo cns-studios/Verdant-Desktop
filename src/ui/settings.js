@@ -425,9 +425,9 @@ export async function openSettingsModal(profile, currentMailbox, onLogout, onSyn
     const enabled = !!e.target?.checked;
     saveAppPrefs({ ...appPrefs, autostart: enabled });
     try {
-      const { enable, disable } = await import("@tauri-apps/plugin-autostart");
-      if (enabled) await enable();
-      else await disable();
+      const { invoke } = await import("@tauri-apps/api/core");
+      if (enabled) await invoke("autostart_enable");
+      else await invoke("autostart_disable");
     } catch (err) {
       console.error("Failed to toggle autostart", err);
       showToast(t("settings.app.check_failed"), "error");

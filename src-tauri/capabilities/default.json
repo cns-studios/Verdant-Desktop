@@ -18,7 +18,6 @@
     "process:allow-restart",
     "process:allow-exit",
     "shell:allow-open",
-    "notification:default",
-    "autostart:default"
+    "notification:default"
   ]
 }

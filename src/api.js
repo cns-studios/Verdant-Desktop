@@ -68,3 +68,7 @@ export const getThreadMessages = (threadId) => invoke("get_thread_messages", { t
 export const markThreadRead = (threadId) => invoke("mark_thread_read", { threadId });
 
 export const openExternalUrl = (url) => invoke("open_external_url", { url });
+
+export const autostartEnable = () => invoke("autostart_enable");
+export const autostartDisable = () => invoke("autostart_disable");
+export const autostartIsEnabled = () => invoke("autostart_is_enabled");
