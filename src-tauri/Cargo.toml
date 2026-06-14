@@ -37,6 +37,7 @@ tauri-plugin-process = "2"
 tauri-plugin-autostart = "2.2"
 tauri-plugin-notification = "2.2"
 tauri-plugin-shell = "2"
+tauri-plugin-dialog = "2"
 
 imap = "2.4"
 native-tls = "0.2"
