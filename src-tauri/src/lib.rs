@@ -45,8 +45,8 @@ pub fn run() {
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_shell::init())
-        .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, Some(vec!["--autostart"])))
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_dialog::init())
         .setup(move |app| {
             let data_dir = app
                 .path()
@@ -143,6 +143,10 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             update_app_config,
             get_app_config,
+            
+            commands::autostart::autostart_enable,
+            commands::autostart::autostart_disable,
+            commands::autostart::autostart_is_enabled,
             
             commands::auth::connect_gmail,
             commands::auth::auth_status,

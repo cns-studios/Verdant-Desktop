@@ -16,6 +16,7 @@ pub struct UserProfile {
     pub name: String,
     pub email: String,
     pub initials: String,
+    pub degraded: bool,
 }
 
 
@@ -118,6 +119,7 @@ pub async fn get_user_profile(state: State<'_, Arc<DbState>>) -> Result<UserProf
             name,
             email: account.email,
             initials: if initials.is_empty() { "U".to_string() } else { initials },
+            degraded: false,
         });
     }
 
@@ -131,6 +133,23 @@ pub async fn get_user_profile(state: State<'_, Arc<DbState>>) -> Result<UserProf
         .send()
         .await
         .map_err(|e| e.to_string())?;
+
+    if res.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
+        let name = account.display_name.clone()
+            .unwrap_or_else(|| account.email.split('@').next().unwrap_or("User").replace('.', " "));
+        let initials = name
+            .split_whitespace()
+            .take(2)
+            .filter_map(|p| p.chars().next())
+            .collect::<String>()
+            .to_uppercase();
+        return Ok(UserProfile {
+            name,
+            email: account.email,
+            initials: if initials.is_empty() { "U".to_string() } else { initials },
+            degraded: true,
+        });
+    }
 
     if !res.status().is_success() {
         return Err(format!("Profile request failed: {}", res.status()));
@@ -155,5 +174,6 @@ pub async fn get_user_profile(state: State<'_, Arc<DbState>>) -> Result<UserProf
         name,
         email,
         initials: if initials.is_empty() { "U".to_string() } else { initials },
+        degraded: false,
     })
 }

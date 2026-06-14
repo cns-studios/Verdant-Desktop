@@ -24,7 +24,7 @@
 .action-menu button:hover { background: var(--surface2); }
 .settings-grid { display:grid; gap:10px; margin-top:12px; }
 .settings-row { display:grid; grid-template-columns: 1fr 160px; align-items:center; gap:10px; }
-.settings-row input, .settings-row select { height:34px; border-radius:8px; color: var(--text); border:1px solid var(--border); background: var(--bg); padding:0 10px; font:400 12px 'DM Sans', sans-serif; appearance: none;}
+.settings-row input, .settings-row select { height:34px; border-radius:8px; border:1px solid var(--border); background: var(--bg); padding:0 10px; font:400 12px 'DM Sans', sans-serif; -webkit-user-select:text; user-select:text; }
 .settings-switch { display:flex; align-items:center; gap:8px; font:400 12px 'DM Sans', sans-serif; color:var(--text); }
 .colorscheme-options { display:flex; flex-direction:column; gap:10px; }
 .colorscheme-option { display:flex; align-items:center; gap:10px; cursor:pointer; font:400 12px 'DM Sans', sans-serif; color:var(--text); }
@@ -189,6 +189,8 @@ body.reading-pane-hidden .email-list-pane { flex:1 1 auto !important; width:auto
   color: var(--text);
   white-space: nowrap;
   flex-shrink: 0;
+  -webkit-user-select: text;
+  user-select: text;
 }
 .thread-bubble-preview {
   font: 400 13px 'DM Sans', sans-serif;
@@ -219,10 +221,16 @@ body.reading-pane-hidden .email-list-pane { flex:1 1 auto !important; width:auto
 .thread-bubble-to {
   font: 400 11px 'DM Sans', sans-serif;
   color: var(--text-muted);
+  -webkit-user-select: text;
+  user-select: text;
 }
 .thread-bubble-body {
   padding: 4px 16px 16px 54px;
   border-top: 1px solid var(--surface2);
+}
+.thread-bubble-content, .thread-bubble-content * {
+  -webkit-user-select: text;
+  user-select: text;
 }
 .thread-bubble-content {
   font-size: 13.5px;
@@ -333,4 +341,118 @@ body.reading-pane-hidden .email-list-pane { flex:1 1 auto !important; width:auto
 .thread-bubble.expanded {
   background: var(--white);
   border-color: var(--green-muted);
+}
+.settings-inbox-list {
+  display: grid;
+  gap: 6px;
+}
+.settings-inbox-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  transition: border-color 0.12s;
+}
+.settings-inbox-item:hover {
+  border-color: var(--green-muted);
+}
+.settings-inbox-main {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+  flex: 1;
+}
+.settings-inbox-main strong {
+  font: 500 13px 'DM Sans', sans-serif;
+  color: var(--text);
+}
+.settings-inbox-email {
+  font: 400 11px 'DM Sans', sans-serif;
+  color: var(--text-muted);
+}
+.settings-inbox-provider {
+  font: 400 11px 'DM Sans', sans-serif;
+  color: var(--text-mid);
+}
+.settings-inbox-actions {
+  flex-shrink: 0;
+}
+.settings-shortcut-list {
+  display: grid;
+  gap: 4px;
+}
+.settings-shortcut-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+.settings-shortcut-label {
+  font: 400 12px 'DM Sans', sans-serif;
+  color: var(--text);
+  min-width: 0;
+}
+.settings-shortcut-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.settings-shortcut-key {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 60px;
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  font: 500 11px 'DM Sans', sans-serif;
+  color: var(--text);
+  text-align: center;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.settings-shortcut-key.listening {
+  border-color: var(--green);
+  background: var(--green-pale);
+  color: var(--green);
+  animation: pulse-border 1s ease infinite;
+}
+@keyframes pulse-border {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(50,140,80,.3); }
+  50% { box-shadow: 0 0 0 4px rgba(50,140,80,.1); }
+}
+.settings-shortcut-edit, .settings-shortcut-unset {
+  padding: 4px 8px;
+  font-size: 11px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+}
+.settings-radio-group {
+  display: grid;
+  gap: 6px;
+  margin-left: 26px;
+}
+.settings-radio {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font: 400 12px 'DM Sans', sans-serif;
+  color: var(--text);
+  cursor: pointer;
+}
+.settings-radio input[type="radio"] {
+  accent-color: var(--green);
+  margin: 0;
 }

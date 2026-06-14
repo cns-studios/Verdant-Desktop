@@ -1,6 +1,6 @@
 [package]
 name = "Verdant-Desktop"
-version = "2.2.16"
+version = "2.2.18"
 description = "Verdant - a calm mail experience"
 authors = ["cns-studios"]
 license = ""
@@ -34,9 +34,9 @@ pulldown-cmark = "0.12"
 semver = "1"
 tauri-plugin-store = "2"
 tauri-plugin-process = "2"
-tauri-plugin-autostart = "2.2"
 tauri-plugin-notification = "2.2"
 tauri-plugin-shell = "2"
+tauri-plugin-dialog = "2"
 
 imap = "2.4"
 native-tls = "0.2"
@@ -50,3 +50,6 @@ chrono = { version = "0.4", features = ["serde"] }
 futures = "0.3"
 libc = "0.2.183"
 tauri-plugin-single-instance = "2.2.0-beta.1"
+
+[target.'cfg(windows)'.dependencies]
+winreg = "0.10"

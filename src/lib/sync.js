@@ -49,7 +49,7 @@ export async function syncMailboxInBackground(mailbox, force = false, onSynced =
         if (hasMore) {
           mailboxNextPageToken.set(mailbox, currentOffset + 50);
         } else {
-          mailboxNextPageToken.set(mailbox, -1);
+          mailboxNextPageToken.set(mailbox, 0);
         }
       }
       const latest = await getEmails(mailbox);

@@ -537,7 +537,6 @@ export function bindComposeFormatting() {
     });
   });
 
-  // Track active formatting state
   const editor = document.getElementById("compose-body");
   if (editor) {
     editor.addEventListener("input", () => updateFormatToolbarState());
@@ -731,6 +730,7 @@ export function bindComposeSend(onAfterSend) {
       parseContactsFromHeader(payload.cc).forEach((c) => upsertContact(c.email, c.name));
       showToast(t("toast.sent"));
       localStorage.removeItem("verdant.localDraft");
+      resetComposeState();
       closeCompose();
       await onAfterSend();
     } catch (err) {

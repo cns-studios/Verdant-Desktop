@@ -127,13 +127,6 @@ export function hasEmailAttachments(email) {
   return parseEmailAttachments(email).length > 0;
 }
 
-function base64ToBytes(base64) {
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
-  return bytes;
-}
-
 function showAttachmentDownloadModal(filename) {
   document.getElementById("attachment-download-modal")?.remove();
   const modal = document.createElement("div");
@@ -183,17 +176,11 @@ async function handleAttachmentDownload(emailId, attachment) {
       attachment.filename || "attachment",
       attachment.mime_type || "application/octet-stream"
     );
-    const bytes = base64ToBytes(response.data_base64 || "");
-    const blob = new Blob([bytes], { type: response.content_type || attachment.mime_type || "application/octet-stream" });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = response.filename || attachment.filename || "attachment";
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-    URL.revokeObjectURL(url);
     await showAttachmentDownloadSuccess(response.filename || attachment.filename || "attachment");
+    showToast(t("app.attachment_downloaded", { name: response.filename || attachment.filename || "attachment" }));
+  } catch (err) {
+    console.error("Attachment download error:", err);
+    throw err;
   } finally {
     hideAttachmentDownloadModal();
   }
@@ -271,7 +258,7 @@ function renderEmailContentSafely(container, htmlContent) {
     <head>
       <meta charset="UTF-8">
       <style>
-        * { box-sizing: border-box; }
+        * { box-sizing: border-box; -webkit-user-select: text; user-select: text; }
         body {
           font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
           margin: 0;
@@ -281,6 +268,8 @@ function renderEmailContentSafely(container, htmlContent) {
           font-size: 14px;
           line-height: 1.5;
           word-wrap: break-word;
+          -webkit-user-select: text;
+          user-select: text;
         }
         img {
           max-width: 100%;

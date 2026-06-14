@@ -11,11 +11,11 @@
   }
 })();
 
-import { authStatus, getUserProfile, getEmails, syncMailboxPage } from "./api.js";
+import { authStatus, getUserProfile, getEmails, syncMailboxPage, syncImapMailboxPage } from "./api.js";
 import { setEmailReadStatus } from "./api.js";
 import { openExternalUrl } from "./api.js";
 import { ingestContactsFromEmails, ensureContactsLoaded } from "./lib/contacts.js";
-import { loadHotkeys, saveHotkeys, normalizeCombo, eventCombo, canRunHotkey } from "./lib/hotkeys.js";
+import { getHotkeys, normalizeCombo, eventCombo, canRunHotkey } from "./lib/hotkeys.js";
 import { showToast } from "./lib/toast.js";
 import { escapeHtml, sanitizeUnicodeNoise, formatListDate, mailboxTitle } from "./lib/format.js";
 import { syncMailboxInBackground, startPeriodicSync, mailboxNextPageToken, knownInboxIds, setKnownInboxIds } from "./lib/sync.js";
@@ -57,6 +57,27 @@ import { t, initLang } from "./lib/i18n.js";
 
 const PERIODIC_UPDATE_CHECK_INTERVAL_MS = 30 * 60 * 1000;
 
+let profileRetryTimeout = null;
+
+async function retryUserProfile(attempt = 0) {
+    if (profileRetryTimeout) clearTimeout(profileRetryTimeout);
+    if (attempt >= 8) return;
+
+    const delay = Math.min(1000 * Math.pow(2, attempt), 60000);
+    profileRetryTimeout = setTimeout(async () => {
+        try {
+            const profile = await getUserProfile();
+            if (profile.degraded) {
+                retryUserProfile(attempt + 1);
+            } else {
+                setUserProfile(profile);
+            }
+        } catch {
+            retryUserProfile(attempt + 1);
+        }
+    }, delay);
+}
+
 
 let currentMailbox = "INBOX";
 let currentEmails = [];
@@ -66,8 +87,6 @@ let searchQuery = "";
 let isDeepSearchActive = false;
 let isFetchingMore = false;
 let isSyncing = false;
-let hotkeys = loadHotkeys();
-
 
 
 
@@ -151,7 +170,7 @@ function startPeriodicUpdateCheck() {
 async function checkAndShowWhatsNewModal() {
     try {
         const { Store } = await import("@tauri-apps/plugin-store");
-        const store = new Store("verdant.json");
+        const store = await Store.load("verdant.json");
         
         const { invoke } = await import("@tauri-apps/api/core");
         const updateInfo = await invoke("check_for_updates");
@@ -274,7 +293,7 @@ async function loadLocalMailbox(mailbox, animate = false) {
         setListTitle(mailbox, 0);
         const threads = await getInboxThreads();
         ingestContactsFromEmails([]);
-        renderThreadList(threads, activeFilter, searchQuery);
+        renderThreadList(threads, activeFilter, searchQuery, animate);
     } else {
         currentEmails = await getEmails(mailbox);
         ingestContactsFromEmails(currentEmails);
@@ -297,12 +316,16 @@ function onSynced(mailbox, latestEmails) {
     if (mailbox === "INBOX") {
       setTimeout(() => {
         getInboxThreads().then(threads => {
-          renderThreadList(threads, activeFilter, searchQuery);
+          renderThreadList(threads, activeFilter, searchQuery, false);
         }).catch(console.error);
       }, 300);
     } else {
-      currentEmails = latestEmails;
-      renderEmailList(false);
+      setTimeout(() => {
+        currentEmails = latestEmails;
+        renderEmailList(false);
+        refreshCounts().catch(console.error);
+      }, 300);
+      return;
     }
     refreshCounts().catch(console.error);
   }
@@ -362,8 +385,20 @@ async function fetchMoreCurrentMailbox() {
     isFetchingMore = true;
     setListFetchIndicator(t("list.loading_more"));
     try {
-        const next = await syncMailboxPage(currentMailbox, token);
-        mailboxNextPageToken.set(currentMailbox, next || null);
+        const { getActiveAccountInfo } = await import("./api.js");
+        const info = await getActiveAccountInfo();
+        let next;
+        if (info?.provider === "imap") {
+            next = await syncImapMailboxPage(currentMailbox, token);
+            if (next) {
+                mailboxNextPageToken.set(currentMailbox, token + 50);
+            } else {
+                mailboxNextPageToken.set(currentMailbox, null);
+            }
+        } else {
+            next = await syncMailboxPage(currentMailbox, token);
+            mailboxNextPageToken.set(currentMailbox, next || null);
+        }
         currentEmails = await getEmails(currentMailbox);
         renderEmailList(false);
         if (!next) {
@@ -422,7 +457,7 @@ function bindSearch() {
         searchQuery = input.value || "";
         if (!searchQuery.trim()) isDeepSearchActive = false;
         if (currentMailbox === "INBOX") {
-            getInboxThreads().then(threads => renderThreadList(threads, activeFilter, searchQuery)).catch(console.error);
+                getInboxThreads().then(threads => renderThreadList(threads, activeFilter, searchQuery, false)).catch(console.error);
         } else {
             renderEmailList(false);
         }
@@ -440,7 +475,7 @@ function bindFilterChips() {
             chip.classList.add("active");
             activeFilter = chip.dataset.filter || "All";
             if (currentMailbox === "INBOX") {
-                getInboxThreads().then(threads => renderThreadList(threads, activeFilter, searchQuery)).catch(console.error);
+            getInboxThreads().then(threads => renderThreadList(threads, activeFilter, searchQuery, false)).catch(console.error);
             } else {
                 renderEmailList(false);
             }
@@ -452,6 +487,7 @@ function bindFilterChips() {
 
 function bindHotkeys() {
     document.addEventListener("keydown", async (event) => {
+        const hotkeys = getHotkeys();
         const combo = normalizeCombo(eventCombo(event));
 
         if (combo === hotkeys.close) {
@@ -486,6 +522,7 @@ function bindHotkeys() {
             isSyncing = true;
             showToast(t("toast.fetching"));
             try {
+                await loadLocalMailbox(currentMailbox, true);
                 await syncMailboxInBackground(currentMailbox, true, onSynced);
             } finally {
                 isSyncing = false;
@@ -608,6 +645,11 @@ async function initializeConnectedUI() {
 
     const profile = await getUserProfile();
     setUserProfile(profile);
+
+    if (profile.degraded) {
+        showToast(t("toast.rate_limited"));
+        retryUserProfile();
+    }
 
     
     bindUserRow(() => {

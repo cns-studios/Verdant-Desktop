@@ -25,7 +25,8 @@ const CONFETTI_COLORS = [
 
 async function wasDismissed(version) {
     try {
-        const store = new Store("verdant.json");
+        const { Store } = await import("@tauri-apps/plugin-store");
+        const store = await Store.load("verdant.json");
         const dismissed = await store.get("whatsNewDismissed");
         if (Array.isArray(dismissed)) {
             return dismissed.includes(version);
@@ -38,7 +39,8 @@ async function wasDismissed(version) {
 
 async function markAsDismissed(version) {
     try {
-        const store = new Store("verdant.json");
+        const { Store } = await import("@tauri-apps/plugin-store");
+        const store = await Store.load("verdant.json");
         const dismissed = await store.get("whatsNewDismissed") || [];
         if (Array.isArray(dismissed) && !dismissed.includes(version)) {
             dismissed.push(version);
@@ -179,7 +181,50 @@ export async function openWhatsNewModal(version) {
         document.body.appendChild(modal);
     } catch (error) {
         console.error("Failed to load changelog:", error);
-        closeWhatsNewModal(false);
+
+        const backdrop = document.createElement("div");
+        backdrop.className = "whatsnew-backdrop";
+        backdrop.onclick = () => closeWhatsNewModal(false);
+        document.body.appendChild(backdrop);
+
+        const modal = document.createElement("div");
+        modal.className = "whatsnew-modal";
+        modal.id = "whatsnew-modal";
+
+        const header = document.createElement("div");
+        header.className = "whatsnew-header";
+        header.innerHTML = `
+            <h2 class="whatsnew-title">${t("whatsnew.title")}</h2>
+            <button class="whatsnew-close-btn" aria-label="Close" title="Close">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+        `;
+        header.querySelector(".whatsnew-close-btn").onclick = () => closeWhatsNewModal(false);
+        modal.appendChild(header);
+
+        const content = document.createElement("div");
+        content.className = "whatsnew-content";
+        
+        const versionDisplay = document.createElement("div");
+        versionDisplay.className = "whatsnew-version";
+        versionDisplay.textContent = `v${version}`;
+        content.appendChild(versionDisplay);
+        
+        const noChanges = document.createElement("div");
+        noChanges.style.cssText = "color:var(--text-muted); font:400 13.5px/1.6 'DM Sans',sans-serif;";
+        noChanges.textContent = t("whatsnew.no_changes", { default: "No new changes introduced in this version." });
+        content.appendChild(noChanges);
+        modal.appendChild(content);
+
+        const footer = document.createElement("div");
+        footer.className = "whatsnew-footer";
+        footer.innerHTML = `
+            <button class="whatsnew-dismiss-btn">${t("whatsnew.dismiss", { default: "Cool" })}</button>
+        `;
+        footer.querySelector(".whatsnew-dismiss-btn").onclick = () => closeWhatsNewModal(true, version);
+        modal.appendChild(footer);
+
+        document.body.appendChild(modal);
     }
 }
 

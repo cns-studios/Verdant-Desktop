@@ -40,12 +40,13 @@ function formatParticipants(rawSenders, maxDisplay = 3) {
 }
 
 
-export function renderThreadList(threads, activeFilter, searchQuery) {
+export function renderThreadList(threads, activeFilter, searchQuery, animate = false) {
   currentThreads = threads || [];
   const list = document.getElementById("email-list");
   if (!list) return;
 
   list.innerHTML = "";
+  list.classList.toggle("suppress-anim", !animate);
 
   const visible = currentThreads.filter(thread => {
     if (activeFilter === "Important") {
@@ -129,8 +130,12 @@ async function selectThread(thread, row) {
     renderThreadPane(thread, messages);
 
     if (!thread.is_read) {
-      await markThreadRead(thread.thread_id);
       thread.is_read = true;
+      const expanded = messages[messages.length - 1];
+      if (expanded && !expanded.is_read) {
+        expanded.is_read = true;
+        setEmailReadStatus(expanded.id, true).catch(() => {});
+      }
       if (onCountsRefreshCallback) onCountsRefreshCallback();
     }
   } catch (err) {
@@ -338,20 +343,9 @@ function bindBubbleButtons(bubble, message, allMessages) {
           attachment.filename || "attachment",
           attachment.mime_type || "application/octet-stream"
         );
-        const binary = atob(response.data_base64 || "");
-        const bytes = new Uint8Array(binary.length);
-        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-        const blob = new Blob([bytes], { type: response.content_type || attachment.mime_type });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = response.filename || attachment.filename;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        URL.revokeObjectURL(url);
-        showToast(t("app.attachment_downloaded", { name: response.filename || attachment.filename }));
-      } catch {
+        showToast(t("app.attachment_downloaded", { name: response.filename || attachment.filename || "attachment" }));
+      } catch (err) {
+        console.error("Attachment download error:", err);
         showToast(t("toast.attachment_failed"), "error");
       } finally {
         btn.disabled = false;

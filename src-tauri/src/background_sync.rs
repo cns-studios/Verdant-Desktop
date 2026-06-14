@@ -228,7 +228,7 @@ async fn upsert_emails(state: &DbState, account_id: i64, emails: Vec<crate::db::
                                  snippet, body_html, attachments_json, has_attachments, date, is_read, starred,
                                  mailbox, labels, internal_ts)
              VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18)
-            ON CONFLICT(id) DO UPDATE SET
+             ON CONFLICT(id, account_id) DO UPDATE SET
                 thread_id=excluded.thread_id,
                 subject=excluded.subject,
                 sender=excluded.sender,

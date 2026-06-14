@@ -1,8 +1,8 @@
-import { logout, clearLocalData, getMailboxCounts, authStatus } from "../api.js";
+import { logout, clearLocalData, getMailboxCounts, authStatus, listAccounts, removeAccount } from "../api.js";
 import { checkForUpdates, downloadLatestUpdate } from "../api.js";
 import { escapeHtml } from "../lib/format.js";
 import { showToast } from "../lib/toast.js";
-import { loadHotkeys, saveHotkeys, defaultHotkeys, normalizeCombo } from "../lib/hotkeys.js";
+import { getHotkeys, saveHotkeys, defaultHotkeys, normalizeCombo, eventCombo } from "../lib/hotkeys.js";
 import { syncMailboxInBackground, lastSynced } from "../lib/sync.js";
 import { t, getLang, setLang, getSupportedLanguages } from "../lib/i18n.js";
 import { getVersion } from "@tauri-apps/api/app";
@@ -12,7 +12,7 @@ const defaultUpdatePrefs = { autoCheck: true, autoDownload: false, channel: "sta
 export let updatePrefs = loadUpdatePrefs();
 
 const APP_PREFS_KEY = "verdant.appPrefs";
-const defaultAppPrefs = { runInBackground: true, autostart: false, showNotifications: true };
+const defaultAppPrefs = { runInBackground: true, autostart: false, showNotifications: true, notificationImportance: "all" };
 export let appPrefs = loadAppPrefs();
 
 function normalizeUpdateChannel(value) {
@@ -81,14 +81,28 @@ export async function hydratePrefsFromBackend() {
   }
 }
 
+function formatCombo(combo) {
+  if (!combo) return "";
+  const parts = combo.split("+").map(p => {
+    if (p === "ctrl") return "Ctrl";
+    if (p === "alt") return "Alt";
+    if (p === "shift") return "Shift";
+    if (p === "meta") return "Meta";
+    if (p === "enter") return "Enter";
+    if (p === "escape") return "Esc";
+    if (p === "tab") return "Tab";
+    if (p.length === 1) return p.toUpperCase();
+    return p.charAt(0).toUpperCase() + p.slice(1);
+  });
+  return parts.join(" + ");
+}
+
 function setUpdateStatus(message, isError = false) {
   const el = document.getElementById("settings-update-status");
   if (!el) return;
   el.textContent = message;
   el.style.color = isError ? "#8a3b3b" : "";
 }
-
-
 
 export async function checkForAppUpdates(options = {}) {
   const {
@@ -100,7 +114,7 @@ export async function checkForAppUpdates(options = {}) {
 
   try {
     const info = await checkForUpdates(channel);
-    const channelLabel = channel === "nightly" ? t("settings.app.channel.nightly") : t("settings.app.channel.stable");
+    const channelLabel = channel === "nightly" ? t("settings.advanced.channel.nightly") : t("settings.advanced.channel.stable");
 
     if (updateSettingsUi) {
       if (info.updateAvailable) {
@@ -148,39 +162,8 @@ export async function runAutomaticUpdateFlow() {
   });
 }
 
-let hotkeys = loadHotkeys();
-
 export function isSettingsOpen() {
   return !!document.getElementById("verdant-overlay");
-}
-
-export function showOverlay(title, message, buttons) {
-  closeOverlay(true);
-  const overlay = document.createElement("div");
-  overlay.id = "verdant-overlay";
-  overlay.className = "verdant-overlay";
-  overlay.innerHTML = `
-    <div class="verdant-panel">
-      <div class="verdant-head">
-        <h2>${escapeHtml(title)}</h2>
-        <button class="verdant-close" aria-label="Close">×</button>
-      </div>
-      <p>${escapeHtml(message)}</p>
-      <div class="verdant-actions"></div>
-    </div>
-  `;
-  overlay.querySelector(".verdant-close")?.addEventListener("click", () => closeOverlay());
-  overlay.addEventListener("click", (e) => { if (e.target === overlay) closeOverlay(); });
-  const actions = overlay.querySelector(".verdant-actions");
-  for (const btn of buttons) {
-    const el = document.createElement("button");
-    el.className = `verdant-btn ${btn.primary ? "primary" : ""}`;
-    el.textContent = btn.label;
-    el.onclick = btn.onClick;
-    actions.appendChild(el);
-  }
-  document.body.appendChild(overlay);
-  requestAnimationFrame(() => overlay.classList.add("open"));
 }
 
 export function closeOverlay(immediate = false) {
@@ -191,158 +174,218 @@ export function closeOverlay(immediate = false) {
   setTimeout(() => overlay.remove(), 180);
 }
 
-export async function openSettingsModal(profile, currentMailbox, onLogout, onSync) {
-  let auth = { connected: true };
-  let counts = { inbox_total: 0, inbox_unread: 0, starred_total: 0, sent_total: 0, drafts_total: 0, archive_total: 0 };
-
-  try {
-    [auth, counts] = await Promise.all([authStatus(), getMailboxCounts()]);
-  } catch {}
-
+function buildAppTab(profile, accounts, counts, langs, currentLang, version) {
   const lastInboxSync = lastSynced.get("INBOX")
     ? new Date(lastSynced.get("INBOX")).toLocaleString()
-    : t("settings.account.not_synced");
+    : t("settings.app.not_synced");
 
-  const langs = getSupportedLanguages();
-  const currentLang = getLang();
+  const activeAccount = accounts.find(a => a.is_active);
 
-  showOverlay(t("settings.title"), `${t("settings.account.email")}: ${profile.email}`, []);
-  const panel = document.querySelector("#verdant-overlay .verdant-panel");
-  if (!panel) return;
-
-  const grid = document.createElement("div");
-  grid.className = "settings-grid";
-  grid.innerHTML = `
-    <div class="settings-tabs">
-      <button class="settings-tab active" data-tab="account">${escapeHtml(t("settings.tab.account"))}</button>
-      <button class="settings-tab" data-tab="shortcuts">${escapeHtml(t("settings.tab.shortcuts"))}</button>
-      <button class="settings-tab" data-tab="app">${escapeHtml(t("settings.tab.app"))}</button>
-    </div>
-
-    <section class="settings-pane active" data-pane="account">
+  return `
+    <section class="settings-pane active" data-pane="app">
+      <div class="settings-section-label">${escapeHtml(t("settings.app.language"))}</div>
       <div class="settings-card">
-        <div class="settings-info-row"><span>${escapeHtml(t("settings.account.name"))}</span><strong>${escapeHtml(profile.name || t("settings.user_fallback"))}</strong></div>
-        <div class="settings-info-row"><span>${escapeHtml(t("settings.account.email"))}</span><strong>${escapeHtml(profile.email || "-")}</strong></div>
-        <div class="settings-info-row"><span>${escapeHtml(t("settings.account.gmail_status"))}</span><strong>${auth.connected ? escapeHtml(t("settings.account.gmail_connected")) : escapeHtml(t("settings.account.gmail_disconnected"))}</strong></div>
-        <div class="settings-info-row"><span>${escapeHtml(t("settings.account.inbox"))}</span><strong>${escapeHtml(t("settings.account.inbox_value", { unread: counts.inbox_unread, total: counts.inbox_total }))}</strong></div>
-        <div class="settings-info-row"><span>${escapeHtml(t("settings.account.last_sync"))}</span><strong>${escapeHtml(lastInboxSync)}</strong></div>
-      </div>
-      <div class="settings-section-label">${escapeHtml(t("settings.language"))}</div>
-      <div class="settings-row">
-        <span>${escapeHtml(t("settings.language"))}</span>
-        <select id="settings-lang-select">
-          ${langs.map(l => `<option value="${l.code}" ${l.code === currentLang ? "selected" : ""}>${escapeHtml(l.label)}</option>`).join("")}
-        </select>
-      </div>
-      <div class="settings-actions">
-        <button class="verdant-btn settings-danger" id="settings-logout">${escapeHtml(t("settings.account.logout"))}</button>
-      </div>
-    </section>
-
-    <section class="settings-pane" data-pane="shortcuts">
-      <label class="settings-switch">
-        <input type="checkbox" id="hk-enabled" ${hotkeys.enabled ? "checked" : ""}>
-        ${escapeHtml(t("settings.shortcuts.enabled"))}
-      </label>
-      <div class="settings-row"><span>${escapeHtml(t("settings.shortcuts.compose"))}</span><input id="hk-compose" value="${escapeHtml(hotkeys.compose)}" /></div>
-      <div class="settings-row"><span>${escapeHtml(t("settings.shortcuts.maximize"))}</span><input id="hk-compose-maximize" value="${escapeHtml(hotkeys.composeMaximize)}" /></div>
-      <div class="settings-row"><span>${escapeHtml(t("settings.shortcuts.refresh"))}</span><input id="hk-refresh" value="${escapeHtml(hotkeys.refresh)}" /></div>
-      <div class="settings-row"><span>${escapeHtml(t("settings.shortcuts.settings"))}</span><input id="hk-settings" value="${escapeHtml(hotkeys.settings)}" /></div>
-      <div class="settings-row"><span>${escapeHtml(t("settings.shortcuts.search"))}</span><input id="hk-search" value="${escapeHtml(hotkeys.search)}" /></div>
-      <div class="settings-row"><span>${escapeHtml(t("settings.shortcuts.send"))}</span><input id="hk-send" value="${escapeHtml(hotkeys.send)}" /></div>
-      <div class="settings-row"><span>${escapeHtml(t("settings.shortcuts.switch_account"))}</span><input id="hk-switch-account" value="${escapeHtml(hotkeys.switchNextAccount)}" /></div>
-      <div class="settings-actions">
-        <button class="verdant-btn" id="settings-save">${escapeHtml(t("settings.shortcuts.save"))}</button>
-      </div>
-    </section>
-
-    <section class="settings-pane" data-pane="app">
-
-      <div class="settings-section-label">${escapeHtml(t("settings.app.general"))}</div>
-      <div class="settings-card">
-        <label class="settings-switch">
-          <input type="checkbox" id="app-autostart" ${appPrefs.autostart ? "checked" : ""}>
-          ${escapeHtml(t("settings.app.autostart"))}
-        </label>
-        <label class="settings-switch">
-          <input type="checkbox" id="app-run-background" ${appPrefs.runInBackground ? "checked" : ""}>
-          ${escapeHtml(t("settings.app.run_in_background"))}
-        </label>
-      </div>
-
-      <div class="settings-section-label">${escapeHtml(t("settings.app.colorscheme"))}</div>
-      <div class="settings-card">
-        <div class="colorscheme-options">
-          <label class="colorscheme-option">
-            <input type="radio" name="colorscheme" value="light" ${!appPrefs.useDarkMode ? "checked" : ""}>
-            <span class="colorscheme-label">${escapeHtml(t("settings.app.light_mode"))}</span>
-          </label>
-          <label class="colorscheme-option">
-            <input type="radio" name="colorscheme" value="dark" ${appPrefs.useDarkMode ? "checked" : ""}>
-            <span class="colorscheme-label">${escapeHtml(t("settings.app.dark_mode"))}</span>
-          </label>
+        <div class="settings-row">
+          <span>${escapeHtml(t("settings.app.language"))}</span>
+          <select id="settings-lang-select">
+            ${langs.map(l => `<option value="${l.code}" ${l.code === currentLang ? "selected" : ""}>${escapeHtml(l.label)}</option>`).join("")}
+          </select>
         </div>
       </div>
 
-      <div class="settings-section-label">${escapeHtml(t("settings.app.notifications_title"))}</div>
-      <div class="settings-card">
-        <label class="settings-switch">
-          <input type="checkbox" id="app-show-notifications" ${appPrefs.showNotifications ? "checked" : ""}>
-          ${escapeHtml(t("settings.app.show_notifications"))}
-        </label>
+      <div class="settings-section-label">${escapeHtml(t("settings.app.connected_inboxes"))}</div>
+      <div class="settings-inbox-list" id="settings-inbox-list">
+        ${accounts.map(acc => {
+          const isActive = acc.is_active;
+          const statusParts = [];
+          if (isActive) {
+            statusParts.push(`${t("settings.app.inbox_status", { unread: counts.inbox_unread, total: counts.inbox_total })}`);
+            statusParts.push(`${t("settings.app.last_sync")}: ${lastInboxSync}`);
+          }
+          const hoverText = isActive ? statusParts.join(" · ") : "";
+          return `
+            <div class="settings-inbox-item" data-account-id="${acc.id}" ${hoverText ? `title="${escapeHtml(hoverText)}"` : ""}>
+              <div class="settings-inbox-main">
+                <strong>${escapeHtml(acc.display_name || acc.email)}</strong>
+                <span class="settings-inbox-provider">${escapeHtml(acc.provider)}${isActive ? ` · ${escapeHtml(t("settings.app.inbox_status", { unread: counts.inbox_unread, total: counts.inbox_total }))}` : ""}</span>
+              </div>
+              <div class="settings-inbox-actions">
+                <button class="verdant-btn settings-danger settings-inbox-remove" data-account-id="${acc.id}" data-account-email="${escapeHtml(acc.email)}">
+                  ${escapeHtml(isActive ? t("settings.app.logout") : t("settings.app.remove_account"))}
+                </button>
+              </div>
+            </div>
+          `;
+        }).join("")}
       </div>
 
-      <div class="settings-section-label">${escapeHtml(t("settings.app.updates_title"))}</div>
+      <div class="settings-section-label">${escapeHtml(t("settings.app.update"))}</div>
       <div class="settings-card">
         <div class="settings-info-row">
           <span>${escapeHtml(t("settings.app.installed_version"))}</span>
-          <strong id="settings-installed-version">${escapeHtml(t("app.version_loading"))}</strong>
+          <strong id="settings-installed-version">v${escapeHtml(version || t("app.version_unknown"))}</strong>
         </div>
         <div class="settings-info-row">
           <span>${escapeHtml(t("settings.app.update_status"))}</span>
           <strong id="settings-update-status">${escapeHtml(t("settings.app.update_not_checked"))}</strong>
         </div>
-        <hr class="settings-divider" />
-        <div class="settings-row">
-          <span>${escapeHtml(t("settings.app.update_channel"))}</span>
-          <select id="update-channel">
-            <option value="stable" ${updatePrefs.channel === "stable" ? "selected" : ""}>${escapeHtml(t("settings.app.channel.stable"))}</option>
-            <option value="nightly" ${updatePrefs.channel === "nightly" ? "selected" : ""}>${escapeHtml(t("settings.app.channel.nightly"))}</option>
-          </select>
-        </div>
-        <label class="settings-switch">
-          <input type="checkbox" id="update-auto-check" ${updatePrefs.autoCheck ? "checked" : ""}>
-          ${escapeHtml(t("settings.app.auto_check"))}
-        </label>
-        <label class="settings-switch">
-          <input type="checkbox" id="update-auto-download" ${updatePrefs.autoDownload ? "checked" : ""}>
-          ${escapeHtml(t("settings.app.auto_download"))}
-        </label>
       </div>
       <div class="settings-actions">
         <button class="verdant-btn" id="settings-check-update">${escapeHtml(t("settings.app.check_update"))}</button>
       </div>
-
-      <div class="settings-section-label">${escapeHtml(t("settings.app.data_title"))}</div>
-      <div class="settings-card">
-        <div class="settings-help">${escapeHtml(t("settings.app.cache_info"))}</div>
-      </div>
-      <div class="settings-actions">
-        <button class="verdant-btn" id="settings-sync">${escapeHtml(t("settings.app.sync_now"))}</button>
-        <button class="verdant-btn" id="settings-clear">${escapeHtml(t("settings.app.clear_db"))}</button>
-      </div>
-
     </section>
   `;
-  panel.appendChild(grid);
+}
 
-  getVersion().then((v) => {
-    const el = panel.querySelector("#settings-installed-version");
-    if (el) el.textContent = `v${v}`;
-  }).catch(() => {
-    const el = panel.querySelector("#settings-installed-version");
-    if (el) el.textContent = t("app.version_unknown");
-  });
+function buildBehaviorTab() {
+  return `
+    <section class="settings-pane" data-pane="behavior">
+      <div class="settings-section-label">${escapeHtml(t("settings.behavior.notifications"))}</div>
+      <div class="settings-card">
+        <label class="settings-switch">
+          <input type="checkbox" id="app-show-notifications" ${appPrefs.showNotifications ? "checked" : ""}>
+          ${escapeHtml(t("settings.behavior.notifications"))}
+        </label>
+        <div class="settings-radio-group" id="notification-importance-group" style="margin-top:6px;${appPrefs.showNotifications ? "" : "opacity:0.5;pointer-events:none;"}">
+          <label class="settings-radio">
+            <input type="radio" name="notification-importance" value="all" ${appPrefs.notificationImportance !== "important" ? "checked" : ""}>
+            ${escapeHtml(t("settings.behavior.all_mail"))}
+          </label>
+          <label class="settings-radio">
+            <input type="radio" name="notification-importance" value="important" ${appPrefs.notificationImportance === "important" ? "checked" : ""}>
+            ${escapeHtml(t("settings.behavior.only_important"))}
+          </label>
+        </div>
+      </div>
+
+      <div class="settings-section-label">${escapeHtml(t("settings.behavior.start_on_login"))}</div>
+      <div class="settings-card">
+        <label class="settings-switch">
+          <input type="checkbox" id="app-autostart" ${appPrefs.autostart ? "checked" : ""}>
+          ${escapeHtml(t("settings.behavior.start_on_login"))}
+        </label>
+        <label class="settings-switch">
+          <input type="checkbox" id="app-run-background" ${appPrefs.runInBackground ? "checked" : ""}>
+          ${escapeHtml(t("settings.behavior.run_in_background"))}
+        </label>
+      </div>
+    </section>
+  `;
+}
+
+function buildShortcutsTab() {
+  const hotkeys = getHotkeys();
+  const shortcuts = [
+    { key: "compose", i18n: "settings.shortcuts.compose" },
+    { key: "composeMaximize", i18n: "settings.shortcuts.maximize" },
+    { key: "refresh", i18n: "settings.shortcuts.refresh" },
+    { key: "settings", i18n: "settings.shortcuts.settings" },
+    { key: "search", i18n: "settings.shortcuts.search" },
+    { key: "send", i18n: "settings.shortcuts.send" },
+    { key: "switchNextAccount", i18n: "settings.shortcuts.switch_account" },
+  ];
+
+  return `
+    <section class="settings-pane" data-pane="shortcuts">
+      <label class="settings-switch" style="margin-bottom:10px;">
+        <input type="checkbox" id="hk-enabled" ${hotkeys.enabled ? "checked" : ""}>
+        ${escapeHtml(t("settings.shortcuts.enabled"))}
+      </label>
+      <div class="settings-shortcut-list">
+        ${shortcuts.map(s => {
+          const combo = hotkeys[s.key] || "";
+          return `
+            <div class="settings-shortcut-row" data-shortcut-key="${s.key}">
+              <span class="settings-shortcut-label">${escapeHtml(t(s.i18n))}</span>
+              <div class="settings-shortcut-controls">
+                <span class="settings-shortcut-key" data-shortcut-display="${s.key}">${combo ? escapeHtml(formatCombo(combo)) : escapeHtml("-")}</span>
+                <button class="verdant-btn settings-shortcut-edit" data-shortcut-key="${s.key}">${escapeHtml(t("settings.shortcuts.edit"))}</button>
+                <button class="verdant-btn settings-shortcut-unset" data-shortcut-key="${s.key}" ${combo ? "" : "disabled"}>${escapeHtml(t("settings.shortcuts.unset"))}</button>
+              </div>
+            </div>
+          `;
+        }).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function buildAdvancedTab() {
+  return `
+    <section class="settings-pane" data-pane="advanced">
+      <div class="settings-section-label">${escapeHtml(t("settings.advanced.update_channel"))}</div>
+      <div class="settings-card">
+        <div class="settings-row">
+          <span>${escapeHtml(t("settings.advanced.update_channel"))}</span>
+          <select id="update-channel">
+            <option value="stable" ${updatePrefs.channel === "stable" ? "selected" : ""}>${escapeHtml(t("settings.advanced.channel.stable"))}</option>
+            <option value="nightly" ${updatePrefs.channel === "nightly" ? "selected" : ""}>${escapeHtml(t("settings.advanced.channel.nightly"))}</option>
+          </select>
+        </div>
+        <div class="settings-help" style="margin-top:8px;">${escapeHtml(t("settings.advanced.channel_info"))}</div>
+      </div>
+
+      <div class="settings-section-label">${escapeHtml(t("settings.advanced.sync_all"))}</div>
+      <div class="settings-card">
+        <div class="settings-help">${escapeHtml(t("settings.advanced.cache_info"))}</div>
+      </div>
+      <div class="settings-actions">
+        <button class="verdant-btn" id="settings-sync-all">${escapeHtml(t("settings.advanced.sync_all"))}</button>
+        <button class="verdant-btn settings-danger" id="settings-clear">${escapeHtml(t("settings.advanced.clear_cache"))}</button>
+      </div>
+    </section>
+  `;
+}
+
+export async function openSettingsModal(profile, currentMailbox, onLogout, onSync) {
+  let auth = { connected: true };
+  let counts = { inbox_total: 0, inbox_unread: 0, starred_total: 0, sent_total: 0, drafts_total: 0, archive_total: 0, trash_total: 0 };
+  let accounts = [];
+
+  try {
+    [auth, counts, accounts] = await Promise.all([authStatus(), getMailboxCounts(), listAccounts()]);
+  } catch {}
+
+  const langs = getSupportedLanguages();
+  const currentLang = getLang();
+
+  let version = "";
+  try {
+    version = await getVersion();
+  } catch {}
+
+  closeOverlay(true);
+  const overlay = document.createElement("div");
+  overlay.id = "verdant-overlay";
+  overlay.className = "verdant-overlay";
+  overlay.innerHTML = `
+    <div class="verdant-panel">
+      <div class="verdant-head">
+        <h2>${escapeHtml(t("settings.title"))}</h2>
+        <button class="verdant-close" aria-label="Close">×</button>
+      </div>
+      <div class="settings-grid">
+        <div class="settings-tabs">
+          <button class="settings-tab active" data-tab="app">${escapeHtml(t("settings.tab.app"))}</button>
+          <button class="settings-tab" data-tab="behavior">${escapeHtml(t("settings.tab.behavior"))}</button>
+          <button class="settings-tab" data-tab="shortcuts">${escapeHtml(t("settings.tab.shortcuts"))}</button>
+          <button class="settings-tab" data-tab="advanced">${escapeHtml(t("settings.tab.advanced"))}</button>
+        </div>
+        ${buildAppTab(profile, accounts, counts, langs, currentLang, version)}
+        ${buildBehaviorTab()}
+        ${buildShortcutsTab()}
+        ${buildAdvancedTab()}
+      </div>
+    </div>
+  `;
+
+  overlay.querySelector(".verdant-close")?.addEventListener("click", () => closeOverlay());
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) closeOverlay(); });
+
+  document.body.appendChild(overlay);
+  requestAnimationFrame(() => overlay.classList.add("open"));
+
+  const panel = overlay.querySelector(".verdant-panel");
 
   const tabs = Array.from(panel.querySelectorAll(".settings-tab"));
   const panes = Array.from(panel.querySelectorAll(".settings-pane"));
@@ -360,58 +403,126 @@ export async function openSettingsModal(profile, currentMailbox, onLogout, onSyn
     openSettingsModal(profile, currentMailbox, onLogout, onSync);
   });
 
-  panel.querySelector("#settings-save")?.addEventListener("click", () => {
-    hotkeys = {
-      enabled: !!panel.querySelector("#hk-enabled")?.checked,
-      compose: normalizeCombo(panel.querySelector("#hk-compose")?.value || defaultHotkeys.compose),
-      composeMaximize: normalizeCombo(panel.querySelector("#hk-compose-maximize")?.value || defaultHotkeys.composeMaximize),
-      refresh: normalizeCombo(panel.querySelector("#hk-refresh")?.value || defaultHotkeys.refresh),
-      settings: normalizeCombo(panel.querySelector("#hk-settings")?.value || defaultHotkeys.settings),
-      search: normalizeCombo(panel.querySelector("#hk-search")?.value || defaultHotkeys.search),
-      send: normalizeCombo(panel.querySelector("#hk-send")?.value || defaultHotkeys.send),
-      switchNextAccount: normalizeCombo(panel.querySelector("#hk-switch-account")?.value || defaultHotkeys.switchNextAccount),
-      close: "escape",
-    };
-    saveHotkeys(hotkeys);
-    showToast(t("toast.shortcuts_saved"));
+  panel.querySelector("#app-show-notifications")?.addEventListener("change", (e) => {
+    const enabled = !!e.target?.checked;
+    saveAppPrefs({ ...appPrefs, showNotifications: enabled });
+    const group = panel.querySelector("#notification-importance-group");
+    if (group) {
+      group.style.opacity = enabled ? "" : "0.5";
+      group.style.pointerEvents = enabled ? "" : "none";
+    }
   });
 
-  panel.querySelector("#update-channel")?.addEventListener("change", (e) => {
-    const value = normalizeUpdateChannel(e.target?.value);
-    saveUpdatePrefs({ ...updatePrefs, channel: value });
-    const label = value === "nightly" ? t("settings.app.channel.nightly") : t("settings.app.channel.stable");
-    setUpdateStatus(t("settings.app.channel_set", { channel: label }));
-    const btn = panel.querySelector("#settings-check-update");
-    if (btn) { btn.textContent = t("settings.app.check_update"); btn.dataset.updateReady = ""; }
-  });
-
-  panel.querySelector("#update-auto-check")?.addEventListener("change", (e) => {
-    saveUpdatePrefs({ ...updatePrefs, autoCheck: !!e.target?.checked });
-  });
-
-  panel.querySelector("#update-auto-download")?.addEventListener("change", (e) => {
-    saveUpdatePrefs({ ...updatePrefs, autoDownload: !!e.target?.checked });
-  });
-
-  panel.querySelector("#app-run-background")?.addEventListener("change", (e) => {
-    saveAppPrefs({ ...appPrefs, runInBackground: !!e.target?.checked });
+  panel.querySelectorAll('input[name="notification-importance"]').forEach(radio => {
+    radio.addEventListener("change", (e) => {
+      if (e.target?.checked) {
+        saveAppPrefs({ ...appPrefs, notificationImportance: e.target.value });
+      }
+    });
   });
 
   panel.querySelector("#app-autostart")?.addEventListener("change", async (e) => {
     const enabled = !!e.target?.checked;
     saveAppPrefs({ ...appPrefs, autostart: enabled });
     try {
-      const { enable, disable } = await import("@tauri-apps/plugin-autostart");
-      if (enabled) await enable();
-      else await disable();
+      const { invoke } = await import("@tauri-apps/api/core");
+      if (enabled) await invoke("autostart_enable");
+      else await invoke("autostart_disable");
     } catch (err) {
       console.error("Failed to toggle autostart", err);
       showToast(t("settings.app.check_failed"), "error");
     }
   });
 
-  panel.querySelector("#app-show-notifications")?.addEventListener("change", (e) => {
-    saveAppPrefs({ ...appPrefs, showNotifications: !!e.target?.checked });
+  panel.querySelector("#app-run-background")?.addEventListener("change", (e) => {
+    saveAppPrefs({ ...appPrefs, runInBackground: !!e.target?.checked });
+  });
+
+  let shortcutListening = null;
+  panel.querySelectorAll(".settings-shortcut-edit").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const key = btn.dataset.shortcutKey;
+      const displayEl = panel.querySelector(`[data-shortcut-display="${key}"]`);
+      const unsetBtn = panel.querySelector(`.settings-shortcut-unset[data-shortcut-key="${key}"]`);
+      if (!displayEl) return;
+
+      if (shortcutListening) {
+        const prevDisplay = panel.querySelector(`[data-shortcut-display="${shortcutListening}"]`);
+        if (prevDisplay) prevDisplay.classList.remove("listening");
+        const prevCombo = getHotkeys()[shortcutListening] || "";
+        if (prevDisplay && prevDisplay.classList.contains("listening")) {
+          prevDisplay.textContent = prevCombo ? formatCombo(prevCombo) : "-";
+        }
+      }
+      shortcutListening = key;
+      displayEl.textContent = t("settings.shortcuts.listening");
+      displayEl.classList.add("listening");
+
+      const handler = (e) => {
+        if (e.key === "Escape") {
+          cleanup();
+          return;
+        }
+
+        if (["Control", "Shift", "Alt", "Meta"].includes(e.key)) return;
+
+        e.preventDefault();
+        e.stopPropagation();
+
+        const combo = normalizeCombo(eventCombo(e));
+        const h = getHotkeys();
+        h[key] = combo;
+        saveHotkeys(h);
+        cleanup();
+        displayEl.textContent = formatCombo(combo);
+        displayEl.classList.remove("listening");
+        showToast(t("toast.shortcuts_saved"));
+        if (unsetBtn) unsetBtn.disabled = false;
+      };
+
+      const cleanup = () => {
+        document.removeEventListener("keydown", handler, true);
+        shortcutListening = null;
+        const el = panel.querySelector(`[data-shortcut-display="${key}"]`);
+        if (el) {
+          const currentCombo = getHotkeys()[key] || "";
+          if (el.classList.contains("listening")) {
+            el.textContent = currentCombo ? formatCombo(currentCombo) : "-";
+            el.classList.remove("listening");
+          }
+        }
+      };
+
+      document.addEventListener("keydown", handler, true);
+    });
+  });
+
+  panel.querySelectorAll(".settings-shortcut-unset").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const key = btn.dataset.shortcutKey;
+      const displayEl = panel.querySelector(`[data-shortcut-display="${key}"]`);
+      const h = getHotkeys();
+      h[key] = "";
+      saveHotkeys(h);
+      if (displayEl) displayEl.textContent = "-";
+      btn.disabled = true;
+      showToast(t("toast.shortcuts_saved"));
+    });
+  });
+
+  panel.querySelector("#hk-enabled")?.addEventListener("change", (e) => {
+    const h = getHotkeys();
+    h.enabled = !!e.target?.checked;
+    saveHotkeys(h);
+  });
+
+  panel.querySelector("#update-channel")?.addEventListener("change", (e) => {
+    const value = normalizeUpdateChannel(e.target?.value);
+    saveUpdatePrefs({ ...updatePrefs, channel: value });
+    const label = value === "nightly" ? t("settings.advanced.channel.nightly") : t("settings.advanced.channel.stable");
+    showToast(t("settings.app.channel_set", { channel: label }));
+    const btn = panel.querySelector("#settings-check-update");
+    if (btn) { btn.textContent = t("settings.app.check_update"); btn.dataset.updateReady = ""; }
   });
 
   panel.querySelectorAll('input[name="colorscheme"]').forEach((radio) => {
@@ -455,16 +566,19 @@ export async function openSettingsModal(profile, currentMailbox, onLogout, onSyn
     if (btn) btn.disabled = false;
   });
 
-  let isSyncingSettings = false;
-  panel.querySelector("#settings-sync")?.addEventListener("click", async () => {
-    if (isSyncingSettings) return;
-    isSyncingSettings = true;
+  let isSyncingAll = false;
+  panel.querySelector("#settings-sync-all")?.addEventListener("click", async () => {
+    if (isSyncingAll) return;
+    isSyncingAll = true;
     showToast(t("toast.fetching"));
     try {
-      await onSync();
+      const { syncEmails } = await import("../api.js");
+      await syncEmails();
       showToast(t("toast.sync_complete"));
+    } catch (err) {
+      showToast(String(err), "error");
     } finally {
-      isSyncingSettings = false;
+      isSyncingAll = false;
     }
   });
 
@@ -475,9 +589,24 @@ export async function openSettingsModal(profile, currentMailbox, onLogout, onSyn
     await onSync();
   });
 
-  panel.querySelector("#settings-logout")?.addEventListener("click", async () => {
-    await logout();
-    closeOverlay();
-    onLogout();
+  panel.querySelectorAll(".settings-inbox-remove").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const accountId = parseInt(btn.dataset.accountId, 10);
+      const email = btn.dataset.accountEmail;
+      if (accountId === auth.active_account_id) {
+        await logout();
+        closeOverlay();
+        onLogout();
+      } else {
+        try {
+          await removeAccount(accountId);
+          showToast(`${email} removed`);
+          closeOverlay();
+          openSettingsModal(profile, currentMailbox, onLogout, onSync);
+        } catch (err) {
+          showToast(String(err), "error");
+        }
+      }
+    });
   });
 }
