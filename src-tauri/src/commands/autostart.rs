@@ -53,6 +53,8 @@ fn enable_impl(app: &tauri::AppHandle) -> Result<(), String> {
         PartOf=graphical-session.target\n\
         \n\
         [Service]\n\
+        Type=exec\n\
+        Environment=DISPLAY=:0\n\
         ExecStart={} --autostart\n\
         Restart=on-failure\n\
         RestartSec=5\n\

@@ -1,4 +1,17 @@
-import { authStatus, getUserProfile, getEmails, syncMailboxPage, syncImapMailboxPage } from "./api.js";
+(() => {
+  const APP_PREFS_KEY = "verdant.appPrefs";
+  try {
+    const appPrefsRaw = localStorage.getItem(APP_PREFS_KEY);
+    const appPrefs = appPrefsRaw ? JSON.parse(appPrefsRaw) : {};
+    if (appPrefs.useDarkMode === true) {
+      document.documentElement.classList.add("dark");
+    }
+  } catch (err) {
+    console.error("Theme preference check failed:", err);
+  }
+})();
+
+import { authStatus, getUserProfile, getEmails, syncMailboxPage, syncImapMailboxPage, getStartupFlags, hideMainWindow } from "./api.js";
 import { setEmailReadStatus } from "./api.js";
 import { openExternalUrl } from "./api.js";
 import { ingestContactsFromEmails, ensureContactsLoaded } from "./lib/contacts.js";
@@ -677,7 +690,12 @@ async function initializeConnectedUI() {
 
 document.addEventListener("DOMContentLoaded", async () => {
     initLang();
-    
+
+    const flags = await getStartupFlags().catch(() => ({ is_autostart: false }));
+    if (flags.is_autostart) {
+        hideMainWindow().catch(err => console.error("Autostart hide failed:", err));
+    }
+
     const { invoke } = await import("@tauri-apps/api/core");
     await hydratePrefsFromBackend();
     invoke("update_app_config", { config: { run_in_background: appPrefs.runInBackground, update_channel: updatePrefs.channel } })

@@ -72,3 +72,6 @@ export const openExternalUrl = (url) => invoke("open_external_url", { url });
 export const autostartEnable = () => invoke("autostart_enable");
 export const autostartDisable = () => invoke("autostart_disable");
 export const autostartIsEnabled = () => invoke("autostart_is_enabled");
+
+export const getStartupFlags = () => invoke("get_startup_flags");
+export const hideMainWindow = () => invoke("hide_main_window");

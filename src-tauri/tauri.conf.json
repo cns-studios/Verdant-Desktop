@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Verdant Desktop",
-  "version": "2.2.17",
+  "version": "2.2.18",
   "identifier": "com.cns-studios.verdant",
   "build": {
     "frontendDist": "../dist",
@@ -17,7 +17,8 @@
         "height": 900,
         "resizable": true,
         "decorations": false,
-        "fullscreen": false
+        "fullscreen": false,
+        "url": "tauri://localhost"
       }
     ],
     "security": {
