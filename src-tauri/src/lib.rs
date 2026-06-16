@@ -32,7 +32,7 @@ pub fn run() {
     let _ = dotenvy::from_filename("../.env").or_else(|_| dotenvy::from_filename(".env"));
 
     let args: Vec<String> = std::env::args().collect();
-    let is_autostart = args.iter().any(|arg| arg == "--autostart");
+    let _is_autostart = args.iter().any(|arg| arg == "--autostart");
 
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
@@ -75,19 +75,11 @@ pub fn run() {
             app.manage(state.clone());
             app.manage(AppConfigState(Mutex::new(load_app_config(&app.handle().clone()))));
 
-            if is_autostart {
-                if let Some(window) = app.get_webview_window("main") {
-                    let _ = window.hide();
-                }
-            }
-
-            if cfg!(debug_assertions) {
-                app.handle().plugin(
-                    tauri_plugin_log::Builder::default()
-                        .level(log::LevelFilter::Info)
-                        .build(),
-                )?;
-            }
+            app.handle().plugin(
+                tauri_plugin_log::Builder::default()
+                    .level(log::LevelFilter::Info)
+                    .build(),
+            )?;
 
             
             let state_for_sync = state.clone();
@@ -191,6 +183,9 @@ pub fn run() {
             commands::updater::install_and_relaunch,
             commands::updater::get_changelog,
             commands::shell::open_external_url,
+
+            commands::window::get_startup_flags,
+            commands::window::hide_main_window,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
