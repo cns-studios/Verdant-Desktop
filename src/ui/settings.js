@@ -273,6 +273,26 @@ function buildBehaviorTab() {
   `;
 }
 
+function buildAppearenceTab() {
+  return `
+    <section class="settings-pane" data-pane="appearence">
+      <div class="settings-section-label">${escapeHtml(t("settings.appearance.title"))}</div>
+      <div class="settings-card">
+        <div class="settings-radio-group" id="colorscheme-group">
+          <label class="settings-radio">
+            <input type="radio" name="colorscheme" value="light" ${!appPrefs.useDarkMode ? "checked" : ""}>
+            ${escapeHtml(t("settings.appearence.light"))}
+          </label>
+          <label class="settings-radio">
+            <input type="radio" name="colorscheme" value="dark" ${appPrefs.useDarkMode ? "checked" : ""}>
+            ${escapeHtml(t("settings.appearence.dark"))}
+          </label>
+        </div>
+      </div>
+    </section>
+  `;
+}
+
 function buildShortcutsTab() {
   const hotkeys = getHotkeys();
   const shortcuts = [
@@ -368,11 +388,13 @@ export async function openSettingsModal(profile, currentMailbox, onLogout, onSyn
         <div class="settings-tabs">
           <button class="settings-tab active" data-tab="app">${escapeHtml(t("settings.tab.app"))}</button>
           <button class="settings-tab" data-tab="behavior">${escapeHtml(t("settings.tab.behavior"))}</button>
+          <button class="settings-tab" data-tab="appearence">${escapeHtml(t("settings.tab.appearence"))}</button>
           <button class="settings-tab" data-tab="shortcuts">${escapeHtml(t("settings.tab.shortcuts"))}</button>
           <button class="settings-tab" data-tab="advanced">${escapeHtml(t("settings.tab.advanced"))}</button>
         </div>
         ${buildAppTab(profile, accounts, counts, langs, currentLang, version)}
         ${buildBehaviorTab()}
+        ${buildAppearenceTab()}
         ${buildShortcutsTab()}
         ${buildAdvancedTab()}
       </div>
@@ -523,6 +545,14 @@ export async function openSettingsModal(profile, currentMailbox, onLogout, onSyn
     showToast(t("settings.app.channel_set", { channel: label }));
     const btn = panel.querySelector("#settings-check-update");
     if (btn) { btn.textContent = t("settings.app.check_update"); btn.dataset.updateReady = ""; }
+  });
+
+  panel.querySelectorAll('input[name="colorscheme"]').forEach((radio) => {
+    radio.addEventListener("change", (e) => {
+      const isDarkMode = e.target.value === "dark";
+      saveAppPrefs({ ...appPrefs, useDarkMode: isDarkMode });
+      document.documentElement.classList.toggle("dark", isDarkMode);
+    });
   });
 
   panel.querySelector("#settings-check-update")?.addEventListener("click", async () => {
