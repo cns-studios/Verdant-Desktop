@@ -27,6 +27,21 @@ pub struct UpdateDownloadResult {
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum UpdateChannel { Stable, Nightly }
 
+fn load_saved_update_channel() -> String {
+    let config_path = dirs::data_dir()
+        .map(|d| d.join("com.cns-studios.verdant").join("app-config.json"));
+
+    match config_path {
+        Some(path) => {
+            std::fs::read_to_string(path).ok()
+                .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok())
+                .and_then(|v| v.get("update_channel").and_then(|c| c.as_str().map(|s| s.to_string())))
+                .unwrap_or_else(|| "stable".to_string())
+        }
+        None => "stable".to_string(),
+    }
+}
+
 fn updater_repo_owner() -> String {
     env::var("UPDATER_REPO_OWNER").unwrap_or_else(|_| "cns-studios".to_string())
 }
@@ -336,7 +351,8 @@ pub fn get_changelog(version: String) -> Result<ChangelogEntry, String> {
 
 pub async fn handle_cli_update() {
     println!("Checking for updates...");
-    match check_for_updates(None).await {
+    let channel_str = load_saved_update_channel();
+    match check_for_updates(Some(channel_str.clone())).await {
         Ok(info) => {
             if !info.update_available {
                 println!("Verdant is already up to date (v{}).", info.current_version);
@@ -344,7 +360,7 @@ pub async fn handle_cli_update() {
             }
             println!("New version available: v{} -> v{}", info.current_version, info.latest_version);
             println!("Downloading {}...", info.download_asset_name);
-            match download_latest_update(None).await {
+            match download_latest_update(Some(channel_str)).await {
                 Ok(result) => {
                     println!("Download complete. Installing...");
                     if let Err(e) = install_and_relaunch(result.file_path).await {
