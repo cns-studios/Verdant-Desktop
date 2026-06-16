@@ -2,6 +2,9 @@
 
 ## [2.2.18]
 - Improved autostart for some Operating Systems
+- Added Appearance Tab in the Settings
+- Added Darkmode
+- Improved Update channels and fixed minor bugs for some edge cases
 
 ## [2.2.17]
 - Read/Unread status of mails are synced to the mail provider

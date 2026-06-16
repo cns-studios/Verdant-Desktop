@@ -96,6 +96,13 @@ async function runStartupUpdateCheck() {
         const info = await checkForUpdates(channel);
         if (!info?.updateAvailable) return;
 
+        // Nightly dedup: don't re-notify for same build
+        if (channel === "nightly") {
+            const lastUrl = localStorage.getItem("verdant.lastNightlyUrl");
+            if (info.downloadUrl === lastUrl) return;
+            localStorage.setItem("verdant.lastNightlyUrl", info.downloadUrl);
+        }
+
         const toast = document.createElement("div");
         toast.className = "update-toast";
         toast.innerHTML = `

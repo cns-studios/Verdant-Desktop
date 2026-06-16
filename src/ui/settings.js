@@ -8,6 +8,7 @@ import { t, getLang, setLang, getSupportedLanguages } from "../lib/i18n.js";
 import { getVersion } from "@tauri-apps/api/app";
 
 const UPDATE_PREFS_KEY = "verdant.updatePrefs";
+const LAST_NIGHTLY_URL_KEY = "verdant.lastNightlyUrl";
 const defaultUpdatePrefs = { autoCheck: true, autoDownload: false, channel: "stable" };
 export let updatePrefs = loadUpdatePrefs();
 
@@ -114,6 +115,17 @@ export async function checkForAppUpdates(options = {}) {
 
   try {
     const info = await checkForUpdates(channel);
+
+    // Nightly dedup: don't notify/download the same build twice
+    if (channel === "nightly" && info.updateAvailable) {
+        const lastUrl = localStorage.getItem(LAST_NIGHTLY_URL_KEY);
+        if (info.downloadUrl === lastUrl) {
+            info.updateAvailable = false;
+        } else {
+            localStorage.setItem(LAST_NIGHTLY_URL_KEY, info.downloadUrl);
+        }
+    }
+
     const channelLabel = channel === "nightly" ? t("settings.advanced.channel.nightly") : t("settings.advanced.channel.stable");
 
     if (updateSettingsUi) {

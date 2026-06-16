@@ -163,7 +163,10 @@ pub async fn check_for_updates(channel: Option<String>) -> Result<UpdateInfo, St
     let release = fetch_release_for_channel(channel).await?;
     let latest_tag = release.get("tag_name").and_then(Value::as_str).unwrap_or_default().to_string();
     let latest_version = normalize_version(&latest_tag);
-    let update_available = version_is_newer(&current_version, &latest_version);
+    let update_available = match channel {
+        UpdateChannel::Nightly => true,
+        UpdateChannel::Stable => version_is_newer(&current_version, &latest_version),
+    };
     let (download_asset_name, download_url) = select_best_asset(&release)?;
     Ok(UpdateInfo {
         current_version,
