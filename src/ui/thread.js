@@ -1,5 +1,6 @@
 import { getInboxThreads, getThreadMessages, markThreadRead, archiveEmail, trashEmail, toggleStarred, setEmailReadStatus } from "../api.js";
 import { escapeHtml, sanitizeUnicodeNoise, formatListDate, formatReadingDate } from "../lib/format.js";
+import { sanitizeEmailHtml } from "../lib/sanitize.js";
 import { showToast } from "../lib/toast.js";
 import { t } from "../lib/i18n.js";
 import { applySenderAvatar, buildActionMenu } from "./reading.js";
@@ -199,6 +200,43 @@ function buildMessageBubble(message, allMessages) {
 
   if (isExpanded) {
     bubble.innerHTML = buildExpandedBubble(message, senderName);
+
+    const host = bubble.querySelector("[data-email-shadow-host]");
+    if (host) {
+      const rawHtml = message.body_html || `<pre>${escapeHtml(message.snippet || "")}</pre>`;
+      const sanitized = sanitizeEmailHtml(sanitizeUnicodeNoise(rawHtml));
+      const shadow = host.attachShadow({ mode: "closed" });
+      shadow.innerHTML = `
+        <style>
+          :host {
+            display: block;
+            overflow-x: auto;
+            -webkit-user-select: text;
+            user-select: text;
+          }
+          .email-center {
+            max-width: 640px;
+            margin: 0 auto;
+          }
+          p { margin-bottom: 12px; }
+          p:last-child { margin-bottom: 0; }
+          pre {
+            white-space: pre-wrap;
+            word-break: break-word;
+            background: var(--surface, #f0f0ec);
+            border: 1px solid var(--border, #d6d9d2);
+            border-radius: 8px;
+            padding: 10px 12px;
+            font-size: 12px;
+          }
+          img { max-width: 100%; height: auto; }
+          a { color: var(--green, #4a5e45); }
+          table { max-width: 100%; overflow-x: auto; display: block; }
+          * { box-sizing: border-box; }
+        </style>
+        <div class="email-center">${sanitized}</div>
+      `;
+    }
   } else {
     bubble.innerHTML = buildCollapsedBubble(message, senderName);
   }
@@ -257,7 +295,7 @@ function buildExpandedBubble(message, senderName) {
       <span class="thread-bubble-date">${escapeHtml(formatReadingDate(message.date))}</span>
     </div>
     <div class="thread-bubble-body">
-      <div class="thread-bubble-content email-body-text">${sanitizeUnicodeNoise(message.body_html || `<pre>${escapeHtml(message.snippet || "")}</pre>`)}</div>
+      <div class="thread-bubble-content email-body-text" data-email-shadow-host></div>
       ${attachmentsHtml}
     </div>
     <div class="thread-bubble-actions">

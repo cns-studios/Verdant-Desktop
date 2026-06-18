@@ -1,5 +1,6 @@
 import { setEmailReadStatus, toggleStarred, archiveEmail, trashEmail } from "../api.js";
 import { escapeHtml, sanitizeUnicodeNoise, formatReadingDate, formatAttachmentSize } from "../lib/format.js";
+import { sanitizeEmailHtml } from "../lib/sanitize.js";
 import { showToast } from "../lib/toast.js";
 import { downloadAttachment } from "../api.js";
 import { openExternalUrl } from "../api.js";
@@ -262,7 +263,7 @@ function renderEmailContentSafely(container, htmlContent) {
         body {
           font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
           margin: 0;
-          padding: 16px;
+          padding: 0;
           background: transparent;
           color: #1e2119;
           font-size: 14px;
@@ -270,6 +271,11 @@ function renderEmailContentSafely(container, htmlContent) {
           word-wrap: break-word;
           -webkit-user-select: text;
           user-select: text;
+        }
+        .email-center {
+          max-width: 640px;
+          margin: 0 auto;
+          padding: 16px;
         }
         img {
           max-width: 100%;
@@ -280,14 +286,10 @@ function renderEmailContentSafely(container, htmlContent) {
           color: #4a5e45;
           text-decoration: underline;
         }
-        script, style { display: none !important; }
-        body, div, p, span, a, img {
-          all: revert;
-        }
       </style>
     </head>
     <body>
-      ${htmlContent}
+      <div class="email-center">${sanitizeEmailHtml(htmlContent)}</div>
     </body>
     </html>
   `;

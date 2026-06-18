@@ -1,5 +1,6 @@
 import { sendEmail, saveDraft, sendExistingDraft } from "../api.js";
 import { escapeHtml, sanitizeUnicodeNoise } from "../lib/format.js";
+import { sanitizeEmailHtmlForCompose } from "../lib/sanitize.js";
 import { showToast } from "../lib/toast.js";
 import { t } from "../lib/i18n.js";
 import {
@@ -156,7 +157,7 @@ export function openComposeForForward(email) {
 function buildQuotedHtml(email) {
   const sender = escapeHtml(sanitizeUnicodeNoise(email.sender || "Unknown"));
   const date = escapeHtml(email.date || "");
-  const originalHtml = email.body_html || `<pre>${escapeHtml(email.snippet || "")}</pre>`;
+  const originalHtml = sanitizeEmailHtmlForCompose(email.body_html || `<pre>${escapeHtml(email.snippet || "")}</pre>`);
 
   return `
     <div style="border-left: 3px solid #c8d5c4; padding-left: 12px; margin-top: 16px; color: #4a4d45;">
@@ -175,7 +176,7 @@ function buildForwardHtml(email) {
   const date = escapeHtml(email.date || "");
   const to = escapeHtml(sanitizeUnicodeNoise(email.to_recipients || ""));
   const subject = escapeHtml(sanitizeUnicodeNoise(email.subject || ""));
-  const originalHtml = email.body_html || `<pre>${escapeHtml(email.snippet || "")}</pre>`;
+  const originalHtml = sanitizeEmailHtmlForCompose(email.body_html || `<pre>${escapeHtml(email.snippet || "")}</pre>`);
 
   return `
     <div style="border-left: 3px solid #c8d5c4; padding-left: 12px; margin-top: 16px; color: #4a4d45;">

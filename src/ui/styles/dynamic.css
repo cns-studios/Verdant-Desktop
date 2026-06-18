@@ -272,31 +272,7 @@ body.reading-pane-hidden .email-list-pane { flex:1 1 auto !important; width:auto
   font-size: 13.5px;
   line-height: 1.7;
   color: var(--text-mid);
-  max-width: 580px;
   overflow-x: auto;
-}
-.thread-bubble-content p { margin-bottom: 12px; }
-.thread-bubble-content p:last-child { margin-bottom: 0; }
-.thread-bubble-content pre {
-  white-space: pre-wrap;
-  word-break: break-word;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 10px 12px;
-  font-size: 12px;
-}
-.thread-bubble-content img {
-  max-width: 100%;
-  height: auto;
-}
-.thread-bubble-content a {
-  color: var(--green);
-}
-.thread-bubble-content table {
-  max-width: 100%;
-  overflow-x: auto;
-  display: block;
 }
 .thread-bubble-actions {
   padding: 10px 16px 14px 54px;

@@ -7,6 +7,7 @@
 - Improved Update channels and fixed minor bugs for some edge cases
 - Improved styling of the Settings
 - Added Unsubscribe Button for Advertisment Emails
+- Improved Email rendering
 
 ## [2.2.17]
 - Read/Unread status of mails are synced to the mail provider
