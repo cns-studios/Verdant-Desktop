@@ -381,6 +381,25 @@ export function updateTopActionStates(email, mailbox) {
   const isTrash = email?.mailbox?.toUpperCase().includes("TRASH") || currentMailbox.includes("TRASH") || activeNav.toUpperCase().includes("TRASH");
   const isSent = email?.mailbox?.toUpperCase().includes("SENT") || currentMailbox.includes("SENT") || activeNav.toUpperCase().includes("SENT");
 
+  const unsubBtn = document.querySelector(".reading-actions .unsubscribe-btn");
+  if (unsubBtn) {
+    const hasUnsub = email?.list_unsubscribe && email.list_unsubscribe.trim().length > 0;
+    if (isDraft || isSent || isTrash || !hasUnsub) {
+      unsubBtn.style.display = "none";
+    } else {
+      unsubBtn.style.display = "";
+      if (email?.unsubscribed) {
+        unsubBtn.classList.add("unsubscribed");
+        unsubBtn.textContent = t("reading.unsubscribed");
+        unsubBtn.disabled = true;
+      } else {
+        unsubBtn.classList.remove("unsubscribed");
+        unsubBtn.textContent = t("reading.unsubscribe");
+        unsubBtn.disabled = false;
+      }
+    }
+  }
+
   buttons.forEach((btn) => {
     const action = btn.dataset.action;
 
@@ -423,7 +442,7 @@ export function setReadingPaneHidden(hidden) {
   document.body.classList.toggle("reading-pane-hidden", !!hidden);
 }
 
-export function bindReadingActions(getSelected, setSelected, onRefresh, openCompose, getCurrentMailbox, getThreadId) {
+export function bindReadingActions(getSelected, setSelected, onRefresh, openCompose, getCurrentMailbox, getThreadId, getThreadLatestEmail) {
   const buttons = Array.from(document.querySelectorAll(".reading-actions .icon-btn"));
 
   for (const button of buttons) {
@@ -610,11 +629,26 @@ export function bindReadingActions(getSelected, setSelected, onRefresh, openComp
         return;
       }
 
+      if (action === "unsubscribe") {
+        const targetEmail = threadId && getThreadLatestEmail ? getThreadLatestEmail() : email;
+        showUnsubscribeDialog(targetEmail || email, onRefresh);
+        return;
+      }
+
       if (action === "close") {
         setSelected(null);
         document.querySelectorAll(".email-item").forEach((el) => el.classList.remove("active"));
         setReadingPaneHidden(true);
       }
+    };
+  }
+
+  const unsubBtn = document.querySelector(".reading-actions .unsubscribe-btn");
+  if (unsubBtn) {
+    unsubBtn.onclick = async () => {
+      const threadId = getThreadId?.();
+      const email = threadId && getThreadLatestEmail ? getThreadLatestEmail() : getSelected();
+      showUnsubscribeDialog(email, onRefresh);
     };
   }
 }
@@ -642,4 +676,54 @@ export function buildActionMenu(entries, anchor, onRefresh) {
   setTimeout(() => {
     document.addEventListener("click", () => menu.remove(), { once: true });
   }, 0);
+}
+
+function showUnsubscribeDialog(email, onRefresh) {
+  const existing = document.getElementById("unsubscribe-dialog");
+  if (existing) existing.remove();
+
+  const overlay = document.createElement("div");
+  overlay.id = "unsubscribe-dialog";
+  overlay.className = "verdant-overlay";
+  overlay.innerHTML = `
+    <div class="verdant-panel unsubscribe-panel">
+      <div class="verdant-head">
+        <h2>${t("reading.unsubscribe_confirm_title")}</h2>
+        <button class="verdant-close" aria-label="Close">×</button>
+      </div>
+      <p>${t("reading.unsubscribe_confirm_body", { sender: escapeHtml(email.sender || "") })}</p>
+      <div class="verdant-actions">
+        <button class="verdant-btn" data-action="cancel">${t("reading.unsubscribe_cancel")}</button>
+        <button class="verdant-btn primary" data-action="confirm">${t("reading.unsubscribe_confirm")}</button>
+      </div>
+    </div>
+  `;
+
+  overlay.querySelector(".verdant-close").addEventListener("click", () => overlay.remove());
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) overlay.remove(); });
+  overlay.querySelector("[data-action='cancel']").addEventListener("click", () => overlay.remove());
+
+  overlay.querySelector("[data-action='confirm']").addEventListener("click", async () => {
+    const confirmBtn = overlay.querySelector("[data-action='confirm']");
+    confirmBtn.disabled = true;
+    confirmBtn.textContent = t("reading.unsubscribing");
+
+    try {
+      const { unsubscribeFromList } = await import("../api.js");
+      await unsubscribeFromList(email.id);
+      email.unsubscribed = true;
+      overlay.remove();
+      updateTopActionStates(email);
+      showToast(t("toast.unsubscribed"));
+      if (onRefresh) onRefresh();
+    } catch (e) {
+      overlay.remove();
+      updateTopActionStates(email);
+      console.error("Unsubscribe failed:", e);
+      showToast(t("toast.unsubscribe_failed"), "error");
+    }
+  });
+
+  document.body.appendChild(overlay);
+  requestAnimationFrame(() => overlay.classList.add("open"));
 }

@@ -119,6 +119,7 @@ export function renderShell() {
             <button class="icon-btn" data-action="star" title="${t("reading.star")}">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
             </button>
+            <button class="unsubscribe-btn" data-action="unsubscribe" style="display:none">${t("reading.unsubscribe")}</button>
             <button class="icon-btn" data-action="more" title="${t("reading.more")}" style="margin-left:auto">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
             </button>

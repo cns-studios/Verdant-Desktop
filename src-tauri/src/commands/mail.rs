@@ -120,6 +120,7 @@ pub async fn sync_mailbox_page_internal_for(
             let to_recipients = strip_confusable_chars(&header_value(&headers, "To").unwrap_or_default());
             let cc_recipients = strip_confusable_chars(&header_value(&headers, "Cc").unwrap_or_default());
             let date = header_value(&headers, "Date").unwrap_or_else(|| "Unknown Date".to_string());
+            let list_unsubscribe = header_value(&headers, "List-Unsubscribe").unwrap_or_default();
             let internal_ts = detail_json.get("internalDate").and_then(Value::as_str).and_then(|s| s.parse::<i64>().ok()).unwrap_or(0);
 
             let (existing_body, existing_attachments) = {
@@ -152,8 +153,9 @@ pub async fn sync_mailbox_page_internal_for(
             let conn = state.conn.lock().await;
             conn.execute(
                 "INSERT INTO emails (id, account_id, draft_id, thread_id, subject, sender, to_recipients, cc_recipients,
-                                     snippet, body_html, attachments_json, has_attachments, date, is_read, mailbox, labels, internal_ts)
-                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17)
+                                     snippet, body_html, attachments_json, has_attachments, date, is_read, mailbox, labels, internal_ts,
+                                     list_unsubscribe)
+                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18)
                  ON CONFLICT(id, account_id) DO UPDATE SET
                     draft_id = excluded.draft_id,
                     thread_id = excluded.thread_id,
@@ -168,12 +170,14 @@ pub async fn sync_mailbox_page_internal_for(
                     date = excluded.date,
                     mailbox = excluded.mailbox,
                     labels = excluded.labels,
-                    internal_ts = excluded.internal_ts",
+                    internal_ts = excluded.internal_ts,
+                    list_unsubscribe = excluded.list_unsubscribe",
                 rusqlite::params![
                     composite_id, account_id, resolved_draft_id, thread_id,
                     subject, sender, to_recipients, cc_recipients,
                     snippet, body_html, attachments_json, has_attachments as i32,
-                    date, is_read as i32, mailbox, labels, internal_ts
+                    date, is_read as i32, mailbox, labels, internal_ts,
+                    list_unsubscribe
                 ],
             ).map_err(|e| e.to_string())?;
             
@@ -315,6 +319,8 @@ fn map_email_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Email> {
         labels: row.get(16)?,
         internal_ts: row.get(17)?,
         notified: row.get::<_, i32>(18)? != 0,
+        list_unsubscribe: row.get(19)?,
+        unsubscribed: row.get::<_, i32>(20)? != 0,
     })
 }
 
@@ -330,7 +336,8 @@ pub async fn get_emails(
     let emails = if box_name == "STARRED" {
         let mut stmt = conn.prepare(
             "SELECT id,account_id,draft_id,thread_id,subject,sender,to_recipients,cc_recipients,
-                    snippet,body_html,attachments_json,has_attachments,date,is_read,starred,mailbox,labels,internal_ts,notified
+                    snippet,body_html,attachments_json,has_attachments,date,is_read,starred,mailbox,labels,internal_ts,notified,
+                    list_unsubscribe,unsubscribed
      FROM emails WHERE starred=1 AND account_id=?1 ORDER BY internal_ts DESC, rowid DESC LIMIT 500"
 ).map_err(|e| e.to_string())?;
         let x = stmt.query_map([account_id], map_email_row).map_err(|e| e.to_string())?
@@ -338,7 +345,8 @@ pub async fn get_emails(
     } else {
         let mut stmt = conn.prepare(
             "SELECT id,account_id,draft_id,thread_id,subject,sender,to_recipients,cc_recipients,
-                    snippet,body_html,attachments_json,has_attachments,date,is_read,starred,mailbox,labels,internal_ts,notified
+                    snippet,body_html,attachments_json,has_attachments,date,is_read,starred,mailbox,labels,internal_ts,notified,
+                    list_unsubscribe,unsubscribed
      FROM emails WHERE mailbox=?1 AND account_id=?2 ORDER BY internal_ts DESC, rowid DESC LIMIT 500"
 ).map_err(|e| e.to_string())?;
 let x = stmt.query_map(rusqlite::params![box_name, account_id], map_email_row)
@@ -375,7 +383,8 @@ pub async fn deep_search_emails(
                     let pattern = format!("%{}%", query);
                     let mut stmt = conn.prepare(
                         "SELECT id,account_id,draft_id,thread_id,subject,sender,to_recipients,cc_recipients,
-                                snippet,body_html,attachments_json,has_attachments,date,is_read,starred,mailbox,labels,internal_ts,notified
+                                snippet,body_html,attachments_json,has_attachments,date,is_read,starred,mailbox,labels,internal_ts,notified,
+                                list_unsubscribe,unsubscribed
                          FROM emails WHERE account_id=?1 AND (subject LIKE ?2 OR sender LIKE ?2 OR snippet LIKE ?2)
                          ORDER BY internal_ts DESC LIMIT 100"
                     ).map_err(|e| e.to_string())?;
@@ -423,6 +432,7 @@ pub async fn deep_search_emails(
         let to_recipients = strip_confusable_chars(&header_value(&headers, "To").unwrap_or_default());
         let cc_recipients = strip_confusable_chars(&header_value(&headers, "Cc").unwrap_or_default());
         let date = header_value(&headers, "Date").unwrap_or_default();
+        let list_unsubscribe = header_value(&headers, "List-Unsubscribe").unwrap_or_default();
         let labels = detail_json.get("labelIds").and_then(Value::as_array).map(|a| a.iter().filter_map(Value::as_str).collect::<Vec<_>>().join(",")).unwrap_or_default();
         let internal_ts = detail_json.get("internalDate").and_then(Value::as_str).and_then(|s| s.parse::<i64>().ok()).unwrap_or(0);
         let body_html = detail_json.get("payload").and_then(extract_body).unwrap_or_else(|| format!("<pre>{}</pre>", snippet));
@@ -444,6 +454,8 @@ pub async fn deep_search_emails(
             labels,
             internal_ts,
             notified: false,
+            list_unsubscribe,
+            unsubscribed: false,
         });
     }
 
@@ -798,7 +810,8 @@ pub async fn get_thread_messages(
 
     let mut stmt = conn.prepare(
         "SELECT id,account_id,draft_id,thread_id,subject,sender,to_recipients,cc_recipients,
-                snippet,body_html,attachments_json,has_attachments,date,is_read,starred,mailbox,labels,internal_ts,notified
+                snippet,body_html,attachments_json,has_attachments,date,is_read,starred,mailbox,labels,internal_ts,notified,
+                list_unsubscribe,unsubscribed
          FROM emails WHERE thread_id=?1 AND account_id=?2 ORDER BY internal_ts ASC, rowid ASC"
     ).map_err(|e| e.to_string())?;
 
@@ -944,21 +957,23 @@ pub async fn sync_imap_mailbox_page(
                 let _ = conn.execute(
                     "INSERT INTO emails (id, account_id, draft_id, thread_id, subject, sender, to_recipients, cc_recipients,
                                          snippet, body_html, attachments_json, has_attachments, date, is_read, starred,
-                                         mailbox, labels, internal_ts)
-                     VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18)
+                                         mailbox, labels, internal_ts, list_unsubscribe)
+                     VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19)
                     ON CONFLICT(id, account_id) DO UPDATE SET
                         snippet = excluded.snippet,
                         body_html = excluded.body_html,
                         is_read = excluded.is_read,
                         mailbox = excluded.mailbox,
                         labels = excluded.labels,
-                        internal_ts = excluded.internal_ts",
+                        internal_ts = excluded.internal_ts,
+                        list_unsubscribe = excluded.list_unsubscribe",
                     rusqlite::params![
                         email.id, email.account_id, email.draft_id, email.thread_id,
                         email.subject, email.sender, email.to_recipients, email.cc_recipients,
                         email.snippet, email.body_html, email.attachments_json,
                         email.has_attachments as i32, email.date, email.is_read as i32,
-                        email.starred as i32, email.mailbox, email.labels, email.internal_ts
+                        email.starred as i32, email.mailbox, email.labels, email.internal_ts,
+                        email.list_unsubscribe
                     ],
                 );
             }

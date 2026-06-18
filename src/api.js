@@ -75,3 +75,5 @@ export const autostartIsEnabled = () => invoke("autostart_is_enabled");
 
 export const getStartupFlags = () => invoke("get_startup_flags");
 export const hideMainWindow = () => invoke("hide_main_window");
+
+export const unsubscribeFromList = (emailId) => invoke("unsubscribe_from_list", { emailId });

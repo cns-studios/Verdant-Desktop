@@ -61,6 +61,8 @@ pub struct Email {
     pub labels: String,
     pub internal_ts: i64,
     pub notified: bool,
+    pub list_unsubscribe: String,
+    pub unsubscribed: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -111,6 +113,8 @@ pub fn init_db(conn: &Connection) -> Result<()> {
             labels TEXT NOT NULL DEFAULT '',
             internal_ts INTEGER NOT NULL DEFAULT 0,
             notified INTEGER NOT NULL DEFAULT 0,
+            list_unsubscribe TEXT NOT NULL DEFAULT '',
+            unsubscribed INTEGER NOT NULL DEFAULT 0,
             PRIMARY KEY (id, account_id)
         );
     ")?;
@@ -163,6 +167,8 @@ pub fn init_db(conn: &Connection) -> Result<()> {
     let _ = conn.execute("ALTER TABLE emails ADD COLUMN attachments_json TEXT NOT NULL DEFAULT '[]'", []);
     let _ = conn.execute("ALTER TABLE emails ADD COLUMN has_attachments INTEGER NOT NULL DEFAULT 0", []);
     let _ = conn.execute("ALTER TABLE emails ADD COLUMN notified INTEGER NOT NULL DEFAULT 0", []);
+    let _ = conn.execute("ALTER TABLE emails ADD COLUMN list_unsubscribe TEXT NOT NULL DEFAULT ''", []);
+    let _ = conn.execute("ALTER TABLE emails ADD COLUMN unsubscribed INTEGER NOT NULL DEFAULT 0", []);
 
     let _ = conn.execute(
         "DELETE FROM emails WHERE subject = 'Welcome to Verdant' AND sender = 'foo@example.com'",

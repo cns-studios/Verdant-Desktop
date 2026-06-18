@@ -162,8 +162,8 @@ pub async fn save_draft(
         conn.execute(
             "INSERT INTO emails (id, account_id, draft_id, thread_id, subject, sender, to_recipients, cc_recipients,
                                 snippet, body_html, attachments_json, has_attachments, date, is_read, starred,
-                                mailbox, labels, internal_ts)
-            VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,'[]',0,?11,1,0,'DRAFT','DRAFT',?12)
+                                mailbox, labels, internal_ts, list_unsubscribe)
+            VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,'[]',0,?11,1,0,'DRAFT','DRAFT',?12,'')
             ON CONFLICT(id, account_id) DO UPDATE SET
                 subject = excluded.subject,
                 to_recipients = excluded.to_recipients,

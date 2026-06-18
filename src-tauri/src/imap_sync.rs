@@ -27,7 +27,7 @@ impl ImapCredentials {
 
 type TlsSession = imap::Session<native_tls::TlsStream<std::net::TcpStream>>;
 
-fn connect(creds: &ImapCredentials) -> Result<TlsSession, String> {
+pub fn connect(creds: &ImapCredentials) -> Result<TlsSession, String> {
     let tls = TlsConnector::builder()
         .build()
         .map_err(|e| format!("TLS build error: {}", e))?;
@@ -310,6 +310,7 @@ pub fn sync_imap_mailbox(
         let to_recipients  = headers.get_first_value("To").unwrap_or_default();
         let cc_recipients  = headers.get_first_value("Cc").unwrap_or_default();
         let date           = headers.get_first_value("Date").unwrap_or_default();
+        let list_unsubscribe = headers.get_first_value("List-Unsubscribe").unwrap_or_default();
         let message_id = headers.get_first_value("Message-ID")
             .unwrap_or_else(|| format!("imap-{}-{}-{}", account.id, mailbox_label, uid));
         let thread_id      = headers.get_first_value("In-Reply-To")
@@ -345,6 +346,8 @@ pub fn sync_imap_mailbox(
             labels: mailbox_label.to_string(),
             internal_ts,
             notified: false,
+            list_unsubscribe,
+            unsubscribed: false,
         });
     }
 
@@ -472,6 +475,7 @@ pub fn imap_search_emails(
         let to_recipients = headers.get_first_value("To").unwrap_or_default();
         let cc_recipients = headers.get_first_value("Cc").unwrap_or_default();
         let date = headers.get_first_value("Date").unwrap_or_default();
+        let list_unsubscribe = headers.get_first_value("List-Unsubscribe").unwrap_or_default();
         let message_id = headers.get_first_value("Message-ID")
             .unwrap_or_else(|| format!("imap-{}-search-{}", account.id, uid));
         let thread_id = headers.get_first_value("In-Reply-To")
@@ -507,6 +511,8 @@ pub fn imap_search_emails(
             labels: "INBOX".to_string(),
             internal_ts,
             notified: false,
+            list_unsubscribe,
+            unsubscribed: false,
         });
     }
 
@@ -749,6 +755,7 @@ pub fn sync_imap_mailbox_page(
         let to_recipients = headers.get_first_value("To").unwrap_or_default();
         let cc_recipients = headers.get_first_value("Cc").unwrap_or_default();
         let date = headers.get_first_value("Date").unwrap_or_default();
+        let list_unsubscribe = headers.get_first_value("List-Unsubscribe").unwrap_or_default();
         let message_id = headers.get_first_value("Message-ID")
             .unwrap_or_else(|| format!("imap-{}-{}-{}", account.id, mailbox_label, uid));
         let thread_id = headers.get_first_value("In-Reply-To")
@@ -784,10 +791,37 @@ pub fn sync_imap_mailbox_page(
             labels: mailbox_label.to_string(),
             internal_ts,
             notified: false,
+            list_unsubscribe,
+            unsubscribed: false,
         });
     }
 
     let _ = session.logout();
     emails.sort_by(|a, b| b.internal_ts.cmp(&a.internal_ts));
     Ok(emails)
+}
+
+pub fn fetch_list_unsubscribe_header(account: &Account, uid_str: &str) -> Result<String, String> {
+    let creds = ImapCredentials::from_account(account)?;
+    let mut session = connect(&creds)?;
+
+    let uid: u32 = uid_str.parse().map_err(|_| format!("Invalid UID: {}", uid_str))?;
+
+    let messages = session.fetch(
+        format!("{}:{}", uid, uid).as_str(),
+        "(BODY.PEEK[HEADER.FIELDS (List-Unsubscribe)])",
+    ).map_err(|e| format!("IMAP fetch error: {}", e))?;
+
+    for msg in messages.iter() {
+        if let Some(body) = msg.body() {
+            let parsed = mailparse::parse_mail(body).map_err(|e| format!("Parse error: {}", e))?;
+            if let Some(val) = parsed.get_headers().get_first_value("List-Unsubscribe") {
+                let _ = session.logout();
+                return Ok(val);
+            }
+        }
+    }
+
+    let _ = session.logout();
+    Err("No List-Unsubscribe header found".to_string())
 }

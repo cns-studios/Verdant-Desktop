@@ -4,6 +4,7 @@ pub mod auth;
 pub mod autostart;
 pub mod compose;
 pub mod mail;
+pub mod unsubscribe;
 pub mod updater;
 pub mod app_config;
 pub mod shell;

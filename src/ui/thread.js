@@ -153,7 +153,7 @@ function renderThreadPane(thread, messages) {
   const metaEl = document.querySelector(".reading-meta");
   if (metaEl) metaEl.style.display = "none";
 
-  updateThreadActionStates(thread);
+  updateThreadActionStates(thread, messages);
 
   const readingBody = document.querySelector(".reading-body");
   if (!readingBody) return;
@@ -365,9 +365,29 @@ function parseAttachments(message) {
 }
 
 
-function updateThreadActionStates(thread) {
+function updateThreadActionStates(thread, messages) {
   const buttons = Array.from(document.querySelectorAll(".reading-actions .icon-btn"));
-  
+
+  const unsubBtn = document.querySelector(".reading-actions .unsubscribe-btn");
+  if (unsubBtn) {
+    const latest = messages && messages.length > 0 ? messages[messages.length - 1] : null;
+    const hasUnsub = latest?.list_unsubscribe && latest.list_unsubscribe.trim().length > 0;
+    if (!hasUnsub) {
+      unsubBtn.style.display = "none";
+    } else {
+      unsubBtn.style.display = "";
+      if (latest?.unsubscribed) {
+        unsubBtn.classList.add("unsubscribed");
+        unsubBtn.textContent = t("reading.unsubscribed");
+        unsubBtn.disabled = true;
+      } else {
+        unsubBtn.classList.remove("unsubscribed");
+        unsubBtn.textContent = t("reading.unsubscribe");
+        unsubBtn.disabled = false;
+      }
+    }
+  }
+
   buttons.forEach(btn => {
     if (!btn.dataset.action) {
       const initialTitle = btn.getAttribute("title") || "";
@@ -421,6 +441,10 @@ function resetReadingPane() {
 
 export function getSelectedThreadId() {
   return selectedThreadId;
+}
+
+export function getSelectedThreadLatestMessage() {
+  return selectedThreadMessages.length > 0 ? selectedThreadMessages[selectedThreadMessages.length - 1] : null;
 }
 
 export function clearSelectedThread() {

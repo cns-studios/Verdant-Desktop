@@ -51,7 +51,7 @@ import { checkForUpdates, downloadLatestUpdate, switchAccount, listAccounts } fr
 import { getInboxThreads } from "./api.js";
 import {
     renderThreadList,
-    getSelectedThreadId, clearSelectedThread,
+    getSelectedThreadId, getSelectedThreadLatestMessage, clearSelectedThread,
 } from "./ui/thread.js";
 import { t, initLang } from "./lib/i18n.js";
 
@@ -635,6 +635,7 @@ async function initializeConnectedUI() {
         openComposeForDraft,
         () => currentMailbox,
         () => getSelectedThreadId(),
+        () => getSelectedThreadLatestMessage(),
     );
     bindFilterChips();
     bindSearch();

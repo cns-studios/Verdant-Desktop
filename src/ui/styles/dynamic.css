@@ -86,6 +86,36 @@
 body.reading-pane-hidden .reading-pane { display: none !important; }
 body.reading-pane-hidden .pane-resizer { display: none !important; }
 body.reading-pane-hidden .email-list-pane { flex:1 1 auto !important; width:auto !important; min-width:0 !important; max-width:none !important; border-right:0 !important; }
+.unsubscribe-btn {
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--green);
+  font: 500 12px 'DM Sans', sans-serif;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .12s, border-color .12s;
+}
+.unsubscribe-btn:hover {
+  background: var(--green-pale);
+  border-color: var(--green-muted);
+}
+.unsubscribe-btn.unsubscribed {
+  color: var(--text-muted);
+  cursor: default;
+  opacity: .6;
+}
+.unsubscribe-btn.unsubscribed:hover {
+  background: transparent;
+  border-color: var(--border);
+}
+.unsubscribe-panel p {
+  word-break: break-word;
+}
 .icon-btn.active { background: var(--green-pale); color: var(--green); border:1px solid var(--green-muted); }
 .icon-btn.danger:hover { background:#f5dede !important; color:#8a2e2e !important; border:1px solid #d79f9f; }
 .compose-maximized { width:min(1100px, 96vw) !important; height:min(90vh, 920px) !important; display:flex !important; flex-direction:column !important; }

@@ -226,8 +226,8 @@ async fn upsert_emails(state: &DbState, account_id: i64, emails: Vec<crate::db::
         let _ = conn.execute(
             "INSERT INTO emails (id, account_id, draft_id, thread_id, subject, sender, to_recipients, cc_recipients,
                                  snippet, body_html, attachments_json, has_attachments, date, is_read, starred,
-                                 mailbox, labels, internal_ts)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18)
+                                 mailbox, labels, internal_ts, list_unsubscribe)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19)
              ON CONFLICT(id, account_id) DO UPDATE SET
                 thread_id=excluded.thread_id,
                 subject=excluded.subject,
@@ -243,13 +243,15 @@ async fn upsert_emails(state: &DbState, account_id: i64, emails: Vec<crate::db::
                 starred=excluded.starred,
                 mailbox=excluded.mailbox,
                 labels=excluded.labels,
-                internal_ts=excluded.internal_ts",
+                internal_ts=excluded.internal_ts,
+                list_unsubscribe=excluded.list_unsubscribe",
             rusqlite::params![
                 email.id, email.account_id, email.draft_id, email.thread_id,
                 email.subject, email.sender, email.to_recipients, email.cc_recipients,
                 email.snippet, email.body_html, email.attachments_json,
                 email.has_attachments as i32, email.date, email.is_read as i32,
-                email.starred as i32, email.mailbox, email.labels, email.internal_ts
+                email.starred as i32, email.mailbox, email.labels, email.internal_ts,
+                email.list_unsubscribe
             ],
         );
     }
