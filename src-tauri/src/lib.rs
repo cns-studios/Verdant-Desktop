@@ -116,6 +116,14 @@ pub fn run() {
                 })
                 .build(app)?;
 
+            // workaround: tauri dev sometimes loads tauri://localhost instead of devUrl
+            #[cfg(debug_assertions)]
+            {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.navigate(url::Url::parse("http://localhost:5173").expect("invalid dev url"));
+                }
+            }
+
             Ok(())
         })
         .on_window_event(|window, event| {
