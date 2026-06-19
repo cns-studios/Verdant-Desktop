@@ -6,6 +6,7 @@ import { t } from "../lib/i18n.js";
 import { applySenderAvatar, buildActionMenu } from "./reading.js";
 import { downloadAttachment } from "../api.js";
 import { openComposeForReply, openComposeForForward } from "./compose.js";
+import { refreshCounts } from "./sidebar.js";
 
 
 let currentThreads = [];
@@ -137,7 +138,7 @@ async function selectThread(thread, row) {
         expanded.is_read = true;
         setEmailReadStatus(expanded.id, true).catch(() => {});
       }
-      if (onCountsRefreshCallback) onCountsRefreshCallback();
+      refreshCounts().catch(() => {});
     }
   } catch (err) {
     if (readingBody) {
