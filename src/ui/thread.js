@@ -1,4 +1,4 @@
-import { getInboxThreads, getThreadMessages, markThreadRead, archiveEmail, trashEmail, toggleStarred, setEmailReadStatus } from "../api.js";
+import { getInboxThreads, getThreadMessages, markThreadRead, archiveEmail, trashEmail, toggleStarred, setEmailReadStatus, openExternalUrl } from "../api.js";
 import { escapeHtml, sanitizeUnicodeNoise, formatListDate, formatReadingDate } from "../lib/format.js";
 import { sanitizeEmailHtml } from "../lib/sanitize.js";
 import { showToast } from "../lib/toast.js";
@@ -236,6 +236,39 @@ function buildMessageBubble(message, allMessages) {
         </style>
         <div class="email-center">${sanitized}</div>
       `;
+
+      shadow.querySelectorAll("a[href]").forEach((a) => {
+        const originalHref = a.getAttribute("href") || "";
+        a.setAttribute("data-verdant-href", originalHref);
+        a.setAttribute("href", "#");
+        a.setAttribute("target", "_self");
+        a.setAttribute("rel", "noopener noreferrer");
+      });
+
+      const handleLinkIntent = (e) => {
+        const target = e.target instanceof Element ? e.target : e.target?.parentElement;
+        const a = target?.closest?.("a[href]");
+        if (!a) return;
+
+        const href = a.getAttribute("data-verdant-href") || a.getAttribute("href");
+        e.preventDefault();
+        e.stopPropagation();
+
+        if (!(href && (href.startsWith("http://") || href.startsWith("https://")))) {
+          return;
+        }
+
+        openExternalUrl(href).catch((error) => {
+          console.error("External link open failed", error);
+        });
+      };
+
+      shadow.addEventListener("click", handleLinkIntent, true);
+      shadow.addEventListener("auxclick", handleLinkIntent, true);
+      shadow.addEventListener("keydown", (e) => {
+        if (e.key !== "Enter") return;
+        handleLinkIntent(e);
+      }, true);
     }
   } else {
     bubble.innerHTML = buildCollapsedBubble(message, senderName);
