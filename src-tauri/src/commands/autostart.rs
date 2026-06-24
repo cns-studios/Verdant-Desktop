@@ -50,17 +50,17 @@ fn enable_impl(app: &tauri::AppHandle) -> Result<(), String> {
         "[Unit]\n\
         Description=Verdant Desktop\n\
         After=graphical-session.target\n\
-        PartOf=graphical-session.target\n\
+        BindsTo=graphical-session.target\n\
+        Wants=dbus.socket\n\
         \n\
         [Service]\n\
         Type=exec\n\
-        Environment=DISPLAY=:0\n\
         ExecStart={} --autostart\n\
         Restart=on-failure\n\
         RestartSec=5\n\
         \n\
         [Install]\n\
-        WantedBy=default.target",
+        WantedBy=graphical-session.target",
         exe
     );
 
