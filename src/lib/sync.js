@@ -1,4 +1,4 @@
-import { syncMailboxPage, getEmails } from "../api.js";
+import { syncMailboxPage, getEmails, getActiveAccountInfo, syncImapMailboxPage } from "../api.js";
 import { ingestContactsFromEmails } from "./contacts.js";
 import { t } from "./i18n.js";
 
@@ -38,27 +38,22 @@ export async function syncMailboxInBackground(mailbox, force = false, onSynced =
   if (!force && now - last < RESYNC_COOLDOWN_MS) return;
   lastSynced.set(key, now);
 
-  try {
-    const { getActiveAccountInfo, syncImapMailboxPage } = await import("../api.js");
-    const info = await getActiveAccountInfo();
-    
-    if (info?.provider === "imap") {
-      const currentOffset = mailboxNextPageToken.get(mailbox) || 0;
-      if (currentOffset !== -1) {
-        const hasMore = await syncImapMailboxPage(mailbox, currentOffset);
-        if (hasMore) {
-          mailboxNextPageToken.set(mailbox, currentOffset + 50);
-        } else {
-          mailboxNextPageToken.set(mailbox, 0);
-        }
+  const info = await getActiveAccountInfo();
+
+  if (info?.provider === "imap") {
+    const currentOffset = mailboxNextPageToken.get(mailbox) || 0;
+    if (currentOffset !== -1) {
+      const hasMore = await syncImapMailboxPage(mailbox, currentOffset);
+      if (hasMore) {
+        mailboxNextPageToken.set(mailbox, currentOffset + 50);
+      } else {
+        mailboxNextPageToken.set(mailbox, 0);
       }
-      const latest = await getEmails(mailbox);
-      ingestContactsFromEmails(latest);
-      if (onSynced) onSynced(mailbox, latest);
-      return;
     }
-  } catch (err) {
-    console.warn("IMAP manual sync warning:", err);
+    const latest = await getEmails(mailbox);
+    ingestContactsFromEmails(latest);
+    if (onSynced) onSynced(mailbox, latest);
+    return;
   }
 
   

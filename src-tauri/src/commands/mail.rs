@@ -954,7 +954,7 @@ pub async fn sync_imap_mailbox_page(
             let has_more = !emails.is_empty();
             let conn = state.conn.lock().await;
             for email in emails {
-                let _ = conn.execute(
+                if let Err(e) = conn.execute(
                     "INSERT INTO emails (id, account_id, draft_id, thread_id, subject, sender, to_recipients, cc_recipients,
                                          snippet, body_html, attachments_json, has_attachments, date, is_read, starred,
                                          mailbox, labels, internal_ts, list_unsubscribe)
@@ -975,7 +975,9 @@ pub async fn sync_imap_mailbox_page(
                         email.starred as i32, email.mailbox, email.labels, email.internal_ts,
                         email.list_unsubscribe
                     ],
-                );
+                ) {
+                    log::error!("sync_imap_mailbox_page upsert failed: {}", e);
+                }
             }
             Ok(has_more)
         }

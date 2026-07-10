@@ -6,7 +6,7 @@ use crate::db::{get_all_accounts, Account};
 use crate::state::DbState;
 
 const SYNC_INTERVAL_SECS: u64 = 45;
-const IMAP_SYNC_INTERVAL_SECS: u64 = 12;
+const IMAP_SYNC_INTERVAL_SECS: u64 = 60;
 const IMAP_MAILBOXES: &[&str] = &["INBOX", "SENT", "DRAFT", "TRASH"];
 
 
@@ -223,7 +223,7 @@ async fn upsert_emails(state: &DbState, account_id: i64, emails: Vec<crate::db::
     for email in &emails {
         synced_ids.push(email.id.clone());
 
-        let _ = conn.execute(
+        if let Err(e) = conn.execute(
             "INSERT INTO emails (id, account_id, draft_id, thread_id, subject, sender, to_recipients, cc_recipients,
                                  snippet, body_html, attachments_json, has_attachments, date, is_read, starred,
                                  mailbox, labels, internal_ts, list_unsubscribe)
@@ -253,7 +253,9 @@ async fn upsert_emails(state: &DbState, account_id: i64, emails: Vec<crate::db::
                 email.starred as i32, email.mailbox, email.labels, email.internal_ts,
                 email.list_unsubscribe
             ],
-        );
+        ) {
+            log::error!("IMAP upsert email {} failed: {}", email.id, e);
+        }
     }
 
     if !synced_ids.is_empty() {
@@ -283,6 +285,8 @@ async fn upsert_emails(state: &DbState, account_id: i64, emails: Vec<crate::db::
             params.push(rusqlite::types::Value::Text(id));
         }
 
-        let _ = conn.execute(&sql, rusqlite::params_from_iter(params));
+        if let Err(e) = conn.execute(&sql, rusqlite::params_from_iter(params)) {
+            log::error!("IMAP upsert OTHER marking failed: {}", e);
+        }
     }
 }

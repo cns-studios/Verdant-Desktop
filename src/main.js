@@ -531,6 +531,8 @@ function bindHotkeys() {
             try {
                 await loadLocalMailbox(currentMailbox, true);
                 await syncMailboxInBackground(currentMailbox, true, onSynced);
+            } catch (err) {
+                showToast(String(err), "error");
             } finally {
                 isSyncing = false;
             }
