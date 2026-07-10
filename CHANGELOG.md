@@ -8,6 +8,7 @@
 - Improved styling of the Settings
 - Added Unsubscribe Button for Advertisment Emails
 - Improved Email rendering
+- Improved SMTP connection reliability
 
 ## [2.2.17]
 - Read/Unread status of mails are synced to the mail provider

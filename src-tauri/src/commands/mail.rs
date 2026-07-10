@@ -3,7 +3,7 @@ use serde_json::{json, Value};
 use tauri::State;
 use futures::StreamExt;
 
-use crate::db::{clear_account_emails, Email};
+use crate::db::{clear_account_emails, get_account_by_id, Account, Email};
 use crate::gmail::{
     collect_attachments, extract_body, header_value, mailbox_from_labels, mailbox_label,
     strip_confusable_chars, AttachmentMeta,
@@ -195,7 +195,72 @@ pub async fn sync_mailbox_page_internal_for(
     Ok(next_page_token)
 }
 
+pub async fn sync_imap_mailbox_internal_for(state: &DbState, account: &Account, mailbox: &str) -> Result<(), String> {
+    let account_id = account.id;
+    let acc = account.clone();
+    let mb = mailbox.to_string();
+    let mb_for_fallback = mb.clone();
+
+    let stored_state = {
+        let conn = state.conn.lock().await;
+        crate::db::get_mailbox_sync_state(&conn, account_id, &mb)
+            .ok().flatten()
+    };
+    let (stored_uidvalidity, stored_highest_uid) = stored_state
+        .map(|s| (Some(s.uidvalidity), Some(s.highest_uid)))
+        .unwrap_or((None, None));
+
+    let result = tokio::task::spawn_blocking(move || {
+        crate::imap_sync::sync_imap_mailbox_incremental(&acc, &mb, stored_uidvalidity, stored_highest_uid)
+    }).await.map_err(|e| format!("IMAP task error: {}", e))?;
+
+    match result {
+        Ok(sync_result) => {
+            crate::background_sync::upsert_emails(state, account_id, sync_result.emails, &mb_for_fallback).await;
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs() as i64)
+                .unwrap_or(0);
+            let sync_state = crate::db::MailboxSyncState {
+                account_id,
+                mailbox_name: mb_for_fallback.clone(),
+                highest_uid: sync_result.highest_uid,
+                uidvalidity: sync_result.uidvalidity,
+                last_synced_at: now,
+            };
+            let conn = state.conn.lock().await;
+            let _ = crate::db::set_mailbox_sync_state(&conn, &sync_state);
+            Ok(())
+        }
+        Err(e) => {
+            log::error!("IMAP sync error account={} mailbox={}: {}", account_id, mailbox, e);
+            let acc2 = account.clone();
+            let mb2 = mailbox.to_string();
+            let mb2_fb = mb2.clone();
+            let fallback = tokio::task::spawn_blocking(move || {
+                crate::imap_sync::sync_imap_mailbox(&acc2, &mb2, 50)
+            }).await.map_err(|e| format!("IMAP fallback task error: {}", e))?;
+            if let Ok(emails) = fallback {
+                crate::background_sync::upsert_emails(state, account_id, emails, &mb2_fb).await;
+            }
+            Ok(())
+        }
+    }
+}
+
 pub async fn sync_mailbox_internal_for(state: &DbState, account_id: i64, mailbox: &str) -> Result<(), String> {
+    let account = {
+        let conn = state.conn.lock().await;
+        get_account_by_id(&conn, account_id)
+            .ok()
+            .flatten()
+    };
+    if let Some(ref acc) = account {
+        if acc.provider == "imap" {
+            return sync_imap_mailbox_internal_for(state, acc, mailbox).await;
+        }
+    }
+
     let mut synced_ids = Vec::new();
     let mut current_token: Option<String> = None;
     let mut first_page = true;

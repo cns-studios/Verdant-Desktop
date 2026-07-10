@@ -170,6 +170,17 @@ pub fn init_db(conn: &Connection) -> Result<()> {
     let _ = conn.execute("ALTER TABLE emails ADD COLUMN list_unsubscribe TEXT NOT NULL DEFAULT ''", []);
     let _ = conn.execute("ALTER TABLE emails ADD COLUMN unsubscribed INTEGER NOT NULL DEFAULT 0", []);
 
+    conn.execute_batch("
+        CREATE TABLE IF NOT EXISTS mailbox_sync_state (
+            account_id INTEGER NOT NULL,
+            mailbox_name TEXT NOT NULL,
+            highest_uid INTEGER NOT NULL DEFAULT 0,
+            uidvalidity INTEGER NOT NULL DEFAULT 0,
+            last_synced_at INTEGER NOT NULL DEFAULT 0,
+            PRIMARY KEY (account_id, mailbox_name)
+        );
+    ")?;
+
     let _ = conn.execute(
         "DELETE FROM emails WHERE subject = 'Welcome to Verdant' AND sender = 'foo@example.com'",
         [],
@@ -324,6 +335,47 @@ pub fn get_token(conn: &Connection) -> Result<Option<StoredToken>> {
             expires_at_epoch: a.expires_at_epoch,
         })
     }))
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MailboxSyncState {
+    pub account_id: i64,
+    pub mailbox_name: String,
+    pub highest_uid: u32,
+    pub uidvalidity: u32,
+    pub last_synced_at: i64,
+}
+
+pub fn get_mailbox_sync_state(conn: &Connection, account_id: i64, mailbox_name: &str) -> Result<Option<MailboxSyncState>> {
+    let mut stmt = conn.prepare(
+        "SELECT account_id, mailbox_name, highest_uid, uidvalidity, last_synced_at
+         FROM mailbox_sync_state WHERE account_id = ?1 AND mailbox_name = ?2"
+    )?;
+    let mut rows = stmt.query(params![account_id, mailbox_name])?;
+    if let Some(row) = rows.next()? {
+        Ok(Some(MailboxSyncState {
+            account_id: row.get(0)?,
+            mailbox_name: row.get(1)?,
+            highest_uid: row.get::<_, i64>(2)? as u32,
+            uidvalidity: row.get::<_, i64>(3)? as u32,
+            last_synced_at: row.get(4)?,
+        }))
+    } else {
+        Ok(None)
+    }
+}
+
+pub fn set_mailbox_sync_state(conn: &Connection, state: &MailboxSyncState) -> Result<()> {
+    conn.execute(
+        "INSERT INTO mailbox_sync_state (account_id, mailbox_name, highest_uid, uidvalidity, last_synced_at)
+         VALUES (?1, ?2, ?3, ?4, ?5)
+         ON CONFLICT(account_id, mailbox_name) DO UPDATE SET
+            highest_uid = excluded.highest_uid,
+            uidvalidity = excluded.uidvalidity,
+            last_synced_at = excluded.last_synced_at",
+        params![state.account_id, state.mailbox_name, state.highest_uid as i64, state.uidvalidity as i64, state.last_synced_at],
+    )?;
+    Ok(())
 }
 
 pub fn clear_tokens(conn: &Connection) -> Result<()> {
