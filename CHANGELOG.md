@@ -9,6 +9,8 @@
 - Added Unsubscribe Button for Advertisment Emails
 - Improved Email rendering
 - Improved SMTP connection reliability
+- Better contrast in light mode
+- New icons used across the App
 
 ## [2.2.17]
 - Read/Unread status of mails are synced to the mail provider
