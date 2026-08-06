@@ -1,4 +1,5 @@
 import { t } from "../lib/i18n.js";
+import { icon } from "./icons.js";
 
 export function renderShell() {
   const root = document.getElementById("root");
@@ -11,13 +12,13 @@ export function renderShell() {
       </div>
       <div class="app-header-controls" id="app-header-controls">
         <button class="app-win-btn" id="app-min-btn" aria-label="${t("app.minimize_window")}" title="${t("app.minimize")}">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          ${icon("minus")}
         </button>
         <button class="app-win-btn" id="app-max-btn" aria-label="${t("app.maximize_window")}" title="${t("app.maximize")}">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="5" width="14" height="14" rx="1"/></svg>
+          ${icon("square")}
         </button>
         <button class="app-win-btn close" id="app-close-btn" aria-label="${t("app.close_window")}" title="${t("app.close")}">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          ${icon("x")}
         </button>
       </div>
     </header>
@@ -27,17 +28,12 @@ export function renderShell() {
         <div class="sidebar-header">
           <div class="logo">
             <div class="logo-mark">
-              <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
-                <polyline points="22,6 12,13 2,6"/>
-              </svg>
+              ${icon("mail")}
             </div>
             <span class="logo-name">Verdant</span>
           </div>
           <button class="compose-btn" id="compose-open-btn">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-            </svg>
+            ${icon("plus")}
             ${t("sidebar.compose")}
           </button>
         </div>
@@ -45,27 +41,27 @@ export function renderShell() {
         <div class="sidebar-section">
           <div class="section-label">${t("sidebar.mailboxes")}</div>
           <div class="nav-item active" data-mailbox="INBOX">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 13V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v12c0 1.1.9 2 2 2h8"/><polyline points="22,6 12,13 2,6"/></svg>
+            ${icon("inbox")}
             ${t("sidebar.inbox")}
           </div>
           <div class="nav-item" data-mailbox="STARRED">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+            ${icon("star")}
             ${t("sidebar.starred")}
           </div>
           <div class="nav-item" data-mailbox="ARCHIVE">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>
+            ${icon("archive")}
             ${t("sidebar.archive")}
           </div>
           <div class="nav-item" data-mailbox="SENT">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+            ${icon("send")}
             ${t("sidebar.sent")}
           </div>
           <div class="nav-item" data-mailbox="DRAFT">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            ${icon("file-text")}
             ${t("sidebar.drafts")}
           </div>
           <div class="nav-item" data-mailbox="TRASH">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+            ${icon("trash")}
             ${t("sidebar.trash")}
           </div>
         </div>
@@ -88,7 +84,7 @@ export function renderShell() {
             <span class="list-count">0 ${t("list.count", { n: 0 })}</span>
           </div>
           <div class="search-bar">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            ${icon("search")}
             <input type="text" placeholder="${t("list.search.placeholder")}" id="search-input">
           </div>
           <div class="filter-chips">
@@ -108,23 +104,23 @@ export function renderShell() {
         <div class="reading-header">
           <div class="reading-actions">
             <button class="icon-btn" data-action="archive" title="${t("reading.archive")}">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>
+              ${icon("archive")}
             </button>
             <button class="icon-btn" data-action="delete" title="${t("reading.delete")}">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+              ${icon("trash")}
             </button>
             <button class="icon-btn" data-action="mark_unread" title="${t("reading.mark_unread")}">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+              ${icon("mail")}
             </button>
             <button class="icon-btn" data-action="star" title="${t("reading.star")}">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+              ${icon("star")}
             </button>
             <button class="unsubscribe-btn" data-action="unsubscribe" style="display:none">${t("reading.unsubscribe")}</button>
             <button class="icon-btn" data-action="more" title="${t("reading.more")}" style="margin-left:auto">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
+              ${icon("dots")}
             </button>
             <button class="icon-btn" data-action="close" title="${t("reading.close")}" aria-label="${t("reading.close")}">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              ${icon("x")}
             </button>
           </div>
 
@@ -152,7 +148,7 @@ export function renderShell() {
           <span class="modal-title">${t("compose.title")}</span>
           <div class="modal-header-actions">
             <button class="modal-close" id="compose-max-btn" title="${t("app.maximize")}" aria-label="${t("app.maximize")}">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="1"></rect></svg>
+              ${icon("square")}
             </button>
             <button class="modal-close" id="compose-close-btn">×</button>
           </div>
@@ -198,16 +194,16 @@ export function renderShell() {
         <div class="modal-footer">
           <div class="modal-tools">
             <button class="modal-tool" id="compose-attach-btn" title="${t("compose.tool.attach")}">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+              ${icon("paperclip")}
             </button>
             <button class="modal-tool" id="compose-format-btn" title="${t("compose.tool.format")}">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/></svg>
+              ${icon("forms")}
             </button>
           </div>
           <div style="display:flex; gap:8px;">
             <button class="verdant-btn" id="compose-save-draft-btn">${t("compose.save_draft")}</button>
             <button class="send-btn" id="compose-send-btn">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+              ${icon("send")}
               ${t("compose.send")}
             </button>
           </div>

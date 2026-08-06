@@ -53,8 +53,9 @@
       border-radius: 7px;
       display: flex; align-items: center; justify-content: center;
       flex-shrink: 0;
+      color: #fff;
     }
-    .logo-mark svg { width: 14px; height: 14px; }
+    .logo-mark svg { width: 16px; height: 16px; }
     .name {
       font-family: 'Fraunces', serif;
       font-size: 15px; font-weight: 500;
@@ -90,7 +91,7 @@
       font-size: 12px;
       display: flex; align-items: center; gap: 7px;
     }
-    .note svg { width: 13px; height: 13px; flex-shrink: 0; }
+    .note svg { width: 15px; height: 15px; flex-shrink: 0; }
     @media (max-width: 640px) {
       .content { padding: 26px 20px 28px; }
       h1 { font-size: 31px; }
@@ -102,10 +103,7 @@
     <div class="topbar">
       <div class="brand">
         <div class="logo-mark" aria-hidden="true">
-          <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
-            <polyline points="22,6 12,13 2,6"/>
-          </svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 7a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2v10a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2v-10"/><path d="M3 7l9 6l9 -6"/></svg>
         </div>
         <div class="name">Verdant</div>
       </div>
@@ -115,11 +113,7 @@
       <h1 id="heading"></h1>
       <p id="subtext"></p>
       <div class="note">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <circle cx="12" cy="12" r="10"></circle>
-          <line x1="12" y1="8" x2="12" y2="12"></line>
-          <line x1="12" y1="16" x2="12.01" y2="16"></line>
-        </svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 12a9 9 0 1 0 18 0a9 9 0 0 0 -18 0"/><path d="M12 9h.01"/><path d="M11 12h1v4h1"/></svg>
         <span id="note-text"></span>
       </div>
     </div>

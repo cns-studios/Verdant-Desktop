@@ -21,8 +21,9 @@
 .ob-logo-mark {
     width: 34px; height: 34px; background: var(--green);
     border-radius: 9px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    color: #fff;
 }
-.ob-logo-mark svg { width: 17px; height: 17px; }
+.ob-logo-mark svg { width: 19px; height: 19px; }
 .ob-brand-name { font: 500 20px 'Fraunces', serif; color: var(--text); letter-spacing: -0.3px; }
 .ob-brand-row { display: flex; align-items: center; justify-content: space-between; }
 .ob-lang-picker { display: flex; align-items: center; gap: 7px; }
@@ -90,5 +91,5 @@
 .ob-win-btn { width:28px; height:24px; border-radius:7px; border:1px solid var(--border); background:var(--surface2); color:var(--text-mid); display:inline-flex; align-items:center; justify-content:center; cursor:pointer; transition:all .12s ease; }
 .ob-win-btn:hover { background:var(--white); color:var(--text); }
 .ob-win-btn.close:hover { background:#f3dfdf; border-color:#ddb5b5; color:#8a2e2e; }
-.ob-win-btn svg { width:12px; height:12px; stroke-width:2.2; }
+.ob-win-btn svg { width:14px; height:14px; stroke-width:2.2; }
 .ob-root.ob-has-header { padding-top: 66px; }

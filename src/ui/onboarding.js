@@ -2,6 +2,7 @@ import { connectGmail } from "../api.js";
 import { escapeHtml } from "../lib/format.js";
 import { showToast } from "../lib/toast.js";
 import { t, getLang, setLang, getSupportedLanguages, initLang } from "../lib/i18n.js";
+import { icon } from "./icons.js";
 
 function providerCardHtml(id, label, description, icon, available) {
     return `
@@ -16,9 +17,9 @@ function providerCardHtml(id, label, description, icon, available) {
     `;
 }
 
-const mailIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="20" height="20"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>`;
-const serverIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="20" height="20"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>`;
-const globeIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="20" height="20"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>`;
+const mailIcon = icon("mail", 22);
+const serverIcon = icon("activity", 22);
+const globeIcon = icon("globe", 22);
 
 function renderOnboardingContent(root, onSuccess, cancelable) {
     const langs = getSupportedLanguages();
@@ -28,10 +29,7 @@ function renderOnboardingContent(root, onSuccess, cancelable) {
         <div class="ob-brand-row">
             <div class="ob-brand">
                 <div class="ob-logo-mark">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
-                        <polyline points="22,6 12,13 2,6"/>
-                    </svg>
+                    ${icon("mail")}
                 </div>
                 <span class="ob-brand-name">Verdant</span>
             </div>
@@ -118,13 +116,13 @@ export function showOnboarding(onSuccess, cancelable = false) {
             </div>
             <div class="ob-header-controls">
                 <button class="ob-win-btn" id="ob-min-btn" aria-label="Minimize">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    ${icon("minus")}
                 </button>
                 <button class="ob-win-btn" id="ob-max-btn" aria-label="Maximize">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="5" width="14" height="14" rx="1"/></svg>
+                    ${icon("square")}
                 </button>
                 <button class="ob-win-btn close" id="ob-close-btn" aria-label="Close">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    ${icon("x")}
                 </button>
             </div>
         `;

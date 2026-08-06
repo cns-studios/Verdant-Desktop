@@ -4,6 +4,7 @@ import { sanitizeEmailHtml } from "../lib/sanitize.js";
 import { showToast } from "../lib/toast.js";
 import { downloadAttachment } from "../api.js";
 import { openExternalUrl } from "../api.js";
+import { icon } from "./icons.js";
 import { t } from "../lib/i18n.js";
 
 function senderInitials(sender) {
@@ -146,12 +147,12 @@ function showAttachmentDownloadModal(filename) {
 async function showAttachmentDownloadSuccess(filename) {
   const modal = document.getElementById("attachment-download-modal");
   if (!modal) return;
-  const icon = modal.querySelector(".attachment-download-icon");
+  const iconEl = modal.querySelector(".attachment-download-icon");
   const text = modal.querySelector(".attachment-download-text");
-  if (icon) {
-    icon.classList.remove("is-spinning");
-    icon.classList.add("is-success");
-    icon.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7L10 17l-5-5"/></svg>`;
+  if (iconEl) {
+    iconEl.classList.remove("is-spinning");
+    iconEl.classList.add("is-success");
+    iconEl.innerHTML = icon("check");
   }
   if (text) text.textContent = t("app.attachment_downloaded", { name: filename || "attachment" });
   await new Promise((resolve) => setTimeout(resolve, 1500));
@@ -415,10 +416,10 @@ export function updateTopActionStates(email, mailbox) {
       btn.classList.add("danger");
       if (isTrash) {
         btn.setAttribute("title", t("reading.permanent_delete"));
-        btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/><line x1="9" y1="11" x2="15" y2="17"/><line x1="15" y1="11" x2="9" y2="17"/></svg>`;
+        btn.innerHTML = icon("trash-x");
       } else {
         btn.setAttribute("title", t("reading.delete"));
-        btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>`;
+        btn.innerHTML = icon("trash");
       }
     }
 
@@ -426,11 +427,11 @@ export function updateTopActionStates(email, mailbox) {
       if (isTrash) {
         btn.style.display = "";
         btn.setAttribute("title", t("reading.restore"));
-        btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 00-9-9 9 9 0 00-6 2.3L3 13"/></svg>`;
+        btn.innerHTML = icon("rotate");
       } else {
         btn.style.display = isDraft || isSent ? "none" : "";
         btn.setAttribute("title", t("reading.archive"));
-        btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>`;
+        btn.innerHTML = icon("archive");
       }
     }
 

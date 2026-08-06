@@ -14,7 +14,7 @@ const translations = {
     "onboarding.connecting": "Connecting...",
     "onboarding.language.label": "Language",
 
-    "sidebar.mailboxes": "Mailboxes",
+    "sidebar.mailboxes": "Menu",
     "sidebar.inbox": "Inbox",
     "sidebar.starred": "Starred",
     "sidebar.archive": "Archive",
@@ -265,7 +265,7 @@ const translations = {
     "onboarding.connecting": "Verbinde...",
     "onboarding.language.label": "Sprache",
 
-    "sidebar.mailboxes": "Postfächer",
+    "sidebar.mailboxes": "Menü",
     "sidebar.inbox": "Posteingang",
     "sidebar.starred": "Markiert",
     "sidebar.archive": "Archiv",

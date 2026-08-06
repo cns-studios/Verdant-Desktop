@@ -97,7 +97,7 @@
     transition: background .1s, color .1s;
 }
 .account-popover-action:hover { background: var(--surface2); color: var(--text); }
-.account-popover-action svg { width: 14px; height: 14px; flex-shrink: 0; }
+.account-popover-action svg { width: 16px; height: 16px; flex-shrink: 0; }
 
 .add-account-overlay {
     position: fixed; inset: 0;

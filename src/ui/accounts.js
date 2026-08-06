@@ -6,6 +6,7 @@ import { openWhatsNewModal } from "./whatsnew.js";
 import { escapeHtml } from "../lib/format.js";
 import { showToast } from "../lib/toast.js";
 import { t } from "../lib/i18n.js";
+import { icon } from "./icons.js";
 
 
 
@@ -97,9 +98,7 @@ export async function openAccountPopover(onSwitch, onAddAccount) {
     const addBtn = document.createElement("div");
     addBtn.className = "account-popover-action";
     addBtn.innerHTML = `
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>
-        </svg>
+        ${icon("circle-plus")}
         ${t("sidebar.add_account")}
     `;
     addBtn.onclick = () => {
@@ -112,10 +111,7 @@ export async function openAccountPopover(onSwitch, onAddAccount) {
     const whatsNewBtn = document.createElement("div");
     whatsNewBtn.className = "account-popover-action";
     whatsNewBtn.innerHTML = `
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="10"/>
-            <polyline points="12 6 12 12 16 14"/>
-        </svg>
+        ${icon("news")}
         ${t("whatsnew.title")}
     `;
     whatsNewBtn.onclick = async () => {
@@ -133,10 +129,7 @@ export async function openAccountPopover(onSwitch, onAddAccount) {
     const settingsBtn = document.createElement("div");
     settingsBtn.className = "account-popover-action";
     settingsBtn.innerHTML = `
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="3"/>
-            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-        </svg>
+        ${icon("settings")}
         ${t("settings.title")}
     `;
     settingsBtn.onclick = () => {
@@ -159,9 +152,9 @@ export function closeAccountPopover() {
 
 
 
-const mailIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="20" height="20"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>`;
-const globeIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="20" height="20"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>`;
-const serverIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="20" height="20"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>`;
+const mailIcon = icon("mail", 22);
+const globeIcon = icon("globe", 22);
+const serverIcon = icon("activity", 22);
 
 const PROVIDERS = [
     { id: "gmail", name: "Gmail",       icon: mailIcon,   desc: "Google OAuth" },

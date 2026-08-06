@@ -77,10 +77,10 @@
 .attachment-download-modal { position: fixed; inset: 0; z-index: 2500; background: rgba(31,28,24,.18); pointer-events:none; }
 .attachment-download-card { position:absolute; right:14px; top:14px; width:min(340px, calc(100vw - 28px)); background: var(--surface); border:1px solid var(--border); border-radius:12px; padding:14px; box-shadow: 0 16px 34px rgba(37,35,31,.2); display:flex; align-items:center; gap:10px; transform: translateX(120%); opacity:0; transition: transform .24s ease, opacity .24s ease; }
 .attachment-download-modal.open .attachment-download-card { transform: translateX(0); opacity:1; }
-.attachment-download-icon { width:16px; height:16px; display:flex; align-items:center; justify-content:center; flex-shrink:0; color: var(--green); }
+.attachment-download-icon { width:18px; height:18px; display:flex; align-items:center; justify-content:center; flex-shrink:0; color: var(--green); }
 .attachment-download-icon.is-spinning { border:2px solid var(--green-muted); border-top-color: var(--green); border-radius:50%; animation: verdant-spin .8s linear infinite; }
 .attachment-download-icon.is-success { border:0; animation:none; }
-.attachment-download-icon.is-success svg { width:16px; height:16px; stroke:currentColor; fill:none; stroke-width:2.4; stroke-linecap:round; stroke-linejoin:round; }
+.attachment-download-icon.is-success svg { width:18px; height:18px; stroke:currentColor; fill:none; stroke-width:2.4; stroke-linecap:round; stroke-linejoin:round; }
 .attachment-download-text { font:500 12px 'DM Sans', sans-serif; color: var(--text); }
 @keyframes verdant-spin { to { transform: rotate(360deg); } }
 body.reading-pane-hidden .reading-pane { display: none !important; }
@@ -122,7 +122,7 @@ body.reading-pane-hidden .email-list-pane { flex:1 1 auto !important; width:auto
 .compose-maximized .modal-body { flex:1 !important; max-height:none !important; height:auto !important; overflow-y:auto; }
 .compose-maximized .modal-footer { flex-shrink:0; }
 #compose-max-btn { display:flex; align-items:center; justify-content:center; }
-#compose-max-btn svg { width:16px; height:16px; }
+#compose-max-btn svg { width:18px; height:18px; }
 .thread-count {
   display: inline-flex;
   align-items: center;

@@ -7,6 +7,7 @@ import { applySenderAvatar, buildActionMenu } from "./reading.js";
 import { downloadAttachment } from "../api.js";
 import { openComposeForReply, openComposeForForward } from "./compose.js";
 import { refreshCounts } from "./sidebar.js";
+import { icon } from "./icons.js";
 
 
 let currentThreads = [];
@@ -334,11 +335,11 @@ function buildExpandedBubble(message, senderName) {
     </div>
     <div class="thread-bubble-actions">
       <button class="thread-reply-btn" data-action="reply">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/></svg>
+        ${icon("arrow-back-up", 15)}
         ${t("thread.reply")}
       </button>
       <button class="thread-reply-btn" data-action="forward">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><polyline points="15 17 20 12 15 7"/><path d="M4 18v-2a4 4 0 0 1 4-4h12"/></svg>
+        ${icon("arrow-forward-up", 15)}
         ${t("thread.forward")}
       </button>
     </div>
@@ -476,14 +477,14 @@ function updateThreadActionStates(thread, messages) {
     if (action === "archive") {
       btn.style.display = "";
       btn.setAttribute("title", t("reading.archive"));
-      btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>`;
+      btn.innerHTML = icon("archive");
     }
     
     if (action === "delete") {
       btn.style.display = "";
       btn.classList.add("danger");
       btn.setAttribute("title", t("reading.delete"));
-      btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>`;
+      btn.innerHTML = icon("trash");
     }
 
     if (action === "mark_unread") {

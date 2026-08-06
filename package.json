@@ -7,9 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "tauri": "tauri",
-    "icons": "node scripts/generate-icons.js",
-    "icons:help": "cat src-tauri/icons/README.md"
+    "tauri": "tauri"
   },
   "devDependencies": {
     "@tauri-apps/cli": "~2.10.1",
