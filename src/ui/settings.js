@@ -5,6 +5,7 @@ import { showToast } from "../lib/toast.js";
 import { getHotkeys, saveHotkeys, defaultHotkeys, normalizeCombo, eventCombo } from "../lib/hotkeys.js";
 import { syncMailboxInBackground, lastSynced } from "../lib/sync.js";
 import { t, getLang, setLang, getSupportedLanguages } from "../lib/i18n.js";
+import { icon } from "./icons.js";
 import { getVersion } from "@tauri-apps/api/app";
 
 const UPDATE_PREFS_KEY = "verdant.updatePrefs";
@@ -184,6 +185,30 @@ export function closeOverlay(immediate = false) {
   if (immediate) { overlay.remove(); return; }
   overlay.classList.remove("open");
   setTimeout(() => overlay.remove(), 180);
+}
+
+export function showLanguageReloadOverlay() {
+  closeOverlay(true);
+  document.getElementById("verdant-lang-reload-overlay")?.remove();
+
+  const overlay = document.createElement("div");
+  overlay.id = "verdant-lang-reload-overlay";
+  overlay.className = "verdant-overlay";
+  overlay.innerHTML = `
+    <div class="verdant-panel lang-reload-panel">
+      <div class="lang-reload-icon">${icon("mail")}</div>
+      <h2 class="lang-reload-title">${escapeHtml(t("lang.reload.title"))}</h2>
+      <p class="lang-reload-body">${escapeHtml(t("lang.reload.body"))}</p>
+      <button class="lang-reload-btn" id="lang-reload-btn">${escapeHtml(t("lang.reload.button"))}</button>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+  requestAnimationFrame(() => overlay.classList.add("open"));
+
+  overlay.querySelector("#lang-reload-btn").addEventListener("click", () => {
+    window.location.reload();
+  });
 }
 
 function buildAppTab(profile, accounts, counts, langs, currentLang, version) {
@@ -434,7 +459,7 @@ export async function openSettingsModal(profile, currentMailbox, onLogout, onSyn
   panel.querySelector("#settings-lang-select")?.addEventListener("change", (e) => {
     setLang(e.target.value);
     closeOverlay();
-    openSettingsModal(profile, currentMailbox, onLogout, onSync);
+    showLanguageReloadOverlay();
   });
 
   panel.querySelector("#app-show-notifications")?.addEventListener("change", (e) => {

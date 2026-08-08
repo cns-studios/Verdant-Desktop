@@ -107,7 +107,7 @@ const translations = {
     "toast.read_marked": "Marked as read",
     "toast.unread_marked": "Marked as unread",
     "toast.fetching": "Fetching mails...",
-    "toast.rate_limited": "Google API rate limited - using cached data, will retry shortly",
+    "toast.rate_limited": "Cannot retreive latest data - using cached data, will retry shortly",
     "toast.sync_complete": "Sync complete",
     "toast.db_cleared": "Local database cleared",
     "toast.shortcuts_saved": "Shortcuts saved",
@@ -246,6 +246,10 @@ const translations = {
     "settings.version": "Version",
     "settings.user_fallback": "User",
 
+    "lang.reload.title": "Reload required",
+    "lang.reload.body": "To apply the new language, Verdant needs to be reloaded. Click the button below to reload.",
+    "lang.reload.button": "Reload",
+
     "whatsnew.title": "What's New",
     "whatsnew.dismiss": "Cool!",
   },
@@ -358,7 +362,7 @@ const translations = {
     "toast.read_marked": "Als gelesen markiert",
     "toast.unread_marked": "Als ungelesen markiert",
     "toast.fetching": "Mails werden abgerufen...",
-    "toast.rate_limited": "Google-API-Ratenlimit - verwende zwischengespeicherte Daten, erneuter Versuch in Kürze",
+    "toast.rate_limited": "Neuste Daten können nicht abgerufen werden - verwende zwischengespeicherte Daten, erneuter Versuch in Kürze",
     "toast.sync_complete": "Synchronisierung abgeschlossen",
     "toast.db_cleared": "Lokale Datenbank geleert",
     "toast.shortcuts_saved": "Tastenkürzel gespeichert",
@@ -491,6 +495,10 @@ const translations = {
     "accounts.switched": "Zu {account} gewechselt",
     "settings.version": "Version",
     "settings.user_fallback": "Benutzer",
+
+    "lang.reload.title": "Neu laden erforderlich",
+    "lang.reload.body": "Um die neue Sprache zu übernehmen, muss Verdant neu geladen werden. Klicke auf die Schaltfläche unten, um neu zu laden.",
+    "lang.reload.button": "Neu laden",
 
     "whatsnew.title": "Neuerungen",
     "whatsnew.dismiss": "Super!",

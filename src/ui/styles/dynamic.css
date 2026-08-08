@@ -7,6 +7,14 @@
 .verdant-close { border:1px solid var(--border); background: var(--surface2); border-radius:8px; width:30px; height:30px; cursor:pointer; color:var(--text); }
 .verdant-panel p { font: 400 13px 'DM Sans', sans-serif; color: var(--text-mid); line-height:1.5; margin-bottom:12px; }
 .verdant-actions { display:flex; gap:10px; justify-content:flex-end; }
+.lang-reload-panel { width:min(440px, 94vw); display:flex; flex-direction:column; align-items:center; gap:12px; text-align:center; padding:38px 32px; }
+.lang-reload-icon { width:52px; height:52px; border-radius:50%; background:var(--green-pale); color:var(--green); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.lang-reload-icon svg { width:26px; height:26px; }
+.lang-reload-title { font:500 20px 'Fraunces', serif; color:var(--text); letter-spacing:-.3px; margin:0; }
+.lang-reload-body { font:400 13px/1.55 'DM Sans', sans-serif; color:var(--text-mid); margin:0; max-width:340px; }
+.lang-reload-btn { margin-top:8px; padding:9px 28px; background:var(--green); color:#fff; border:none; border-radius:8px; font:500 13px 'DM Sans', sans-serif; cursor:pointer; transition:all .12s; }
+.lang-reload-btn:hover { background:var(--accent); transform:translateY(-1px); }
+.lang-reload-btn:active { transform:scale(.98); }
 .verdant-btn { padding:8px 14px; border-radius:8px; border:1px solid var(--border); background: var(--surface2); color: var(--text); font: 500 12px 'DM Sans', sans-serif; cursor:pointer; }
 .verdant-btn.primary { background: var(--green); color:#fff; border-color: var(--green); }
 .email-item-main { display:flex; align-items:flex-start; gap:10px; width:100%; }
