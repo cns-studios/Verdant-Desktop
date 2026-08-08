@@ -11,6 +11,7 @@
 - Improved SMTP connection reliability
 - Better contrast in light mode
 - New icons used across the App
+- Better Language switching
 
 ## [2.2.17]
 - Read/Unread status of mails are synced to the mail provider
