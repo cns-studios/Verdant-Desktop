@@ -70,6 +70,7 @@ pub fn run() {
                 tokens: Mutex::new(HashMap::new()),
                 active_account_id: Mutex::new(initial_active_id),
                 sync_handles: Mutex::new(HashMap::new()),
+                rate_limited_until: Mutex::new(HashMap::new()),
             });
 
             app.manage(state.clone());

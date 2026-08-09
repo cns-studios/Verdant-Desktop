@@ -7,6 +7,12 @@ const RESYNC_COOLDOWN_MS = 10 * 1000;
 export const mailboxNextPageToken = new Map();
 export const lastSynced = new Map();
 
+export function setSyncBarVisible(visible) {
+  const bar = document.getElementById("list-sync-bar");
+  if (!bar) return;
+  bar.classList.toggle("visible", !!visible);
+}
+
 const KNOWN_IDS_KEY = "verdant.knownInboxIds";
 export let knownInboxIds = loadKnownIds();
 
@@ -38,35 +44,40 @@ export async function syncMailboxInBackground(mailbox, force = false, onSynced =
   if (!force && now - last < RESYNC_COOLDOWN_MS) return;
   lastSynced.set(key, now);
 
-  const info = await getActiveAccountInfo();
+  setSyncBarVisible(true);
+  try {
+    const info = await getActiveAccountInfo();
 
-  if (info?.provider === "imap") {
-    const currentOffset = mailboxNextPageToken.get(mailbox) || 0;
-    if (currentOffset !== -1) {
-      const hasMore = await syncImapMailboxPage(mailbox, currentOffset);
-      if (hasMore) {
-        mailboxNextPageToken.set(mailbox, currentOffset + 50);
-      } else {
-        mailboxNextPageToken.set(mailbox, 0);
+    if (info?.provider === "imap") {
+      const currentOffset = mailboxNextPageToken.get(mailbox) || 0;
+      if (currentOffset !== -1) {
+        const hasMore = await syncImapMailboxPage(mailbox, currentOffset);
+        if (hasMore) {
+          mailboxNextPageToken.set(mailbox, currentOffset + 50);
+        } else {
+          mailboxNextPageToken.set(mailbox, 0);
+        }
       }
+      const latest = await getEmails(mailbox);
+      ingestContactsFromEmails(latest);
+      if (onSynced) onSynced(mailbox, latest);
+      return;
     }
+
+    
+    if (mailbox !== "STARRED" && mailbox !== "ARCHIVE") {
+      const next = await syncMailboxPage(mailbox, null);
+      mailboxNextPageToken.set(mailbox, next || null);
+    }
+
     const latest = await getEmails(mailbox);
     ingestContactsFromEmails(latest);
-    if (onSynced) onSynced(mailbox, latest);
-    return;
-  }
 
-  
-  if (mailbox !== "STARRED" && mailbox !== "ARCHIVE") {
-    const next = await syncMailboxPage(mailbox, null);
-    mailboxNextPageToken.set(mailbox, next || null);
-  }
-
-  const latest = await getEmails(mailbox);
-  ingestContactsFromEmails(latest);
-
-  if (onSynced) {
-    onSynced(mailbox, latest);
+    if (onSynced) {
+      onSynced(mailbox, latest);
+    }
+  } finally {
+    setSyncBarVisible(false);
   }
 }
 

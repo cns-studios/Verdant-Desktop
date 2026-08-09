@@ -1,7 +1,7 @@
 use rusqlite::Connection;
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tokio::sync::Mutex;
 
 use crate::auth;
@@ -15,6 +15,8 @@ pub struct DbState {
     pub active_account_id: Mutex<i64>,
     
     pub sync_handles: Mutex<HashMap<i64, tokio::sync::oneshot::Sender<()>>>,
+    
+    pub rate_limited_until: Mutex<HashMap<i64, Instant>>,
 }
 
 pub type SharedState = Arc<DbState>;
@@ -28,6 +30,29 @@ pub fn now_epoch() -> i64 {
 
 pub async fn get_active_id(state: &DbState) -> i64 {
     *state.active_account_id.lock().await
+}
+
+pub fn mark_rate_limited(state: &DbState, account_id: i64, retry_after: Duration) {
+    let until = Instant::now() + retry_after;
+    if let Ok(mut map) = state.rate_limited_until.try_lock() {
+        map.insert(account_id, until);
+    }
+}
+
+pub fn rate_limited_remain(state: &DbState, account_id: i64) -> Option<Duration> {
+    let Ok(map) = state.rate_limited_until.try_lock() else {
+        return None;
+    };
+    match map.get(&account_id) {
+        Some(until) if *until > Instant::now() => Some(*until - Instant::now()),
+        _ => None,
+    }
+}
+
+pub fn clear_rate_limited(state: &DbState, account_id: i64) {
+    if let Ok(mut map) = state.rate_limited_until.try_lock() {
+        map.remove(&account_id);
+    }
 }
 
 

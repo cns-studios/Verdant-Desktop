@@ -181,6 +181,14 @@ pub fn init_db(conn: &Connection) -> Result<()> {
         );
     ")?;
 
+    conn.execute_batch("
+        CREATE TABLE IF NOT EXISTS gmail_sync_state (
+            account_id INTEGER PRIMARY KEY,
+            history_id TEXT NOT NULL,
+            last_synced_at INTEGER NOT NULL DEFAULT 0
+        );
+    ")?;
+
     let _ = conn.execute(
         "DELETE FROM emails WHERE subject = 'Welcome to Verdant' AND sender = 'foo@example.com'",
         [],
@@ -376,6 +384,40 @@ pub fn set_mailbox_sync_state(conn: &Connection, state: &MailboxSyncState) -> Re
         params![state.account_id, state.mailbox_name, state.highest_uid as i64, state.uidvalidity as i64, state.last_synced_at],
     )?;
     Ok(())
+}
+
+pub fn get_gmail_history_id(conn: &Connection, account_id: i64) -> Result<Option<String>> {
+    let mut stmt = conn.prepare(
+        "SELECT history_id FROM gmail_sync_state WHERE account_id = ?1"
+    )?;
+    let mut rows = stmt.query(params![account_id])?;
+    if let Some(row) = rows.next()? {
+        Ok(Some(row.get(0)?))
+    } else {
+        Ok(None)
+    }
+}
+
+pub fn set_gmail_history_id(conn: &Connection, account_id: i64, history_id: &str) -> Result<()> {
+    conn.execute(
+        "INSERT INTO gmail_sync_state (account_id, history_id, last_synced_at)
+         VALUES (?1, ?2, ?3)
+         ON CONFLICT(account_id) DO UPDATE SET
+            history_id = excluded.history_id,
+            last_synced_at = excluded.last_synced_at",
+        params![account_id, history_id, crate::state::now_epoch()],
+    )?;
+    Ok(())
+}
+
+pub fn gmail_message_cached(conn: &Connection, account_id: i64, message_id: &str) -> Result<bool> {
+    let composite_id = format!("{}:{}", account_id, message_id);
+    let cached: bool = conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM emails WHERE id = ?1 AND account_id = ?2 AND body_html != '')",
+        params![composite_id, account_id],
+        |r| r.get(0),
+    ).unwrap_or(false);
+    Ok(cached)
 }
 
 pub fn clear_tokens(conn: &Connection) -> Result<()> {

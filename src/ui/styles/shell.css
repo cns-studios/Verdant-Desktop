@@ -43,6 +43,36 @@ body { -webkit-user-select: none; user-select: none; }
 .user-name { font-size:12.5px; font-weight:500; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .user-email { font-size:10.5px; color:var(--text-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .email-list-pane { width:320px; min-width:320px; max-width:68vw; background:var(--white); display:flex; flex-direction:column; overflow:hidden; }
+.list-sync-bar {
+  position:relative; height:3px; flex-shrink:0;
+  background:var(--surface2); overflow:hidden; pointer-events:none;
+  opacity:0; transition:opacity .25s ease;
+}
+.list-sync-bar.visible { opacity:1; }
+.list-sync-bar-inner {
+  position:absolute; inset:0;
+  background:linear-gradient(90deg, var(--surface2) 0%, var(--green) 40%, var(--green-light) 60%, var(--surface2) 100%);
+  background-size:200% 100%;
+  animation:list-sync-shimmer 1.4s linear infinite;
+}
+@keyframes list-sync-shimmer {
+  0% { background-position:200% 0; }
+  100% { background-position:-200% 0; }
+}
+.boot-screen {
+  position:fixed; inset:0; z-index:99999;
+  background:var(--bg); display:flex; align-items:center; justify-content:center;
+}
+.boot-spinner {
+  width:32px; height:32px; border:3px solid rgba(74,94,69,.2);
+  border-top-color:var(--green); border-radius:50%; animation:list-spin .7s linear infinite;
+}
+.list-loading { display:flex; align-items:center; justify-content:center; height:100%; min-height:180px; }
+.list-spinner {
+  width:22px; height:22px; border:2.5px solid rgba(74,94,69,.22);
+  border-top-color:var(--green); border-radius:50%; animation:list-spin .7s linear infinite;
+}
+@keyframes list-spin { to { transform:rotate(360deg); } }
 .pane-resizer { width:8px; cursor:col-resize; background:linear-gradient(to right, transparent 0, transparent 3px, var(--border) 3px, var(--border) 5px, transparent 5px, transparent 8px); flex-shrink:0; transition:background .12s; }
 .pane-resizer:hover { background:linear-gradient(to right, transparent 0, transparent 3px, var(--green-light) 3px, var(--green-light) 5px, transparent 5px, transparent 8px); }
 body.resizing { cursor:col-resize; user-select:none; }

@@ -7,8 +7,10 @@ use crate::imap_sync::{ImapCredentials, connect_with_timeout, SyncResult};
 use crate::state::DbState;
 
 const SYNC_INTERVAL_SECS: u64 = 45;
+const GMAIL_SYNC_INTERVAL_SECS: u64 = 120;
 const IMAP_SYNC_INTERVAL_SECS: u64 = 20;
 const IMAP_MAILBOXES: &[&str] = &["INBOX", "SENT", "DRAFT", "TRASH"];
+const GMAIL_STAGGER_CYCLE: u32 = 4;
 const IDLE_TIMEOUT_SECS: u64 = 60 * 5;
 const RETRY_BASE_MS: u64 = 1000;
 const RETRY_MAX_MS: u64 = 30000;
@@ -59,19 +61,50 @@ async fn run_gmail_sync_loop(
     mut shutdown: oneshot::Receiver<()>,
 ) {
     use crate::commands::mail::sync_mailbox_internal_for;
-    sync_mailbox_internal_for(&state, account.id, "INBOX").await.ok();
+
+    let account_id = account.id;
+    let mut cycle: u32 = 0;
+
+    sync_gmail_account(&app, &state, &account, cycle).await;
 
     loop {
         tokio::select! {
-            _ = tokio::time::sleep(Duration::from_secs(SYNC_INTERVAL_SECS)) => {
-                let fresh = get_fresh_account(&state, account.id).await;
-                if let Some(acc) = fresh {
-                    sync_gmail_account(&app, &state, &acc).await;
-                } else { break; }
+            _ = tokio::time::sleep(Duration::from_secs(GMAIL_SYNC_INTERVAL_SECS)) => {
+                let fresh = get_fresh_account(&state, account_id).await;
+                let Some(acc) = fresh else { break; };
+                cycle = cycle.wrapping_add(1);
+
+                if crate::state::rate_limited_remain(&state, account_id).is_some() {
+                    log::warn!("Gmail account={} rate limited — skipping sync cycle", account_id);
+                    continue;
+                }
+
+                sync_gmail_account(&app, &state, &acc, cycle).await;
             }
             _ = &mut shutdown => break,
         }
     }
+    let _ = app;
+}
+
+async fn sync_gmail_account(app: &tauri::AppHandle, state: &DbState, account: &Account, cycle: u32) {
+    use crate::commands::mail::sync_mailbox_internal_for;
+
+    let mailboxes: &[&str] = if cycle % GMAIL_STAGGER_CYCLE == 0 {
+        &["INBOX", "SENT", "DRAFT", "TRASH"]
+    } else {
+        &["INBOX"]
+    };
+
+    for mailbox in mailboxes {
+        if let Err(e) = sync_mailbox_internal_for(state, account.id, mailbox).await {
+            log::error!("Gmail sync error account={} mailbox={}: {}", account.id, mailbox, e);
+        }
+    }
+
+    emit_notifications_and_event_gmail(app.clone(), state, account).await;
+    use tauri::Emitter;
+    let _ = app.emit("emails-synced", ());
 }
 
 async fn run_imap_sync_loop(
@@ -145,22 +178,6 @@ async fn try_imap_idle(account: &Account, timeout: Duration) -> bool {
         Ok(Ok(notification)) => notification,
         _ => false,
     }
-}
-
-async fn sync_gmail_account(app: &tauri::AppHandle, state: &DbState, account: &Account) {
-    use crate::commands::mail::sync_mailbox_internal_for;
-
-    let mailboxes = ["INBOX", "SENT", "DRAFT", "TRASH"];
-
-    for mailbox in &mailboxes {
-        if let Err(e) = sync_mailbox_internal_for(state, account.id, mailbox).await {
-            log::error!("Gmail sync error account={} mailbox={}: {}", account.id, mailbox, e);
-        }
-    }
-
-    emit_notifications_and_event_gmail(app.clone(), state, account).await;
-    use tauri::Emitter;
-    let _ = app.emit("emails-synced", ());
 }
 
 async fn emit_notifications_and_event_gmail(app: tauri::AppHandle, state: &DbState, account: &Account) {

@@ -104,11 +104,6 @@ export function renderThreadList(threads, activeFilter, searchQuery, animate = f
     row.addEventListener("click", () => selectThread(thread, row));
     list.appendChild(row);
   }
-
-  if (!selectedThreadId && visible.length > 0) {
-    const firstRow = list.querySelector(".email-item");
-    if (firstRow) selectThread(visible[0], firstRow);
-  }
 }
 
 

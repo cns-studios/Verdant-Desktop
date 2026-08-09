@@ -95,6 +95,10 @@ export function renderShell() {
           </div>
         </div>
 
+        <div class="list-sync-bar" id="list-sync-bar">
+          <div class="list-sync-bar-inner"></div>
+        </div>
+
         <div class="email-list" id="email-list"></div>
       </div>
 

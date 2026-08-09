@@ -88,6 +88,56 @@ let isDeepSearchActive = false;
 let isFetchingMore = false;
 let isSyncing = false;
 
+const mailboxCache = new Map();
+let inboxThreadsCache = null;
+
+function showBootScreen() {
+    if (document.getElementById("boot-screen")) return;
+    const boot = document.createElement("div");
+    boot.id = "boot-screen";
+    boot.className = "boot-screen";
+    boot.innerHTML = '<div class="boot-spinner"></div>';
+    document.body.appendChild(boot);
+}
+
+function hideBootScreen() {
+    document.getElementById("boot-screen")?.remove();
+}
+
+function resetMailboxCaches() {
+    mailboxCache.clear();
+    inboxThreadsCache = null;
+    currentEmails = [];
+    mailboxNextPageToken.clear();
+}
+
+function showListLoading(visible = true) {
+    const list = document.getElementById("email-list");
+    if (!list) return;
+    if (visible) {
+        list.innerHTML = '<div class="list-loading"><div class="list-spinner"></div></div>';
+    } else if (list.querySelector(".list-loading")) {
+        list.innerHTML = "";
+    }
+}
+
+async function loadInboxThreads(animate = false) {
+    if (inboxThreadsCache) {
+        renderThreadList(inboxThreadsCache, activeFilter, searchQuery, animate);
+        return;
+    }
+    showListLoading();
+    try {
+        const threads = await getInboxThreads();
+        inboxThreadsCache = threads;
+        showListLoading(false);
+        renderThreadList(threads, activeFilter, searchQuery, animate);
+    } catch (e) {
+        showListLoading(false);
+        console.error("Failed to load inbox threads", e);
+    }
+}
+
 
 
 async function runStartupUpdateCheck() {
@@ -262,9 +312,6 @@ function renderEmailList(animate = false) {
     if (selectedRow && selectedRowEmail) {
         selectedEmail = selectedRowEmail;
         renderReadingPane(selectedRowEmail, currentMailbox);
-    } else if (!selectedEmail && emails.length > 0) {
-        const first = list.querySelector(".email-item");
-        if (first) selectEmail(emails[0], first);
     }
 }
 
@@ -298,13 +345,38 @@ async function loadLocalMailbox(mailbox, animate = false) {
 
     if (mailbox === "INBOX") {
         setListTitle(mailbox, 0);
-        const threads = await getInboxThreads();
-        ingestContactsFromEmails([]);
-        renderThreadList(threads, activeFilter, searchQuery, animate);
+        if (inboxThreadsCache) {
+            renderThreadList(inboxThreadsCache, activeFilter, searchQuery, animate);
+        } else {
+            showListLoading();
+            try {
+                const threads = await getInboxThreads();
+                inboxThreadsCache = threads;
+                renderThreadList(threads, activeFilter, searchQuery, animate);
+            } catch (e) {
+                console.error("Failed to load inbox threads", e);
+            } finally {
+                showListLoading(false);
+            }
+        }
     } else {
-        currentEmails = await getEmails(mailbox);
-        ingestContactsFromEmails(currentEmails);
-        renderEmailList(animate);
+        const cached = mailboxCache.get(mailbox);
+        if (cached) {
+            currentEmails = cached;
+            renderEmailList(animate);
+        } else {
+            showListLoading();
+            try {
+                currentEmails = await getEmails(mailbox);
+                mailboxCache.set(mailbox, currentEmails);
+                ingestContactsFromEmails(currentEmails);
+                renderEmailList(animate);
+            } catch (e) {
+                console.error(`Failed to load mailbox ${mailbox}`, e);
+            } finally {
+                showListLoading(false);
+            }
+        }
     }
 
     refreshAppHeaderSubtitle(currentMailbox, isComposeOpen, isSettingsOpen);
@@ -313,28 +385,29 @@ async function loadLocalMailbox(mailbox, animate = false) {
 
 async function openMailbox(mailbox, animate = false) {
     await loadLocalMailbox(mailbox, animate);
-    syncMailboxInBackground(mailbox, true, onSynced).catch((err) => {
+    try {
+        await syncMailboxInBackground(mailbox, true, onSynced);
+    } catch (err) {
         console.error("Background sync failed:", err);
-    });
+    }
+    loadLocalMailbox(mailbox, animate).catch(console.error);
+    hideBootScreen();
 }
 
 function onSynced(mailbox, latestEmails) {
   if (currentMailbox === mailbox) {
     if (mailbox === "INBOX") {
-      setTimeout(() => {
-        getInboxThreads().then(threads => {
-          renderThreadList(threads, activeFilter, searchQuery, false);
-        }).catch(console.error);
-      }, 300);
-    } else {
-      setTimeout(() => {
-        currentEmails = latestEmails;
-        renderEmailList(false);
+      getInboxThreads().then(threads => {
+        inboxThreadsCache = threads;
+        renderThreadList(threads, activeFilter, searchQuery, false);
         refreshCounts().catch(console.error);
-      }, 300);
-      return;
+      }).catch(console.error);
+    } else {
+      currentEmails = latestEmails || currentEmails;
+      mailboxCache.set(mailbox, currentEmails);
+      renderEmailList(false);
+      refreshCounts().catch(console.error);
     }
-    refreshCounts().catch(console.error);
   }
 }
 
@@ -345,17 +418,26 @@ async function refreshAfterAction() {
 
 
 
-async function handleAccountSwitch(accountId) {
-    if (accountId !== null) {
-        try { await switchAccount(accountId); } catch {}
-    }
-    
+async function switchActiveAccount(accountId) {
+    try {
+        await switchAccount(accountId);
+    } catch {}
+    resetMailboxCaches();
     try {
         const profile = await getUserProfile();
         setUserProfile(profile);
     } catch {}
     await openMailbox("INBOX", true);
     await refreshCounts();
+}
+
+async function handleAccountSwitch(accountId) {
+    if (accountId !== null) {
+        await switchActiveAccount(accountId);
+    } else {
+        await openMailbox("INBOX", true);
+        await refreshCounts();
+    }
 }
 
 async function handleAfterAddAccount(acc) {
@@ -464,7 +546,7 @@ function bindSearch() {
         searchQuery = input.value || "";
         if (!searchQuery.trim()) isDeepSearchActive = false;
         if (currentMailbox === "INBOX") {
-                getInboxThreads().then(threads => renderThreadList(threads, activeFilter, searchQuery, false)).catch(console.error);
+            loadInboxThreads(false);
         } else {
             renderEmailList(false);
         }
@@ -482,7 +564,7 @@ function bindFilterChips() {
             chip.classList.add("active");
             activeFilter = chip.dataset.filter || "All";
             if (currentMailbox === "INBOX") {
-            getInboxThreads().then(threads => renderThreadList(threads, activeFilter, searchQuery, false)).catch(console.error);
+                loadInboxThreads(false);
             } else {
                 renderEmailList(false);
             }
@@ -574,12 +656,8 @@ function bindHotkeys() {
 
                     const accountLabel = nextAccount.display_name || nextAccount.email;
                     showToast(t("accounts.switched", { account: accountLabel }));
-                    
-                    await switchAccount(nextAccount.id);
-                    const profile = await getUserProfile();
-                    setUserProfile(profile);
-                    await openMailbox("INBOX", true);
-                    await refreshCounts();
+
+                    await switchActiveAccount(nextAccount.id);
                 } catch (err) {
                     showToast(String(err), "error");
                 }
@@ -682,6 +760,7 @@ async function initializeConnectedUI() {
     const { notifyNewEmails } = await import("./lib/sync.js");
     await notifyNewEmails(inboxNow);
 
+    setReadingPaneHidden(true);
     await openMailbox("INBOX", true);
     
     checkAndShowWhatsNewModal().catch(() => {});
@@ -700,6 +779,7 @@ async function initializeConnectedUI() {
 
 document.addEventListener("DOMContentLoaded", async () => {
     initLang();
+    showBootScreen();
 
     const flags = await getStartupFlags().catch(() => ({ is_autostart: false }));
     if (flags.is_autostart) {
@@ -717,6 +797,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         const status = await authStatus();
 
         if (!status.has_client_id) {
+            hideBootScreen();
             renderShell();
             document.getElementById("root").innerHTML = `
                 <div style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:'DM Sans',sans-serif;color:var(--text-mid);flex-direction:column;gap:12px;">
@@ -728,12 +809,14 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
 
         if (!status.connected) {
+            hideBootScreen();
             showOnboarding(initializeConnectedUI);
             return;
         }
 
         await initializeConnectedUI();
     } catch (error) {
+        hideBootScreen();
         document.getElementById("root").innerHTML = `
             <div style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:'DM Sans',sans-serif;color:var(--text-mid);flex-direction:column;gap:12px;">
                 <div style="font:500 15px 'Fraunces',serif;color:var(--text);">${t("app.init_failed")}</div>

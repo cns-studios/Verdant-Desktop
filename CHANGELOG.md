@@ -1,6 +1,11 @@
 # Changelog
 
 ## [2.2.18]
+- Improved email syncing
+- Better Inbox loading
+- Minor bug fixes
+
+## [2.2.18]
 - Improved autostart for some Operating Systems
 - Added Appearance Tab in the Settings
 - Added Darkmode
