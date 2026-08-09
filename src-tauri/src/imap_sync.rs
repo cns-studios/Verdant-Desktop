@@ -462,17 +462,14 @@ pub fn test_imap_connection(
     username: &str,
     password: &str,
 ) -> Result<String, String> {
-    let tls = TlsConnector::builder()
-        .build()
-        .map_err(|e| format!("TLS error: {}", e))?;
+    let creds = ImapCredentials {
+        imap_host: imap_host.to_string(),
+        imap_port,
+        username: username.to_string(),
+        password: password.to_string(),
+    };
 
-    let client = imap::connect((imap_host, imap_port), imap_host, &tls)
-        .map_err(|e| format!("Connection failed: {}", e))?;
-
-    let mut session = client
-        .login(username, password)
-        .map_err(|(e, _)| format!("Login failed: {}", e))?;
-
+    let mut session = connect_with_timeout(&creds, CONNECT_TIMEOUT_SECS)?;
     let _ = session.logout();
     Ok(username.to_string())
 }

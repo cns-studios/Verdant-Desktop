@@ -60,6 +60,27 @@
     background: var(--surface2); border: 1px solid var(--border);
     border-radius: 999px; padding: 2px 8px; white-space: nowrap; flex-shrink: 0;
 }
+.ob-root.ob-behind-modal {
+    z-index: 2050;
+    filter: blur(1px);
+    pointer-events: none;
+}
+.ob-root.ob-behind-modal .ob-header { z-index: 2050; }
+.ob-provider-card.ob-connecting {
+    opacity: .6;
+    pointer-events: none;
+}
+.ob-spinner {
+    display: inline-block;
+    width: 12px; height: 12px;
+    border: 2px solid rgba(74,94,69,.3);
+    border-top-color: var(--green);
+    border-radius: 50%;
+    animation: ob-spin .7s linear infinite;
+    vertical-align: -1px;
+    margin-right: 6px;
+}
+@keyframes ob-spin { to { transform: rotate(360deg); } }
 .ob-error {
     font: 400 12px 'DM Sans', sans-serif; color: #8a3b3b;
     background: #f9ecec; border: 1px solid #dcb9b9;

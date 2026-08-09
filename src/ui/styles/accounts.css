@@ -214,6 +214,28 @@
     display: none;
 }
 .add-account-error.visible { display: block; }
+.add-account-spinner {
+    display: inline-block;
+    width: 12px; height: 12px;
+    border: 2px solid currentColor;
+    border-color: rgba(0,0,0,.2);
+    border-top-color: currentColor;
+    border-radius: 50%;
+    animation: add-account-spin .7s linear infinite;
+    vertical-align: -1px;
+    margin-right: 6px;
+}
+.verdant-btn.primary .add-account-spinner {
+    border-color: rgba(255,255,255,.3);
+    border-top-color: #fff;
+}
+.verdant-btn.is-loading {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: default;
+}
+@keyframes add-account-spin { to { transform: rotate(360deg); } }
 .add-account-advanced-toggle {
     font: 500 12px 'DM Sans', sans-serif;
     color: var(--green);

@@ -69,18 +69,17 @@ function renderOnboardingContent(root, onSuccess, cancelable) {
     
     const gmailCard = root.querySelector('[data-provider="gmail"]');
     gmailCard?.addEventListener("click", async () => {
-        gmailCard.style.opacity = "0.6";
-        gmailCard.style.pointerEvents = "none";
-        gmailCard.querySelector(".ob-provider-label").textContent = t("onboarding.connecting");
+        gmailCard.classList.add("ob-connecting");
+        const labelEl = gmailCard.querySelector(".ob-provider-label");
+        labelEl.innerHTML = `<span class="ob-spinner"></span>${escapeHtml(t("onboarding.connecting"))}`;
         const errorEl = root.querySelector("#ob-error");
         try {
             await connectGmail();
             root.remove();
             onSuccess();
         } catch (err) {
-            gmailCard.style.opacity = "";
-            gmailCard.style.pointerEvents = "";
-            gmailCard.querySelector(".ob-provider-label").textContent = t("onboarding.provider.gmail.label");
+            gmailCard.classList.remove("ob-connecting");
+            labelEl.textContent = t("onboarding.provider.gmail.label");
             if (errorEl) { errorEl.textContent = String(err); errorEl.classList.add("visible"); }
         }
     });
@@ -89,10 +88,17 @@ function renderOnboardingContent(root, onSuccess, cancelable) {
     ["gmx", "imap"].forEach(provider => {
         const card = root.querySelector(`[data-provider="${provider}"]`);
         card?.addEventListener("click", () => {
+            root.classList.add("ob-behind-modal");
             import("./accounts.js").then(({ openAddAccountModal }) => {
-                root.remove();
-                openAddAccountModal(null, () => onSuccess(), provider);
-            }).catch(console.error);
+                openAddAccountModal(null, () => onSuccess(), provider, () => {
+                    root.classList.remove("ob-behind-modal");
+                });
+            }).catch((err) => {
+                root.classList.remove("ob-behind-modal");
+                console.error(err);
+                const errorEl = root.querySelector("#ob-error");
+                if (errorEl) { errorEl.textContent = String(err); errorEl.classList.add("visible"); }
+            });
         });
     });
 }

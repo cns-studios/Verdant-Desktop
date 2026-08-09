@@ -162,7 +162,7 @@ const PROVIDERS = [
     { id: "imap",  name: "Custom SMTP", icon: serverIcon, desc: "Any mail server" },
 ];
 
-export function openAddAccountModal(onSwitch, onAfterAdd, initialProvider = null) {
+export function openAddAccountModal(onSwitch, onAfterAdd, initialProvider = null, onClose = null) {
     document.getElementById("add-account-overlay")?.remove();
 
     let selectedProvider = null;
@@ -201,7 +201,10 @@ export function openAddAccountModal(onSwitch, onAfterAdd, initialProvider = null
     overlay.appendChild(panel);
     document.body.appendChild(overlay);
 
-    const closeModal = () => overlay.remove();
+    const closeModal = () => {
+        overlay.remove();
+        if (onClose) onClose();
+    };
 
     panel.querySelector("#add-account-close-btn").onclick = closeModal;
     overlay.addEventListener("click", (e) => { if (e.target === overlay) closeModal(); });
@@ -224,7 +227,6 @@ export function openAddAccountModal(onSwitch, onAfterAdd, initialProvider = null
         }
     }
 }
-
 function renderForm(provider, panel, closeModal, onSwitch, onAfterAdd) {
     const area = panel.querySelector("#account-form-area");
 
@@ -247,7 +249,8 @@ function renderForm(provider, panel, closeModal, onSwitch, onAfterAdd) {
             const btn = panel.querySelector("#add-gmail-btn");
             const errEl = panel.querySelector("#add-gmail-error");
             btn.disabled = true;
-            btn.textContent = t("accounts.connecting");
+            btn.classList.add("is-loading");
+            btn.innerHTML = `<span class="add-account-spinner"></span>${escapeHtml(t("accounts.connecting"))}`;
             errEl.classList.remove("visible");
             try {
                 const acc = await addGmailAccount();
@@ -256,6 +259,7 @@ function renderForm(provider, panel, closeModal, onSwitch, onAfterAdd) {
                 if (onAfterAdd) onAfterAdd(acc);
             } catch (err) {
                 btn.disabled = false;
+                btn.classList.remove("is-loading");
                 btn.textContent = t("accounts.connect_gmail");
                 errEl.textContent = String(err);
                 errEl.classList.add("visible");
@@ -397,7 +401,8 @@ function bindImapForm(panel, prefix, closeModal, onSwitch, onAfterAdd) {
         }
 
         btn.disabled = true;
-        btn.textContent = t("accounts.testing");
+        btn.classList.add("is-loading");
+        btn.innerHTML = `<span class="add-account-spinner"></span>${escapeHtml(t("accounts.testing"))}`;
         errEl.classList.remove("visible");
 
         try {
@@ -416,6 +421,7 @@ function bindImapForm(panel, prefix, closeModal, onSwitch, onAfterAdd) {
             errEl.classList.add("visible");
         } finally {
             btn.disabled = false;
+            btn.classList.remove("is-loading");
             btn.textContent = t("accounts.test");
         }
     };
@@ -432,7 +438,8 @@ function bindImapForm(panel, prefix, closeModal, onSwitch, onAfterAdd) {
         }
 
         btn.disabled = true;
-        btn.textContent = t("onboarding.connecting");
+        btn.classList.add("is-loading");
+        btn.innerHTML = `<span class="add-account-spinner"></span>${escapeHtml(t("onboarding.connecting"))}`;
         errEl.classList.remove("visible");
 
         try {
@@ -445,6 +452,7 @@ function bindImapForm(panel, prefix, closeModal, onSwitch, onAfterAdd) {
             errEl.textContent = String(err);
             errEl.classList.add("visible");
             btn.disabled = false;
+            btn.classList.remove("is-loading");
             btn.textContent = t("sidebar.add_account");
         }
     };

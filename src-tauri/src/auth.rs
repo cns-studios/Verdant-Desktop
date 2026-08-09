@@ -17,13 +17,15 @@ use oauth2::{
 use tiny_http::{Header, Response, Server};
 use url::Url;
 use std::collections::HashMap;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{SystemTime, Duration, UNIX_EPOCH};
 
 use crate::db::StoredToken;
 
 const AUTH_URL: &str = "https://accounts.google.com/o/oauth2/v2/auth";
 const TOKEN_URL: &str = "https://oauth2.googleapis.com/token";
 const REDIRECT_PORT: u16 = 8765;
+const AUTH_TIMEOUT: Duration = Duration::from_secs(5 * 60);
+const DRAIN_GRACE: Duration = Duration::from_secs(2);
 
 fn read_non_empty(value: Option<String>) -> Option<String> {
     value.and_then(|v| {
@@ -79,35 +81,131 @@ fn google_client() -> Result<BasicClient, String> {
     Ok(client)
 }
 
-fn wait_for_auth_code(port: u16, expected_state: String) -> Result<String, String> {
-    let server = Server::http(("127.0.0.1", port)).map_err(|e| e.to_string())?;
-    let request = server.recv().map_err(|e| e.to_string())?;
-
-    let url = Url::parse(&format!("http://127.0.0.1:{}{}", port, request.url()))
-        .map_err(|e| e.to_string())?;
-    let query: HashMap<_, _> = url.query_pairs().into_owned().collect();
-
-    let code = query.get("code").cloned()
-        .ok_or_else(|| "Authorization code missing in callback".to_string())?;
-    let state = query.get("state").cloned()
-        .ok_or_else(|| "OAuth state missing in callback".to_string())?;
-
-    if state != expected_state {
-        let _ = request.respond(Response::from_string("State mismatch.").with_status_code(400));
-        return Err("OAuth state mismatch".to_string());
-    }
-
-    let html = include_str!("../assets/oauth-success.html");
-    let mut response = Response::from_string(html);
+fn build_response(body: String, status: u16) -> Response<std::io::Cursor<Vec<u8>>> {
+    let mut response = Response::from_string(body).with_status_code(status);
     if let Ok(header) = Header::from_bytes(&b"Content-Type"[..], &b"text/html; charset=utf-8"[..]) {
         response = response.with_header(header);
     }
+    if let Ok(header) = Header::from_bytes(&b"Cache-Control"[..], &b"no-store"[..]) {
+        response = response.with_header(header);
+    }
+    if let Ok(header) = Header::from_bytes(&b"Connection"[..], &b"close"[..]) {
+        response = response.with_header(header);
+    }
+    response
+}
+
+fn error_page(title: &str, message: &str) -> String {
+    format!(
+        "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>Verdant - {title}</title><style>\
+         body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#f5f3ef;color:#1e2119;font-family:'DM Sans',system-ui,sans-serif;padding:24px}}\
+         .card{{width:min(480px,100%);background:#fafaf8;border:1px solid #b4afa2;border-radius:16px;padding:28px;box-shadow:0 8px 32px rgba(30,33,25,.14)}}\
+         h1{{font-size:22px;margin:0 0 10px;color:#8a3b3b}}\
+         p{{font-size:14px;line-height:1.6;color:#4a4d45;margin:0 0 14px}}\
+         </style></head><body><div class=\"card\"><h1>{title}</h1><p>{message}</p><p>You can close this tab and return to the Verdant app.</p></div></body></html>"
+    )
+}
+
+fn respond_ok(request: tiny_http::Request, html: &str) {
+    let _ = request.respond(build_response(html.to_string(), 200));
+}
+
+fn respond_no_content(request: tiny_http::Request) {
+    let mut response = Response::empty(204);
+    if let Ok(header) = Header::from_bytes(&b"Connection"[..], &b"close"[..]) {
+        response = response.with_header(header);
+    }
     let _ = request.respond(response);
-    Ok(code)
+}
+
+fn respond_error(request: tiny_http::Request, title: &str, message: &str) {
+    let _ = request.respond(build_response(error_page(title, message), 400));
+}
+
+fn wait_for_auth_code(server: &Server, expected_state: String) -> Result<String, String> {
+    let deadline = SystemTime::now() + AUTH_TIMEOUT;
+    let success_page = include_str!("../assets/oauth-success.html").to_string();
+
+    loop {
+        let remaining = deadline
+            .duration_since(SystemTime::now())
+            .unwrap_or(Duration::ZERO);
+
+        if remaining.is_zero() {
+            return Err("Authentication timed out. No callback received; please try again.".to_string());
+        }
+
+        let request = server
+            .recv_timeout(remaining)
+            .map_err(|e| format!("OAuth callback server error: {}", e))?
+            .ok_or_else(|| "Authentication timed out. No callback received; please try again.".to_string())?;
+
+        let url = Url::parse(&format!("http://127.0.0.1:{}{}", REDIRECT_PORT, request.url()))
+            .map_err(|e| format!("Invalid callback URL: {}", e))?;
+
+        if url.path() != "/callback" {
+            respond_no_content(request);
+            continue;
+        }
+
+        let query: HashMap<_, _> = url.query_pairs().into_owned().collect();
+
+        if let Some(error) = query.get("error") {
+            respond_error(request, "Sign-in failed", &format!("Google returned an error: {}.", error));
+            return Err(format!("Google sign-in failed: {}", error));
+        }
+
+        let state = match query.get("state").cloned() {
+            Some(state) => state,
+            None => {
+                respond_error(request, "Sign-in failed", "The callback was missing the state parameter.");
+                return Err("OAuth state missing in callback".to_string());
+            }
+        };
+
+        if state != expected_state {
+            respond_error(request, "Sign-in failed", "The state parameter did not match. Please try again.");
+            return Err("OAuth state mismatch".to_string());
+        }
+
+        let code = match query.get("code").cloned() {
+            Some(code) => code,
+            None => {
+                respond_error(request, "Sign-in failed", "The callback was missing the authorization code.");
+                return Err("Authorization code missing in callback".to_string());
+            }
+        };
+
+        respond_ok(request, &success_page);
+
+        let drain_deadline = SystemTime::now() + DRAIN_GRACE;
+        loop {
+            let drain_remaining = drain_deadline
+                .duration_since(SystemTime::now())
+                .unwrap_or(Duration::ZERO);
+            if drain_remaining.is_zero() {
+                break;
+            }
+            match server.recv_timeout(drain_remaining) {
+                Ok(Some(extra)) => respond_no_content(extra),
+                _ => break,
+            }
+        }
+
+        return Ok(code);
+    }
 }
 
 pub async fn login_interactive() -> Result<StoredToken, String> {
     let client = google_client()?;
+
+    let server = Server::http(("127.0.0.1", REDIRECT_PORT)).map_err(|e| {
+        format!(
+            "Could not open the OAuth callback port {} ({}). Another instance of Verdant or another app may be using it. Please close it and try again.",
+            REDIRECT_PORT, e
+        )
+    })?;
+
     let (pkce_challenge, pkce_verifier) = PkceCodeChallenge::new_random_sha256();
 
     let (auth_url, csrf_token) = client
@@ -121,7 +219,7 @@ pub async fn login_interactive() -> Result<StoredToken, String> {
     open::that(auth_url.as_str()).map_err(|e| e.to_string())?;
 
     let state = csrf_token.secret().to_string();
-    let code = tokio::task::spawn_blocking(move || wait_for_auth_code(REDIRECT_PORT, state))
+    let code = tokio::task::spawn_blocking(move || wait_for_auth_code(&server, state))
         .await
         .map_err(|e| e.to_string())??;
 

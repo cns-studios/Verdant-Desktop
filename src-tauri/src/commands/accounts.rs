@@ -173,6 +173,17 @@ pub async fn add_imap_account(
     state: State<'_, Arc<DbState>>,
     payload: ImapAccountPayload,
 ) -> Result<AccountPublic, String> {
+    let imap_host = payload.imap_host.clone();
+    let imap_port = payload.imap_port as u16;
+    let username = payload.username.clone();
+    let password = payload.password.clone();
+
+    tokio::task::spawn_blocking(move || {
+        test_imap_connection(&imap_host, imap_port, &username, &password)
+    })
+    .await
+    .map_err(|e| e.to_string())??;
+
     let encrypted_password = encrypt_password(&payload.password)
         .map_err(|e| format!("Failed to encrypt password: {}", e))?;
 
