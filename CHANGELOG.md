@@ -1,6 +1,6 @@
 # Changelog
 
-## [2.2.18]
+## [2.2.19]
 - Improved email syncing
 - Better Inbox loading
 - Minor bug fixes
