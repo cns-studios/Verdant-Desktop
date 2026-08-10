@@ -1,9 +1,9 @@
 [package]
 name = "Verdant-Desktop"
-version = "2.2.18"
+version = "2.2.19"
 description = "Verdant - a calm mail experience"
 authors = ["cns-studios"]
-license = ""
+license = "0BSD"
 repository = ""
 edition = "2021"
 rust-version = "1.77.2"
