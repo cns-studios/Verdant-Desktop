@@ -6,7 +6,6 @@ const HOTKEY_COOLDOWN_MS = {
   search: 250,
   send: 1000,
   switchNextAccount: 500,
-  nextMailbox: 400,
 };
 
 export const defaultHotkeys = {

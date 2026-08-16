@@ -356,11 +356,12 @@ async function loadLocalMailbox(mailbox, animate = false) {
             try {
                 const threads = await getInboxThreads();
                 inboxThreadsCache = threads;
+                if (currentMailbox !== mailbox) return;
                 renderThreadList(threads, activeFilter, searchQuery, animate);
             } catch (e) {
                 console.error("Failed to load inbox threads", e);
             } finally {
-                showListLoading(false);
+                if (currentMailbox === mailbox) showListLoading(false);
             }
         }
     } else {
@@ -371,32 +372,32 @@ async function loadLocalMailbox(mailbox, animate = false) {
         } else {
             showListLoading();
             try {
-                currentEmails = await getEmails(mailbox);
-                mailboxCache.set(mailbox, currentEmails);
-                ingestContactsFromEmails(currentEmails);
+                const fetched = await getEmails(mailbox);
+                mailboxCache.set(mailbox, fetched);
+                if (currentMailbox !== mailbox) return;
+                currentEmails = fetched;
+                ingestContactsFromEmails(fetched);
                 renderEmailList(animate);
             } catch (e) {
                 console.error(`Failed to load mailbox ${mailbox}`, e);
             } finally {
-                showListLoading(false);
+                if (currentMailbox === mailbox) showListLoading(false);
             }
         }
     }
 
     refreshAppHeaderSubtitle(currentMailbox, isComposeOpen, isSettingsOpen);
-    await refreshCounts();
+    refreshCounts().catch(console.error);
 }
 
 async function openMailbox(mailbox, animate = false) {
-    await loadLocalMailbox(mailbox, animate);
-    hideBootScreen();
+    const loadPromise = loadLocalMailbox(mailbox, animate).catch(console.error);
     if (animate) lastAnimatedRenderAt = Date.now();
-    try {
-        await syncMailboxInBackground(mailbox, true, onSynced);
-    } catch (err) {
-        console.error("Background sync failed:", err);
-    }
-    loadLocalMailbox(mailbox, false).catch(console.error);
+    const syncPromise = syncMailboxInBackground(mailbox, true, onSynced).catch(console.error);
+    await loadPromise;
+    hideBootScreen();
+    await syncPromise;
+    if (currentMailbox === mailbox) loadLocalMailbox(mailbox, false).catch(console.error);
 }
 
 function onSynced(mailbox, latestEmails) {
