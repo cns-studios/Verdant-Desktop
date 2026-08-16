@@ -50,6 +50,7 @@ pub struct Email {
     pub sender: String,
     pub to_recipients: String,
     pub cc_recipients: String,
+    pub bcc_recipients: String,
     pub snippet: String,
     pub body_html: String,
     pub attachments_json: String,
@@ -102,6 +103,7 @@ pub fn init_db(conn: &Connection) -> Result<()> {
             sender TEXT NOT NULL,
             to_recipients TEXT NOT NULL DEFAULT '',
             cc_recipients TEXT NOT NULL DEFAULT '',
+            bcc_recipients TEXT NOT NULL DEFAULT '',
             snippet TEXT NOT NULL DEFAULT '',
             body_html TEXT NOT NULL,
             attachments_json TEXT NOT NULL DEFAULT '[]',
@@ -159,6 +161,7 @@ pub fn init_db(conn: &Connection) -> Result<()> {
     let _ = conn.execute("ALTER TABLE emails ADD COLUMN snippet TEXT NOT NULL DEFAULT ''", []);
     let _ = conn.execute("ALTER TABLE emails ADD COLUMN to_recipients TEXT NOT NULL DEFAULT ''", []);
     let _ = conn.execute("ALTER TABLE emails ADD COLUMN cc_recipients TEXT NOT NULL DEFAULT ''", []);
+    let _ = conn.execute("ALTER TABLE emails ADD COLUMN bcc_recipients TEXT NOT NULL DEFAULT ''", []);
     let _ = conn.execute("ALTER TABLE emails ADD COLUMN starred INTEGER NOT NULL DEFAULT 0", []);
     let _ = conn.execute("ALTER TABLE emails ADD COLUMN mailbox TEXT NOT NULL DEFAULT 'INBOX'", []);
     let _ = conn.execute("ALTER TABLE emails ADD COLUMN labels TEXT NOT NULL DEFAULT ''", []);

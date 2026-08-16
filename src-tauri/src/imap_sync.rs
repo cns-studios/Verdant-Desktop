@@ -352,6 +352,7 @@ fn parse_imap_messages(
         let sender = headers.get_first_value("From").unwrap_or_else(|| "Unknown Sender".to_string());
         let to_recipients = headers.get_first_value("To").unwrap_or_default();
         let cc_recipients = headers.get_first_value("Cc").unwrap_or_default();
+        let bcc_recipients = headers.get_first_value("Bcc").unwrap_or_default();
         let date = headers.get_first_value("Date").unwrap_or_default();
         let list_unsubscribe = headers.get_first_value("List-Unsubscribe").unwrap_or_default();
         let message_id = headers.get_first_value("Message-ID")
@@ -378,6 +379,7 @@ fn parse_imap_messages(
             sender: strip_noise(&sender),
             to_recipients: strip_noise(&to_recipients),
             cc_recipients: strip_noise(&cc_recipients),
+            bcc_recipients: strip_noise(&bcc_recipients),
             snippet: strip_noise(&snippet),
             body_html: if body_html.is_empty() { format!("<pre>{}</pre>", html_escape(&snippet)) } else { body_html },
             attachments_json,
@@ -563,6 +565,7 @@ pub fn imap_search_emails(
         let sender = headers.get_first_value("From").unwrap_or_else(|| "Unknown Sender".to_string());
         let to_recipients = headers.get_first_value("To").unwrap_or_default();
         let cc_recipients = headers.get_first_value("Cc").unwrap_or_default();
+        let bcc_recipients = headers.get_first_value("Bcc").unwrap_or_default();
         let date = headers.get_first_value("Date").unwrap_or_default();
         let list_unsubscribe = headers.get_first_value("List-Unsubscribe").unwrap_or_default();
         let message_id = headers.get_first_value("Message-ID")
@@ -589,6 +592,7 @@ pub fn imap_search_emails(
             sender: strip_noise(&sender),
             to_recipients: strip_noise(&to_recipients),
             cc_recipients: strip_noise(&cc_recipients),
+            bcc_recipients: strip_noise(&bcc_recipients),
             snippet: strip_noise(&snippet),
             body_html: if body_html.is_empty() { format!("<pre>{}</pre>", html_escape(&snippet)) } else { body_html },
             attachments_json,

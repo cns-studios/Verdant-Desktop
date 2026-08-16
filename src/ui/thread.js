@@ -3,7 +3,7 @@ import { escapeHtml, sanitizeUnicodeNoise, formatListDate, formatReadingDate } f
 import { sanitizeEmailHtml } from "../lib/sanitize.js";
 import { showToast } from "../lib/toast.js";
 import { t } from "../lib/i18n.js";
-import { applySenderAvatar, buildActionMenu } from "./reading.js";
+import { applySenderAvatar, buildActionMenu, buildRecipientsDetailsHtml } from "./reading.js";
 import { downloadAttachment } from "../api.js";
 import { openComposeForReply, openComposeForForward } from "./compose.js";
 import { refreshCounts } from "./sidebar.js";
@@ -282,6 +282,7 @@ function buildMessageBubble(message, allMessages) {
   }
 
   bindBubbleButtons(bubble, message, allMessages);
+  bindRecipientsToggle(bubble, message);
   return bubble;
 }
 
@@ -322,7 +323,7 @@ function buildExpandedBubble(message, senderName) {
       <div class="thread-bubble-avatar"></div>
       <div class="thread-bubble-meta-expanded">
         <span class="thread-bubble-sender">${escapeHtml(senderName)}</span>
-        <span class="thread-bubble-to">${t("reading.to_x", { name: escapeHtml(sanitizeUnicodeNoise(message.to_recipients || t("reading.to_me"))) })}</span>
+        <span class="thread-bubble-to" title="${t("reading.expand_recipients")}" data-recipients-expanded="false">${t("reading.to_x", { name: escapeHtml(sanitizeUnicodeNoise(message.to_recipients || t("reading.to_me"))) })}</span>
       </div>
       <span class="thread-bubble-date">${escapeHtml(formatReadingDate(message.date))}</span>
     </div>
@@ -343,6 +344,25 @@ function buildExpandedBubble(message, senderName) {
   `;
 }
 
+
+function bindRecipientsToggle(bubble, message) {
+  const toEl = bubble.querySelector(".thread-bubble-to");
+  if (!toEl) return;
+  const collapsed = t("reading.to_x", {
+    name: sanitizeUnicodeNoise(message.to_recipients || t("reading.to_me")),
+  });
+  toEl.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const isExpanded = toEl.dataset.recipientsExpanded === "true";
+    if (isExpanded) {
+      toEl.textContent = collapsed;
+      toEl.dataset.recipientsExpanded = "false";
+    } else {
+      toEl.innerHTML = buildRecipientsDetailsHtml(message) || collapsed;
+      toEl.dataset.recipientsExpanded = "true";
+    }
+  });
+}
 
 function toggleBubble(bubble, message, allMessages) {
   const isExpanded = expandedMessageIds.has(message.id);
@@ -376,6 +396,8 @@ function toggleBubble(bubble, message, allMessages) {
       ?.addEventListener("click", () => toggleBubble(bubble, message, allMessages));
 
     bindBubbleButtons(bubble, message, allMessages);
+
+    bindRecipientsToggle(bubble, message);
 
     if (!message.is_read) {
       message.is_read = true;

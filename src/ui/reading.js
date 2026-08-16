@@ -100,6 +100,31 @@ export function applySenderAvatar(container, sender, mailbox = "") {
   });
 }
 
+export function buildRecipientsDetailsHtml(email) {
+  const toList = sanitizeUnicodeNoise(email.to_recipients || "")
+    .split(",").map((v) => v.trim()).filter(Boolean);
+  const ccList = sanitizeUnicodeNoise(email.cc_recipients || "")
+    .split(",").map((v) => v.trim()).filter(Boolean);
+  const bccList = sanitizeUnicodeNoise(email.bcc_recipients || "")
+    .split(",").map((v) => v.trim()).filter(Boolean);
+
+  const rcptRow = (label, value) =>
+    `<div class="rcpt-row"><span class="rcpt-label">${label}</span><span class="rcpt-value">${value}</span></div>`;
+  const fromRow = email.sender
+    ? rcptRow(t("reading.from"), escapeHtml(email.sender))
+    : "";
+  const toRow = toList.length
+    ? rcptRow(t("compose.to"), toList.map(escapeHtml).join(", "))
+    : "";
+  const ccRow = ccList.length
+    ? rcptRow(t("compose.cc"), ccList.map(escapeHtml).join(", "))
+    : "";
+  const bccRow = bccList.length
+    ? rcptRow(t("compose.bcc"), bccList.map(escapeHtml).join(", "))
+    : "";
+  return [fromRow, toRow, ccRow, bccRow].filter(Boolean).join("");
+}
+
 function renderRecipientsLine(email) {
   const metaTo = document.querySelector(".meta-to");
   if (!metaTo) return;
@@ -115,10 +140,7 @@ function renderRecipientsLine(email) {
   if (merged.length === 1) collapsed = t("reading.to_x", { name: merged[0] });
   if (merged.length > 1) collapsed = t("reading.to_x_others", { name: merged[0], n: merged.length - 1 });
 
-  const expanded = [
-    toList.length ? `${t("compose.to")}: ${toList.join(", ")}` : "",
-    ccList.length ? `${t("compose.cc")}: ${ccList.join(", ")}` : "",
-  ].filter(Boolean).join(" | ");
+  const expanded = buildRecipientsDetailsHtml(email);
 
   metaTo.textContent = collapsed;
   metaTo.dataset.isExpanded = "false";
@@ -132,7 +154,7 @@ function renderRecipientsLine(email) {
       metaTo.textContent = collapsed;
       metaTo.dataset.isExpanded = "false";
     } else {
-      metaTo.textContent = expanded || collapsed;
+      metaTo.innerHTML = expanded || collapsed;
       metaTo.dataset.isExpanded = "true";
     }
   };

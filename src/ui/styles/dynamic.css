@@ -268,7 +268,11 @@ body.reading-pane-hidden .email-list-pane { flex:1 1 auto !important; width:auto
   color: var(--text-muted);
   -webkit-user-select: text;
   user-select: text;
+  cursor: pointer;
 }
+.thread-bubble-to .rcpt-row { display:flex; gap:8px; align-items:baseline; line-height:1.7; }
+.thread-bubble-to .rcpt-label { font-weight:600; color:var(--text-muted); min-width:34px; flex-shrink:0; }
+.thread-bubble-to .rcpt-value { color:var(--text); word-break:break-word; }
 .thread-bubble-body {
   padding: 4px 16px 16px 54px;
   border-top: 1px solid var(--surface2);
