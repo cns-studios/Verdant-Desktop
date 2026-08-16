@@ -204,5 +204,5 @@ body.resizing { cursor:col-resize; user-select:none; }
 .send-btn { padding:8px 18px; background:var(--green); color:white; border:none; border-radius:8px; font-family:'DM Sans',sans-serif; font-size:13px; font-weight:500; cursor:pointer; display:flex; align-items:center; gap:7px; transition:background 0.15s, transform 0.1s; }
 .send-btn:hover { background:var(--accent); transform:translateY(-1px); }
 .send-btn svg { width:15px; height:15px; }
-@keyframes fadeSlideIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
-.email-item { animation:fadeSlideIn 0.2s ease both; }
+@keyframes fadeSlideIn { from { opacity:0; transform:translateY(5px); } to { opacity:1; transform:translateY(0); } }
+.email-item { animation:fadeSlideIn 0.5s cubic-bezier(0.22, 1, 0.36, 1) both; }

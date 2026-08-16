@@ -6,6 +6,7 @@ const HOTKEY_COOLDOWN_MS = {
   search: 250,
   send: 1000,
   switchNextAccount: 500,
+  nextMailbox: 400,
 };
 
 export const defaultHotkeys = {
@@ -18,6 +19,7 @@ export const defaultHotkeys = {
   send: "ctrl+enter",
   close: "escape",
   switchNextAccount: "ctrl+tab",
+  nextMailbox: "<",
 };
 
 const lastHotkeyAt = new Map();

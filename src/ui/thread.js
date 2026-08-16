@@ -73,11 +73,13 @@ export function renderThreadList(threads, activeFilter, searchQuery, animate = f
   const countEl = document.querySelector(".list-count");
   if (countEl) countEl.textContent = t("list.count", { n: visible.length });
 
-  for (const thread of visible) {
+  for (let i = 0; i < visible.length; i++) {
+    const thread = visible[i];
     const row = document.createElement("div");
     const isActive = thread.thread_id === selectedThreadId;
     row.className = `email-item${thread.is_read ? "" : " unread"}${isActive ? " active" : ""}`;
     row.dataset.threadId = thread.thread_id;
+    if (animate) row.style.animationDelay = `${Math.min(i * 40, 1200)}ms`;
 
     const participants = formatParticipants(thread.participants);
     const count = thread.message_count > 1

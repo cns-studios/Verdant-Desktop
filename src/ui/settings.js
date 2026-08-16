@@ -345,6 +345,7 @@ function buildShortcutsTab() {
     { key: "search", i18n: "settings.shortcuts.search" },
     { key: "send", i18n: "settings.shortcuts.send" },
     { key: "switchNextAccount", i18n: "settings.shortcuts.switch_account" },
+    { key: "nextMailbox", i18n: "settings.shortcuts.next_mailbox" },
   ];
 
   return `

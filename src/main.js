@@ -91,6 +91,7 @@ let isSyncing = false;
 
 const mailboxCache = new Map();
 let inboxThreadsCache = null;
+let lastAnimatedRenderAt = 0;
 
 function showBootScreen() {
     if (document.getElementById("boot-screen")) return;
@@ -282,9 +283,11 @@ function renderEmailList(animate = false) {
     const selectedId = selectedEmail?.id || null;
     let selectedRow = null, selectedRowEmail = null;
 
-    for (const email of emails) {
+    for (let i = 0; i < emails.length; i++) {
+        const email = emails[i];
         const row = document.createElement("div");
         row.className = `email-item ${email.is_read ? "" : "unread"}`.trim();
+        if (animate) row.style.animationDelay = `${Math.min(i * 40, 1200)}ms`;
         row.innerHTML = `
             ${email.is_read ? "" : '<div class="unread-dot"></div>'}
             <div class="email-item-main">
@@ -386,16 +389,18 @@ async function loadLocalMailbox(mailbox, animate = false) {
 
 async function openMailbox(mailbox, animate = false) {
     await loadLocalMailbox(mailbox, animate);
+    hideBootScreen();
+    if (animate) lastAnimatedRenderAt = Date.now();
     try {
         await syncMailboxInBackground(mailbox, true, onSynced);
     } catch (err) {
         console.error("Background sync failed:", err);
     }
-    loadLocalMailbox(mailbox, animate).catch(console.error);
-    hideBootScreen();
+    loadLocalMailbox(mailbox, false).catch(console.error);
 }
 
 function onSynced(mailbox, latestEmails) {
+  if (Date.now() - lastAnimatedRenderAt < 1800) return;
   if (currentMailbox === mailbox) {
     if (mailbox === "INBOX") {
       getInboxThreads().then(threads => {
@@ -575,6 +580,21 @@ function bindFilterChips() {
 
 
 
+function cycleMailbox(direction = 1) {
+    const items = Array.from(document.querySelectorAll(".sidebar .nav-item"));
+    if (items.length === 0) return;
+    const activeIndex = Math.max(0, items.findIndex((n) => n.classList.contains("active")));
+    const nextIndex = (activeIndex + direction + items.length) % items.length;
+    const mailbox = items[nextIndex].dataset.mailbox;
+    if (!mailbox) return;
+    items.forEach((n) => n.classList.remove("active"));
+    items[nextIndex].classList.add("active");
+    searchQuery = "";
+    const input = document.getElementById("search-input");
+    if (input) { input.value = ""; input.dispatchEvent(new Event("input")); }
+    openMailbox(mailbox, true);
+}
+
 function bindHotkeys() {
     document.addEventListener("keydown", async (event) => {
         const hotkeys = getHotkeys();
@@ -589,24 +609,6 @@ function bindHotkeys() {
                 document.querySelectorAll(".email-item").forEach((el) => el.classList.remove("active"));
                 setReadingPaneHidden(true);
             }
-            return;
-        }
-
-        if (event.key === "Tab" && !isSettingsOpen() && !isComposeOpen()) {
-            if (event.target instanceof Element && event.target.closest("input, textarea, select")) return;
-            const items = Array.from(document.querySelectorAll(".sidebar .nav-item"));
-            if (items.length === 0) return;
-            event.preventDefault();
-            const activeIndex = Math.max(0, items.findIndex((n) => n.classList.contains("active")));
-            const nextIndex = (activeIndex + (event.shiftKey ? -1 : 1) + items.length) % items.length;
-            const mailbox = items[nextIndex].dataset.mailbox;
-            if (!mailbox) return;
-            items.forEach((n) => n.classList.remove("active"));
-            items[nextIndex].classList.add("active");
-            searchQuery = "";
-            const input = document.getElementById("search-input");
-            if (input) { input.value = ""; input.dispatchEvent(new Event("input")); }
-            await openMailbox(mailbox, true);
             return;
         }
 
@@ -658,6 +660,15 @@ function bindHotkeys() {
             event.preventDefault();
             if (!canRunHotkey("search")) return;
             document.getElementById("search-input")?.focus();
+        }
+
+        if (hotkeys.nextMailbox && (combo === hotkeys.nextMailbox || combo.replace(/^shift\+/, "") === hotkeys.nextMailbox)) {
+            if (isSettingsOpen() || isComposeOpen()) return;
+            if (event.target instanceof Element && event.target.closest("input, textarea, select")) return;
+            event.preventDefault();
+            if (!canRunHotkey("nextMailbox")) return;
+            cycleMailbox(1);
+            return;
         }
 
         if (combo === hotkeys.switchNextAccount) {
