@@ -1267,6 +1267,57 @@ pub async fn restore_from_trash(state: State<'_, Arc<DbState>>, email_id: String
 }
 
 #[tauri::command]
+pub async fn move_to_inbox(state: State<'_, Arc<DbState>>, email_id: String) -> Result<(), String> {
+    let account_id = get_active_id(&state).await;
+
+    let account = {
+        let conn = state.conn.lock().await;
+        crate::db::get_account_by_id(&conn, account_id).ok().flatten()
+    };
+
+    if let Some(ref acc) = account {
+        if acc.provider == "gmail" {
+            let gmail_id = email_id.splitn(2, ':').nth(1).unwrap_or(&email_id).to_string();
+            let token = ensure_token(&state).await.map_err(|e| {
+                e
+            })?.access_token;
+            let client = reqwest::Client::new();
+            let url = format!("https://gmail.googleapis.com/gmail/v1/users/me/messages/{}/modify", gmail_id);
+            let res = client.post(url).bearer_auth(&token)
+                .json(&json!({ "addLabelIds": ["INBOX"] }))
+                .send().await.map_err(|e| {
+                    e.to_string()
+                })?;
+            if !res.status().is_success() {
+                let err = format!("Move to inbox failed: {}", res.status());
+                return Err(err);
+            }
+        } else if acc.provider == "imap" {
+            let msg_id = email_id.splitn(2, ':').nth(1).unwrap_or(&email_id).to_string();
+            let acc_clone = acc.clone();
+            tokio::task::spawn_blocking(move || {
+                crate::imap_sync::imap_move_to_folder(&acc_clone, &msg_id, "ARCHIVE", "INBOX")
+            }).await
+            .map_err(|e| format!("IMAP task error: {}", e))?
+            .map_err(|e| format!("IMAP move error: {}", e))?;
+        }
+    }
+
+    let conn = state.conn.lock().await;
+    conn.execute(
+        "UPDATE emails SET mailbox='INBOX', labels=(
+            CASE WHEN instr(','||labels||',', ',ARCHIVE,') > 0 THEN 
+                trim(replace(','||labels||',', ',ARCHIVE,', ','), ',') || ',INBOX'
+            ELSE 
+                CASE WHEN labels IS NULL OR labels = '' THEN 'INBOX' ELSE labels || ',INBOX' END
+            END
+        ) WHERE id=?1 AND account_id=?2",
+        rusqlite::params![email_id, account_id],
+    ).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn sync_imap_mailbox_page(
     state: State<'_, Arc<DbState>>,
     mailbox: String,

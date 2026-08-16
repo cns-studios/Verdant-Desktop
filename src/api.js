@@ -42,9 +42,10 @@ export async function permanentDeleteEmail(emailId) {
 }
 export async function restoreFromTrash(emailId) {
     return invoke("restore_from_trash", { emailId }).catch(e => {
-        throw e;
+        throw new Error(e);
     });
 }
+export const moveToInbox = (emailId) => invoke("move_to_inbox", { emailId });
 export const getMailboxCounts = () => invoke("get_mailbox_counts");
 export const fetchRemoteImage = (url) => invoke("fetch_remote_image", { url });
 export const clearLocalData = () => invoke("clear_local_data");

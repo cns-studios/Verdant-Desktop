@@ -409,6 +409,7 @@ export function updateTopActionStates(email, mailbox) {
   const isDraft = email?.mailbox?.toUpperCase().includes("DRAFT") || currentMailbox.includes("DRAFT") || activeNav.toUpperCase().includes("DRAFT");
   const isTrash = email?.mailbox?.toUpperCase().includes("TRASH") || currentMailbox.includes("TRASH") || activeNav.toUpperCase().includes("TRASH");
   const isSent = email?.mailbox?.toUpperCase().includes("SENT") || currentMailbox.includes("SENT") || activeNav.toUpperCase().includes("SENT");
+  const isArchive = email?.mailbox?.toUpperCase().includes("ARCHIVE") || currentMailbox.includes("ARCHIVE") || activeNav.toUpperCase().includes("ARCHIVE");
 
   const unsubBtn = document.querySelector(".reading-actions .unsubscribe-btn");
   if (unsubBtn) {
@@ -454,6 +455,10 @@ export function updateTopActionStates(email, mailbox) {
         btn.style.display = "";
         btn.setAttribute("title", t("reading.restore"));
         btn.innerHTML = icon("rotate");
+      } else if (isArchive) {
+        btn.style.display = "";
+        btn.setAttribute("title", t("reading.move_to_inbox"));
+        btn.innerHTML = icon("inbox");
       } else {
         btn.style.display = isDraft || isSent ? "none" : "";
         btn.setAttribute("title", t("reading.archive"));
@@ -496,6 +501,14 @@ export function bindReadingActions(getSelected, setSelected, onRefresh, openComp
             await restoreFromTrash(email.id);
           }
           showToast(t("toast.restored"));
+        } else if (title === t("reading.move_to_inbox")) {
+          const { moveToInbox } = await import("../api.js");
+          if (threadId && messageIds.length) {
+            for (const id of messageIds) await moveToInbox(id).catch(() => {});
+          } else if (email) {
+            await moveToInbox(email.id);
+          }
+          showToast(t("toast.moved_to_inbox"));
         } else {
           if (threadId && messageIds.length) {
             for (const id of messageIds) await archiveEmail(id).catch(() => {});

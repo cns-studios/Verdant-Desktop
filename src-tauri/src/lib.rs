@@ -173,6 +173,7 @@ pub fn run() {
             commands::mail::trash_email,
             commands::mail::permanent_delete_email,
             commands::mail::restore_from_trash,
+            commands::mail::move_to_inbox,
             commands::mail::sync_imap_mailbox_page,
             commands::mail::deep_search_emails,
             commands::mail::get_mailbox_counts,
