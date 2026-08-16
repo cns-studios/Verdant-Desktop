@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.2.10]
+- Better Keyboard Controls throughout the app
+- Improved colors and element positioning
+- Sidebar improvements & Sidebar collabsable
+- Fixed minor bugs
+
 ## [2.2.19]
 - Improved email syncing
 - Better Inbox loading

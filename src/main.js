@@ -581,7 +581,31 @@ function bindHotkeys() {
 
         if (combo === hotkeys.close) {
             if (isSettingsOpen()) { closeOverlay(); return; }
-            if (isComposeOpen()) { closeCompose(); }
+            if (isComposeOpen()) { closeCompose(); return; }
+            if (selectedEmail || getSelectedThreadId()) {
+                selectedEmail = null;
+                clearSelectedThread();
+                document.querySelectorAll(".email-item").forEach((el) => el.classList.remove("active"));
+                setReadingPaneHidden(true);
+            }
+            return;
+        }
+
+        if (event.key === "Tab" && !isSettingsOpen() && !isComposeOpen()) {
+            if (event.target instanceof Element && event.target.closest("input, textarea, select")) return;
+            const items = Array.from(document.querySelectorAll(".sidebar .nav-item"));
+            if (items.length === 0) return;
+            event.preventDefault();
+            const activeIndex = Math.max(0, items.findIndex((n) => n.classList.contains("active")));
+            const nextIndex = (activeIndex + (event.shiftKey ? -1 : 1) + items.length) % items.length;
+            const mailbox = items[nextIndex].dataset.mailbox;
+            if (!mailbox) return;
+            items.forEach((n) => n.classList.remove("active"));
+            items[nextIndex].classList.add("active");
+            searchQuery = "";
+            const input = document.getElementById("search-input");
+            if (input) { input.value = ""; input.dispatchEvent(new Event("input")); }
+            await openMailbox(mailbox, true);
             return;
         }
 

@@ -448,13 +448,27 @@ export async function openSettingsModal(profile, currentMailbox, onLogout, onSyn
 
   const tabs = Array.from(panel.querySelectorAll(".settings-tab"));
   const panes = Array.from(panel.querySelectorAll(".settings-pane"));
+  const switchTab = (target) => {
+    tabs.forEach((t) => t.classList.toggle("active", t.getAttribute("data-tab") === target));
+    panes.forEach((pane) => pane.classList.toggle("active", pane.getAttribute("data-pane") === target));
+  };
   tabs.forEach((tab) => {
-    tab.addEventListener("click", () => {
-      const target = tab.getAttribute("data-tab");
-      tabs.forEach((t) => t.classList.toggle("active", t === tab));
-      panes.forEach((pane) => pane.classList.toggle("active", pane.getAttribute("data-pane") === target));
-    });
+    tab.addEventListener("click", () => switchTab(tab.getAttribute("data-tab")));
   });
+
+  const handleSettingsTabKey = (e) => {
+    if (e.key !== "Tab") return;
+    if (!overlay.isConnected) {
+      document.removeEventListener("keydown", handleSettingsTabKey);
+      return;
+    }
+    e.preventDefault();
+    const activeIndex = Math.max(0, tabs.findIndex((t) => t.classList.contains("active")));
+    const nextIndex = (activeIndex + (e.shiftKey ? -1 : 1) + tabs.length) % tabs.length;
+    switchTab(tabs[nextIndex].getAttribute("data-tab"));
+    tabs[nextIndex].focus();
+  };
+  document.addEventListener("keydown", handleSettingsTabKey);
 
   panel.querySelector("#settings-lang-select")?.addEventListener("change", (e) => {
     setLang(e.target.value);

@@ -6,7 +6,7 @@ export function renderShell() {
   root.innerHTML = `
     <header class="app-header" id="app-header">
       <div class="app-header-left" id="app-header-left">
-        <span class="app-dot"></span>
+        <span class="app-logo-mark">${icon("mail")}</span>
         <span class="app-title">${t("app.title")}</span>
         <span class="app-subtitle">- ${t("sidebar.inbox")}</span>
       </div>
@@ -26,20 +26,10 @@ export function renderShell() {
     <div class="app-content">
       <aside class="sidebar">
         <div class="sidebar-header">
-          <div class="logo">
-            <div class="logo-mark">
-              ${icon("mail")}
-            </div>
-            <span class="logo-name">Verdant</span>
-          </div>
-          <button class="compose-btn" id="compose-open-btn">
-            ${icon("plus")}
-            ${t("sidebar.compose")}
-          </button>
+          <div class="sidebar-menu-label">${t("sidebar.mailboxes")}</div>
         </div>
 
         <div class="sidebar-section">
-          <div class="section-label">${t("sidebar.mailboxes")}</div>
           <div class="nav-item active" data-mailbox="INBOX">
             ${icon("inbox")}
             ${t("sidebar.inbox")}
@@ -64,6 +54,13 @@ export function renderShell() {
             ${icon("trash")}
             ${t("sidebar.trash")}
           </div>
+        </div>
+
+        <div class="compose-wrap">
+          <button class="compose-btn" id="compose-open-btn">
+            ${icon("plus")}
+            ${t("sidebar.compose")}
+          </button>
         </div>
 
         <div class="sidebar-footer">
