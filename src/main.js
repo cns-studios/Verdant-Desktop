@@ -391,12 +391,13 @@ async function loadLocalMailbox(mailbox, animate = false) {
     refreshCounts().catch(console.error);
 }
 
-async function openMailbox(mailbox, animate = false) {
+async function openMailbox(mailbox, animate = false, forceSync = true) {
     const loadPromise = loadLocalMailbox(mailbox, animate).catch(console.error);
     if (animate) lastAnimatedRenderAt = Date.now();
-    const syncPromise = syncMailboxInBackground(mailbox, true, onSynced).catch(console.error);
+    const syncPromise = forceSync
+        ? syncMailboxInBackground(mailbox, true, onSynced).catch(console.error)
+        : Promise.resolve();
     await loadPromise;
-    hideBootScreen();
     await syncPromise;
     if (currentMailbox === mailbox) loadLocalMailbox(mailbox, false).catch(console.error);
 }
@@ -416,6 +417,22 @@ function onSynced(mailbox, latestEmails) {
       renderEmailList(false);
       refreshCounts().catch(console.error);
     }
+  }
+}
+
+async function refreshFromSyncedEvent() {
+  console.log("Backend synced emails, refreshing UI...");
+  try {
+    if (currentMailbox === "INBOX") {
+      const threads = await getInboxThreads();
+      inboxThreadsCache = threads;
+      renderThreadList(threads, activeFilter, searchQuery, false);
+    } else {
+      await loadLocalMailbox(currentMailbox, false);
+    }
+    refreshCounts().catch(console.error);
+  } catch (err) {
+    console.error("Failed to refresh after backend sync", err);
   }
 }
 
@@ -930,16 +947,7 @@ async function initializeConnectedUI() {
     bindHotkeys();
     bindGlobalExternalLinkInterception();
 
-
-    const profile = await getUserProfile();
-    setUserProfile(profile);
-
-    if (profile.degraded) {
-        showToast(t("toast.rate_limited"));
-        retryUserProfile();
-    }
-
-    
+    setReadingPaneHidden(true);
     bindUserRow(() => {
         openAccountPopover(
             handleAccountSwitch,
@@ -947,7 +955,31 @@ async function initializeConnectedUI() {
         );
     });
 
-    
+    const { listen } = await import("@tauri-apps/api/event");
+    await listen("emails-synced", refreshFromSyncedEvent);
+
+    hideBootScreen();
+
+    const profilePromise = getUserProfile();
+    const inboxNowPromise = getEmails("INBOX");
+    const openPromise = openMailbox("INBOX", true, false);
+
+    const profile = await profilePromise;
+    setUserProfile(profile);
+
+    if (profile.degraded) {
+        showToast(t("toast.rate_limited"));
+        retryUserProfile();
+    }
+
+    inboxNowPromise.then(async (inboxNow) => {
+        ingestContactsFromEmails(inboxNow);
+        const { notifyNewEmails } = await import("./lib/sync.js");
+        await notifyNewEmails(inboxNow);
+    }).catch(console.error);
+
+    await openPromise;
+
     window.addEventListener("verdant-open-settings", async () => {
         try {
             const p = await getUserProfile();
@@ -955,22 +987,7 @@ async function initializeConnectedUI() {
         } catch {}
     });
 
-    const inboxNow = await getEmails("INBOX");
-    ingestContactsFromEmails(inboxNow);
-    const { notifyNewEmails } = await import("./lib/sync.js");
-    await notifyNewEmails(inboxNow);
-
-    setReadingPaneHidden(true);
-    await openMailbox("INBOX", true);
-    
     checkAndShowWhatsNewModal().catch(() => {});
-    
-    const { listen } = await import("@tauri-apps/api/event");
-    await listen("emails-synced", async () => {
-        console.log("Backend synced emails, refreshing UI...");
-        await loadLocalMailbox(currentMailbox, false);
-    });
-
     runStartupUpdateCheck().catch(() => {});
     startPeriodicUpdateCheck();
 }
@@ -987,15 +1004,15 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     const { invoke } = await import("@tauri-apps/api/core");
-    await hydratePrefsFromBackend();
+    const [status, _prefsReady, _contactsReady] = await Promise.all([
+        authStatus(),
+        hydratePrefsFromBackend(),
+        ensureContactsLoaded().catch(() => {}),
+    ]);
     invoke("update_app_config", { config: { run_in_background: appPrefs.runInBackground, update_channel: updatePrefs.channel } })
         .catch(err => console.error("Initial app config sync failed", err));
 
-    await ensureContactsLoaded().catch(() => {});
-
     try {
-        const status = await authStatus();
-
         if (!status.has_client_id) {
             hideBootScreen();
             renderShell();

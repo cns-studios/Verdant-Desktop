@@ -2,7 +2,7 @@ use std::sync::Arc;
 use tauri::State;
 
 use crate::db::{get_account_by_id, get_all_accounts, set_active_account};
-use crate::state::{DbState, ensure_token, get_active_id};
+use crate::state::{DbState, get_active_id};
 
 #[derive(serde::Serialize)]
 pub struct AuthStatus {
@@ -105,64 +105,8 @@ pub async fn get_user_profile(state: State<'_, Arc<DbState>>) -> Result<UserProf
             .ok_or_else(|| "Active account not found".to_string())?
     };
 
-    
-    if account.provider == "imap" {
-        let name = account.display_name.clone()
-            .unwrap_or_else(|| account.email.split('@').next().unwrap_or("User").replace('.', " "));
-        let initials = name
-            .split_whitespace()
-            .take(2)
-            .filter_map(|p| p.chars().next())
-            .collect::<String>()
-            .to_uppercase();
-        return Ok(UserProfile {
-            name,
-            email: account.email,
-            initials: if initials.is_empty() { "U".to_string() } else { initials },
-            degraded: false,
-        });
-    }
-
-    
-    let token = ensure_token(&state).await?.access_token;
-    let client = reqwest::Client::new();
-
-    let res = client
-        .get("https://gmail.googleapis.com/gmail/v1/users/me/profile")
-        .bearer_auth(&token)
-        .send()
-        .await
-        .map_err(|e| e.to_string())?;
-
-    if res.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
-        let name = account.display_name.clone()
-            .unwrap_or_else(|| account.email.split('@').next().unwrap_or("User").replace('.', " "));
-        let initials = name
-            .split_whitespace()
-            .take(2)
-            .filter_map(|p| p.chars().next())
-            .collect::<String>()
-            .to_uppercase();
-        return Ok(UserProfile {
-            name,
-            email: account.email,
-            initials: if initials.is_empty() { "U".to_string() } else { initials },
-            degraded: true,
-        });
-    }
-
-    if !res.status().is_success() {
-        return Err(format!("Profile request failed: {}", res.status()));
-    }
-
-    let body = res.json::<serde_json::Value>().await.map_err(|e| e.to_string())?;
-    let email = body
-        .get("emailAddress")
-        .and_then(serde_json::Value::as_str)
-        .unwrap_or("unknown@example.com")
-        .to_string();
-
-    let name = email.split('@').next().unwrap_or("User").replace('.', " ");
+    let name = account.display_name.clone()
+        .unwrap_or_else(|| account.email.split('@').next().unwrap_or("User").replace('.', " "));
     let initials = name
         .split_whitespace()
         .take(2)
@@ -172,8 +116,8 @@ pub async fn get_user_profile(state: State<'_, Arc<DbState>>) -> Result<UserProf
 
     Ok(UserProfile {
         name,
-        email,
+        email: account.email,
         initials: if initials.is_empty() { "U".to_string() } else { initials },
-        degraded: false,
+        degraded: crate::state::rate_limited_remain(&state, active_id).is_some(),
     })
 }

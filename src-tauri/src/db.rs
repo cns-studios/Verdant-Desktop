@@ -197,6 +197,15 @@ pub fn init_db(conn: &Connection) -> Result<()> {
         [],
     );
 
+    conn.execute_batch("
+        CREATE INDEX IF NOT EXISTS idx_emails_mailbox_ts
+            ON emails(account_id, mailbox, internal_ts);
+        CREATE INDEX IF NOT EXISTS idx_emails_thread_ts
+            ON emails(thread_id, mailbox, account_id, internal_ts);
+        CREATE INDEX IF NOT EXISTS idx_emails_thread_id
+            ON emails(thread_id, account_id);
+    ")?;
+
     Ok(())
 }
 
