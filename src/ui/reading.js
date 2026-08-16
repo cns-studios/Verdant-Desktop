@@ -4,6 +4,7 @@ import { sanitizeEmailHtml } from "../lib/sanitize.js";
 import { showToast } from "../lib/toast.js";
 import { downloadAttachment } from "../api.js";
 import { openExternalUrl } from "../api.js";
+import { fetchRemoteImage } from "../api.js";
 import { icon } from "./icons.js";
 import { t } from "../lib/i18n.js";
 
@@ -36,42 +37,67 @@ function senderAvatarUrls(sender, mailbox = "") {
   const domain = email.split("@")[1];
   if (!domain || domain === "localhost") return [];
   return [
-    `https://logo.clearbit.com/${encodeURIComponent(domain)}`,
     `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=64`,
   ];
 }
 
-export function applySenderAvatar(container, sender, mailbox = "") {
-  if (!container) return;
-  container.classList.remove("has-image");
-  container.innerHTML = "";
-  container.textContent = senderInitials(sender);
+const avatarDataCache = new Map();
+const avatarFetching = new Map();
 
-  const urls = senderAvatarUrls(sender, mailbox);
-  if (!urls.length) return;
+async function loadAvatarDataUrl(url) {
+  if (avatarDataCache.has(url)) return avatarDataCache.get(url);
+  if (avatarFetching.has(url)) return avatarFetching.get(url);
 
+  const promise = fetchRemoteImage(url)
+    .then((dataUrl) => {
+      avatarDataCache.set(url, dataUrl);
+      return dataUrl;
+    })
+    .catch(() => {
+      avatarDataCache.set(url, null);
+      return null;
+    })
+    .finally(() => avatarFetching.delete(url));
+
+  avatarFetching.set(url, promise);
+  return promise;
+}
+
+function placeAvatar(container, signature, dataUrl) {
+  container.dataset.avatarKey = signature;
+  container.classList.add("has-image");
+  container.textContent = "";
   const img = document.createElement("img");
   img.alt = "Sender icon";
-  let idx = 0;
+  img.src = dataUrl;
+  container.appendChild(img);
+}
 
-  img.onload = () => {
-    if (img.naturalWidth <= 16 && img.naturalHeight <= 16) {
-      idx += 1;
-      if (idx < urls.length) { img.src = urls[idx]; return; }
-      return;
+export function applySenderAvatar(container, sender, mailbox = "") {
+  if (!container) return;
+
+  const urls = senderAvatarUrls(sender, mailbox);
+  const signature = urls.join("\u0000");
+
+  if (container.dataset.avatarKey === signature) return;
+
+  const cached = avatarDataCache.get(signature);
+  if (cached) {
+    placeAvatar(container, signature, cached);
+    return;
+  }
+
+  container.dataset.avatarKey = signature;
+  container.classList.remove("has-image");
+  container.textContent = senderInitials(sender);
+
+  if (!urls.length) return;
+
+  loadAvatarDataUrl(signature).then((dataUrl) => {
+    if (dataUrl && container.dataset.avatarKey === signature) {
+      placeAvatar(container, signature, dataUrl);
     }
-    container.classList.add("has-image");
-    container.textContent = "";
-    container.innerHTML = "";
-    container.appendChild(img);
-  };
-
-  img.onerror = () => {
-    idx += 1;
-    if (idx < urls.length) img.src = urls[idx];
-  };
-
-  img.src = urls[idx];
+  });
 }
 
 function renderRecipientsLine(email) {

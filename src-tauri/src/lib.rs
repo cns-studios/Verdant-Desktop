@@ -192,6 +192,7 @@ pub fn run() {
             commands::updater::install_and_relaunch,
             commands::updater::get_changelog,
             commands::shell::open_external_url,
+            commands::shell::fetch_remote_image,
             commands::unsubscribe::unsubscribe_from_list,
 
             commands::window::get_startup_flags,

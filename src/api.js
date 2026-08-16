@@ -46,6 +46,7 @@ export async function restoreFromTrash(emailId) {
     });
 }
 export const getMailboxCounts = () => invoke("get_mailbox_counts");
+export const fetchRemoteImage = (url) => invoke("fetch_remote_image", { url });
 export const clearLocalData = () => invoke("clear_local_data");
 
 
