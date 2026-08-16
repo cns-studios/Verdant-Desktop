@@ -66,6 +66,9 @@
 .toast.error { border-color: #c08d8d; color: #7a2d2d; }
 @keyframes toast-in { from { opacity:0; transform: translateY(-14px);} to { opacity:1; transform: translateY(0);} }
 .suppress-anim .email-item { animation:none !important; }
+#email-list .email-item.dust-out { animation:none !important; opacity:0; transition:opacity 0.15s ease-out; pointer-events:none; }
+.dust-layer { position:fixed; inset:0; pointer-events:none; z-index:3000; }
+.dust-particle { position:fixed; border-radius:50%; pointer-events:none; will-change:transform, opacity; }
 .pager { display:flex; gap:6px; justify-content:center; padding:10px 12px 14px; border-top:1px solid var(--border); background: var(--surface); }
 .pager button { border:1px solid var(--border); background: var(--surface2); color: var(--text); border-radius:8px; padding:6px 10px; cursor:pointer; font:500 12px 'DM Sans', sans-serif; }
 .pager button.active { background: var(--green); color:#fff; border-color: var(--green); }

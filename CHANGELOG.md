@@ -5,6 +5,7 @@
 - Improved colors and element positioning
 - Sidebar improvements & Sidebar is now collabsable
 - Better compose window options
+- General App improvements
 - Fixed minor bugs
 
 ## [2.2.19]

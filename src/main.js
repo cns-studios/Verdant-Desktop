@@ -287,6 +287,7 @@ function renderEmailList(animate = false) {
         const email = emails[i];
         const row = document.createElement("div");
         row.className = `email-item ${email.is_read ? "" : "unread"}`.trim();
+        row.dataset.emailId = email.id;
         if (animate) row.style.animationDelay = `${Math.min(i * 40, 1200)}ms`;
         row.innerHTML = `
             ${email.is_read ? "" : '<div class="unread-dot"></div>'}
@@ -418,7 +419,167 @@ function onSynced(mailbox, latestEmails) {
   }
 }
 
-async function refreshAfterAction() {
+async function dustOutRows(rows) {
+    const layer = document.createElement("div");
+    layer.className = "dust-layer";
+    document.body.appendChild(layer);
+
+    const particleAnims = [];
+    rows.forEach((row) => {
+        const rect = row.getBoundingClientRect();
+        row.classList.add("dust-out");
+        const baseColor = getComputedStyle(row).color || "rgb(90,94,86)";
+        const count = 30;
+
+        for (let i = 0; i < count; i++) {
+            const p = document.createElement("div");
+            p.className = "dust-particle";
+            const size = 1.5 + Math.random() * 3.5;
+            const x = rect.left + Math.random() * rect.width;
+            const y = rect.top + Math.random() * rect.height;
+            p.style.left = `${x}px`;
+            p.style.top = `${y}px`;
+            p.style.width = `${size}px`;
+            p.style.height = `${size}px`;
+            const tint = i % 4;
+            p.style.background = tint === 0 ? "rgba(255,255,255,0.95)"
+                : tint === 1 ? "rgba(255,214,120,0.9)"
+                : tint === 2 ? "rgba(175,225,255,0.9)"
+                : baseColor;
+            layer.appendChild(p);
+
+            const dx = (Math.random() - 0.5) * 110;
+            const dy = -15 - Math.random() * 80;
+            const rot = (Math.random() - 0.5) * 200;
+            const scale = 0.05 + Math.random() * 0.35;
+            const anim = p.animate(
+                [
+                    { transform: "translate(0,0) scale(1)", opacity: 1 },
+                    { transform: `translate(${dx}px, ${dy}px) rotate(${rot}deg) scale(${scale})`, opacity: 0 },
+                ],
+                { duration: 550 + Math.random() * 400, easing: "cubic-bezier(0.15, 0.6, 0.35, 1)", fill: "forwards" }
+            );
+            particleAnims.push(anim);
+        }
+    });
+
+    await Promise.all(rows.map((row) => new Promise((resolve) => {
+        setTimeout(() => {
+            const cs = getComputedStyle(row);
+            const h = row.offsetHeight;
+            const pt = parseFloat(cs.paddingTop) || 0;
+            const pb = parseFloat(cs.paddingBottom) || 0;
+            const mt = parseFloat(cs.marginTop) || 0;
+            const mb = parseFloat(cs.marginBottom) || 0;
+            const collapse = row.animate(
+                [
+                    { height: `${h}px`, paddingTop: `${pt}px`, paddingBottom: `${pb}px`, marginTop: `${mt}px`, marginBottom: `${mb}px`, opacity: 0 },
+                    { height: "0px", paddingTop: "0px", paddingBottom: "0px", marginTop: "0px", marginBottom: "0px", opacity: 0 },
+                ],
+                { duration: 420, easing: "cubic-bezier(0.4, 0, 0.2, 1)", fill: "forwards" }
+            );
+            collapse.onfinish = () => { row.remove(); resolve(); };
+        }, 130);
+    })));
+
+    await Promise.all(particleAnims.map((a) => new Promise((r) => { a.onfinish = r; })));
+    layer.remove();
+}
+
+function patchInboxThreadCache(email) {
+    if (!inboxThreadsCache || !email?.thread_id) return;
+    if (inboxThreadsCache.some((t) => t.thread_id === email.thread_id)) return;
+    const thread = {
+        thread_id: email.thread_id,
+        subject: email.subject || t("app.no_subject"),
+        participants: email.sender || t("app.unknown_sender"),
+        snippet: email.snippet || "",
+        latest_ts: email.internal_ts || 0,
+        latest_date: email.date || "",
+        message_count: 1,
+        unread_count: email.is_read ? 0 : 1,
+        is_read: !!email.is_read,
+        starred: !!email.starred,
+        has_attachments: !!(email.has_attachments) || (email.attachments_json && email.attachments_json !== "[]"),
+        labels: email.labels || "",
+    };
+    const idx = inboxThreadsCache.findIndex((t) => (t.latest_ts || 0) < thread.latest_ts);
+    if (idx === -1) inboxThreadsCache.push(thread);
+    else inboxThreadsCache.splice(idx, 0, thread);
+}
+
+async function refreshAfterAction(removedIds = [], movedTo = null, movedEmail = null) {
+    const list = document.getElementById("email-list");
+    if (removedIds.length) {
+        for (const m of Array.from(mailboxCache.keys())) {
+            if (m !== currentMailbox) mailboxCache.delete(m);
+        }
+        if (currentMailbox !== "INBOX") {
+            if (movedTo === "INBOX" && movedEmail?.thread_id) {
+                patchInboxThreadCache(movedEmail);
+            } else {
+                inboxThreadsCache = null;
+            }
+        }
+    }
+    if (removedIds.length && list && !isDeepSearchActive) {
+        const removed = new Set(removedIds);
+        const activeRow = list.querySelector(".email-item.active");
+        let rows = [];
+        if (currentMailbox === "INBOX") {
+            if (activeRow) {
+                rows = [activeRow];
+            } else {
+                const tid = getSelectedThreadId();
+                if (tid) {
+                    rows = Array.from(list.querySelectorAll(".email-item[data-thread-id]"))
+                        .filter((r) => r.dataset.threadId === tid);
+                }
+            }
+        } else {
+            rows = Array.from(list.querySelectorAll(".email-item[data-email-id]"))
+                .filter((r) => removed.has(r.dataset.emailId));
+            if (!rows.length && activeRow) rows = [activeRow];
+        }
+        if (rows.length) {
+            if (currentMailbox === "INBOX") {
+                const tid = rows[0]?.dataset.threadId;
+                if (tid && inboxThreadsCache) {
+                    inboxThreadsCache = inboxThreadsCache.filter((t) => t.thread_id !== tid);
+                }
+            } else {
+                currentEmails = (currentEmails || []).filter((e) => !removed.has(e.id));
+                mailboxCache.set(currentMailbox, currentEmails);
+            }
+            const countEl = document.querySelector(".list-count");
+            if (countEl) {
+                const m = countEl.textContent.match(/\d+/);
+                if (m) countEl.textContent = t("list.count", { n: Math.max(0, Number(m[0]) - rows.length) });
+            }
+            await dustOutRows(rows);
+            refreshCounts().catch(console.error);
+            syncMailboxInBackground(currentMailbox, false, () => refreshCounts().catch(console.error)).catch(() => {});
+            return;
+        }
+    }
+    if (removedIds.length && !isDeepSearchActive) {
+        if (currentMailbox === "INBOX") {
+            const tid = getSelectedThreadId();
+            if (tid && inboxThreadsCache) {
+                inboxThreadsCache = inboxThreadsCache.filter((t) => t.thread_id !== tid);
+                renderThreadList(inboxThreadsCache, activeFilter, searchQuery, false);
+                refreshCounts().catch(console.error);
+                return;
+            }
+        } else {
+            const removed = new Set(removedIds);
+            currentEmails = (currentEmails || []).filter((e) => !removed.has(e.id));
+            mailboxCache.set(currentMailbox, currentEmails);
+            renderEmailList(false);
+            refreshCounts().catch(console.error);
+            return;
+        }
+    }
     await loadLocalMailbox(currentMailbox, false);
     syncMailboxInBackground(currentMailbox, false, onSynced).catch(() => {});
 }

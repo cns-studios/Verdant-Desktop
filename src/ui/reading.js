@@ -515,6 +515,8 @@ export function bindReadingActions(getSelected, setSelected, onRefresh, openComp
       console.log(`[UI] Action clicked: ${action}. title: ${title}. threadId: ${threadId}. messageIds count: ${messageIds.length}. selectedEmailId: ${email?.id}`);
 
       if (action === "archive") {
+        const removedIds = threadId && messageIds.length ? messageIds : (email ? [email.id] : []);
+        const movedEmail = email || getThreadLatestEmail?.() || null;
         if (title === t("reading.restore")) {
           const { restoreFromTrash } = await import("../api.js");
           if (threadId && messageIds.length) {
@@ -523,6 +525,7 @@ export function bindReadingActions(getSelected, setSelected, onRefresh, openComp
             await restoreFromTrash(email.id);
           }
           showToast(t("toast.restored"));
+          await onRefresh(removedIds, "INBOX", movedEmail);
         } else if (title === t("reading.move_to_inbox")) {
           const { moveToInbox } = await import("../api.js");
           if (threadId && messageIds.length) {
@@ -531,6 +534,7 @@ export function bindReadingActions(getSelected, setSelected, onRefresh, openComp
             await moveToInbox(email.id);
           }
           showToast(t("toast.moved_to_inbox"));
+          await onRefresh(removedIds, "INBOX", movedEmail);
         } else {
           if (threadId && messageIds.length) {
             for (const id of messageIds) await archiveEmail(id).catch(() => {});
@@ -538,8 +542,8 @@ export function bindReadingActions(getSelected, setSelected, onRefresh, openComp
             await archiveEmail(email.id);
           }
           showToast(t("toast.archived"));
+          await onRefresh(removedIds);
         }
-        await onRefresh();
         return;
       }
 
@@ -548,6 +552,7 @@ export function bindReadingActions(getSelected, setSelected, onRefresh, openComp
         const messageIds = threadId 
           ? Array.from(document.querySelectorAll(".thread-bubble")).map(b => b.dataset.messageId).filter(Boolean)
           : [];
+        const removedIds = threadId && messageIds.length ? messageIds : (email ? [email.id] : []);
 
         if (title === t("reading.permanent_delete")) {
           const { permanentDeleteEmail } = await import("../api.js");
@@ -567,7 +572,7 @@ export function bindReadingActions(getSelected, setSelected, onRefresh, openComp
           }
           showToast(t("toast.trashed"));
         }
-        await onRefresh();
+        await onRefresh(removedIds);
         return;
       }
 
@@ -672,6 +677,9 @@ export function bindReadingActions(getSelected, setSelected, onRefresh, openComp
           ...(isTrash && email ? [
             {
               label: t("reading.restore"),
+              removedIds: [email.id],
+              movedTo: "INBOX",
+              movedEmail: email,
               onClick: async () => {
                 const { restoreFromTrash } = await import("../api.js");
                 await restoreFromTrash(email.id);
@@ -680,6 +688,7 @@ export function bindReadingActions(getSelected, setSelected, onRefresh, openComp
             },
             {
               label: t("reading.permanent_delete"),
+              removedIds: [email.id],
               onClick: async () => {
                 const { permanentDeleteEmail } = await import("../api.js");
                 await permanentDeleteEmail(email.id);
@@ -730,7 +739,7 @@ export function buildActionMenu(entries, anchor, onRefresh) {
       e.stopPropagation();
       menu.remove();
       await entry.onClick();
-      await onRefresh();
+      await onRefresh(entry.removedIds, entry.movedTo, entry.movedEmail);
     };
     menu.appendChild(b);
   });
