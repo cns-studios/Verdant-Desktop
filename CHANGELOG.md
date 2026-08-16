@@ -1,6 +1,6 @@
 # Changelog
 
-## [2.2.10]
+## [2.2.20]
 - Better Keyboard Controls throughout the app
 - Improved colors and element positioning
 - Sidebar improvements & Sidebar is now collabsable

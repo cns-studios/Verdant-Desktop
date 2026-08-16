@@ -5,26 +5,81 @@ import { icon } from "./icons.js";
 
 const SIDEBAR_COLLAPSED_KEY = "verdant.sidebarCollapsed";
 let pendingCollapsed = null;
+let hoverOutDone = null;
 
-export function applySidebarCollapsed(collapsed) {
+function setCollapseBtn(collapsed) {
     const btn = document.getElementById("sidebar-collapse-btn");
-    if (!btn) {
-        pendingCollapsed = collapsed;
-        return;
-    }
-    pendingCollapsed = null;
-    document.body.classList.toggle("sidebar-collapsed", collapsed);
+    if (!btn) return;
     btn.innerHTML = collapsed ? icon("sidebar-expand") : icon("sidebar-collapse");
     const label = collapsed ? t("sidebar.expand") : t("sidebar.collapse");
     btn.title = label;
     btn.setAttribute("aria-label", label);
-    try { localStorage.setItem(SIDEBAR_COLLAPSED_KEY, collapsed ? "1" : "0"); } catch {}
 }
 
 function persistSidebarCollapsed(collapsed) {
+    try { localStorage.setItem(SIDEBAR_COLLAPSED_KEY, collapsed ? "1" : "0"); } catch {}
     import("@tauri-apps/api/core").then(({ invoke }) => {
         invoke("update_app_config", { config: { sidebar_collapsed: collapsed } })
             .catch(err => console.error("Failed to persist sidebar state:", err));
+    });
+}
+
+function cancelHoverOut() {
+    if (hoverOutDone) { hoverOutDone(); hoverOutDone = null; }
+}
+
+export function applySidebarCollapsed(collapsed) {
+    const sidebar = document.querySelector(".sidebar");
+    if (!sidebar) {
+        pendingCollapsed = collapsed;
+        return;
+    }
+    pendingCollapsed = null;
+    setCollapseBtn(collapsed);
+    persistSidebarCollapsed(collapsed);
+    document.body.classList.toggle("sidebar-collapsed", collapsed);
+    sidebar.classList.remove("sidebar-float", "sidebar-float-expanded", "sidebar-float-exit");
+}
+
+function bindSidebarHover() {
+    const sidebar = document.querySelector(".sidebar");
+    if (!sidebar) return;
+
+    let hoverOutTimer = null;
+
+    sidebar.addEventListener("mouseenter", () => {
+        if (!document.body.classList.contains("sidebar-collapsed")) return;
+        if (hoverOutTimer) { clearTimeout(hoverOutTimer); hoverOutTimer = null; }
+        if (hoverOutDone) { hoverOutDone(); hoverOutDone = null; }
+        if (sidebar.classList.contains("sidebar-float")) {
+            sidebar.classList.add("sidebar-float-expanded");
+            return;
+        }
+        sidebar.classList.add("sidebar-float");
+        void sidebar.offsetWidth;
+        sidebar.classList.add("sidebar-float-expanded");
+    });
+
+    sidebar.addEventListener("mouseleave", () => {
+        if (!document.body.classList.contains("sidebar-collapsed")) return;
+        if (!sidebar.classList.contains("sidebar-float")) return;
+        hoverOutTimer = setTimeout(() => {
+            hoverOutTimer = null;
+            if (!sidebar.classList.contains("sidebar-float-expanded")) return;
+            sidebar.classList.remove("sidebar-float-expanded");
+            const done = (e) => {
+                if (e.target !== sidebar || e.propertyName !== "transform") return;
+                sidebar.removeEventListener("transitionend", done);
+                hoverOutDone = null;
+                sidebar.classList.add("sidebar-float-exit");
+                void sidebar.offsetWidth;
+                sidebar.classList.remove("sidebar-float");
+                void sidebar.offsetWidth;
+                sidebar.classList.remove("sidebar-float-exit");
+            };
+            hoverOutDone = () => sidebar.removeEventListener("transitionend", done);
+            sidebar.addEventListener("transitionend", done);
+        }, 300);
     });
 }
 
@@ -38,10 +93,22 @@ export function bindSidebarCollapse() {
         try { applySidebarCollapsed(localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1"); } catch {}
     }
 
+    bindSidebarHover();
+
     btn.addEventListener("click", () => {
-        const next = !document.body.classList.contains("sidebar-collapsed");
-        applySidebarCollapsed(next);
-        persistSidebarCollapsed(next);
+        const sidebar = document.querySelector(".sidebar");
+        const collapsed = document.body.classList.contains("sidebar-collapsed");
+        if (collapsed) {
+            persistSidebarCollapsed(false);
+            setCollapseBtn(false);
+            cancelHoverOut();
+            document.body.classList.remove("sidebar-collapsed");
+            sidebar.classList.remove("sidebar-float", "sidebar-float-expanded", "sidebar-float-exit");
+        } else {
+            persistSidebarCollapsed(true);
+            setCollapseBtn(true);
+            document.body.classList.add("sidebar-collapsed");
+        }
     });
 }
 
