@@ -753,6 +753,16 @@ export function bindComposeSend(onAfterSend) {
   });
 }
 
+export function bindComposeClear() {
+  const clearBtn = document.getElementById("compose-clear-btn");
+  if (!clearBtn) return;
+
+  clearBtn.addEventListener("click", () => {
+    localStorage.removeItem("verdant.localDraft");
+    resetComposeState();
+  });
+}
+
 export function bindComposeDraftSave(onAfterSave) {
   const draftBtn = document.getElementById("compose-save-draft-btn");
   if (!draftBtn) return;

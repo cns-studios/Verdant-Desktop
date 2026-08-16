@@ -38,7 +38,7 @@ import {
 import {
     isComposeOpen, openCompose, closeCompose, openComposeForDraft,
     bindComposeRecipientInputs, bindComposeFormatting, bindComposeAttachments,
-    bindComposeWindowControls, bindComposeSend, bindComposeDraftSave,
+    bindComposeWindowControls, bindComposeSend, bindComposeDraftSave, bindComposeClear,
 } from "./ui/compose.js";
 import {
     openSettingsModal, isSettingsOpen, closeOverlay,
@@ -751,6 +751,7 @@ async function initializeConnectedUI() {
     bindComposeAttachments();
     bindComposeSend(async () => { await openMailbox(currentMailbox, false); });
     bindComposeDraftSave(async () => { await openMailbox(currentMailbox, false); });
+    bindComposeClear();
     bindHotkeys();
     bindGlobalExternalLinkInterception();
 

@@ -182,13 +182,13 @@ export function renderShell() {
           <div id="compose-body" class="compose-editor" contenteditable="true" data-placeholder="${t("compose.placeholder")}"></div>
         </div>
         <div class="compose-format-toolbar" id="compose-format-toolbar">
-          <button class="compose-format-btn" type="button" data-format="bold">${t("compose.format.bold")}</button>
-          <button class="compose-format-btn" type="button" data-format="header">${t("compose.format.header")}</button>
-          <button class="compose-format-btn" type="button" data-format="italic">${t("compose.format.italic")}</button>
-          <button class="compose-format-btn" type="button" data-format="list">${t("compose.format.list")}</button>
-          <button class="compose-format-btn" type="button" data-format="quote">${t("compose.format.quote")}</button>
-          <button class="compose-format-btn" type="button" data-format="code">${t("compose.format.code")}</button>
-          <button class="compose-format-btn" type="button" data-format="clear">${t("compose.format.clear")}</button>
+          <button class="compose-format-btn" type="button" data-format="bold" title="${t("compose.format.bold")}">${icon("bold")}</button>
+          <button class="compose-format-btn" type="button" data-format="header" title="${t("compose.format.header")}">${icon("h-1")}</button>
+          <button class="compose-format-btn" type="button" data-format="italic" title="${t("compose.format.italic")}">${icon("italic")}</button>
+          <button class="compose-format-btn" type="button" data-format="list" title="${t("compose.format.list")}">${icon("list")}</button>
+          <button class="compose-format-btn" type="button" data-format="quote" title="${t("compose.format.quote")}">${icon("quote")}</button>
+          <button class="compose-format-btn" type="button" data-format="code" title="${t("compose.format.code")}">${icon("code")}</button>
+          <button class="compose-format-btn" type="button" data-format="clear" title="${t("compose.format.clear")}">${icon("eraser")}</button>
         </div>
         <div class="compose-attachments" id="compose-attachments"></div>
         <input id="compose-file-input" type="file" multiple hidden>
@@ -202,6 +202,9 @@ export function renderShell() {
             </button>
           </div>
           <div style="display:flex; gap:8px;">
+            <button class="modal-tool compose-clear-btn" id="compose-clear-btn" title="${t("compose.clear")}" aria-label="${t("compose.clear")}">
+              ${icon("trash")}
+            </button>
             <button class="verdant-btn" id="compose-save-draft-btn">${t("compose.save_draft")}</button>
             <button class="send-btn" id="compose-send-btn">
               ${icon("send")}

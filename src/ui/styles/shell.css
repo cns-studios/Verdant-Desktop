@@ -18,13 +18,13 @@ body { -webkit-user-select: none; user-select: none; }
 .app-win-btn.close:hover { background:#f3dfdf; border-color:#ddb5b5; color:#8a2e2e; }
 .app-win-btn svg { width:14px; height:14px; stroke-width:2.2; }
 .app-content { flex:1; min-height:0; display:flex; width:100%; overflow:hidden; height:calc(100vh - 42px); }
-.sidebar { width:220px; min-width:220px; background:var(--surface); border-right:1px solid var(--border); display:flex; flex-direction:column; overflow:hidden; }
+.sidebar { width:220px; min-width:220px; background:var(--surface); border-right:1px solid var(--border); display:flex; flex-direction:column; overflow:hidden; border-top-right-radius:10px; border-bottom-right-radius:10px; }
 .sidebar-header { padding:20px 20px 10px; }
 .sidebar-menu-label { font-family:'Fraunces',serif; font-size:21px; font-weight:500; letter-spacing:-0.3px; color:var(--text); text-align:left; }
 .compose-btn { width:100%; padding:9px 14px; background:var(--green); color:var(--white); border:none; border-radius:8px; font-family:'DM Sans',sans-serif; font-size:13px; font-weight:500; cursor:pointer; display:flex; align-items:center; gap:7px; transition:background 0.15s, transform 0.1s; }
 .compose-btn:hover { background:var(--accent); transform:translateY(-1px); }
 .compose-btn svg { width:15px; height:15px; opacity:0.9; }
-.sidebar-section { padding:6px 12px 6px; flex:1; overflow-y:auto; }
+.sidebar-section { padding:6px 12px 6px; flex:0 1 auto; overflow-y:auto; }
 .nav-item { display:flex; align-items:center; gap:9px; padding:7px 10px; border-radius:7px; cursor:pointer; font-size:13.5px; color:var(--text-mid); border:1px solid transparent; transition:background 0.12s, color 0.12s, border-color 0.12s; margin-bottom:1px; user-select:none; }
 .nav-item:hover { background:var(--surface2); color:var(--text); }
 .nav-item.active { background:var(--green-pale); border-color:var(--green-muted); color:var(--green); font-weight:500; }
@@ -32,10 +32,10 @@ body { -webkit-user-select: none; user-select: none; }
 .nav-item.active svg { opacity:1; }
 .nav-badge { margin-left:auto; background:var(--green); color:white; font-size:10px; font-weight:500; padding:1px 6px; border-radius:20px; line-height:16px; }
 .nav-badge.subtle { background:var(--surface2); color:var(--text); opacity:1; font-weight:500; }
-.compose-wrap { padding:18px 12px 10px; }
-.sidebar-footer { padding:14px 16px; }
-.user-row { display:flex; align-items:center; gap:10px; cursor:pointer; padding:6px; border-radius:8px; transition:background 0.12s; }
-.user-row:hover { background:var(--surface2); }
+.compose-wrap { padding:24px 12px 10px; }
+.sidebar-footer { padding:14px 16px; margin-top:auto; }
+.user-row { display:flex; align-items:center; gap:10px; cursor:pointer; padding:6px; border-radius:8px; background:var(--user-row-bg); transition:background 0.12s; }
+.user-row:hover { background:var(--user-row-hover); }
 .avatar { width:28px; height:28px; border-radius:50%; background:var(--green-mid); display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:600; color:white; flex-shrink:0; }
 .user-info { flex:1; min-width:0; }
 .user-name { font-size:12.5px; font-weight:500; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -150,11 +150,12 @@ body.resizing { cursor:col-resize; user-select:none; }
 .compose-editor blockquote { border-left:3px solid var(--green-light); background:var(--green-pale); margin:8px 0; padding:8px 10px; color:var(--text-mid); }
 .compose-editor pre { background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:10px; margin:8px 0; overflow-x:auto; }
 .compose-editor ul { margin:8px 0 8px 18px; }
-.compose-format-toolbar { display:none; margin:4px 18px 0; padding:8px; border:1px solid var(--border); border-radius:8px; background:var(--surface); flex-wrap:wrap; gap:6px; }
+.compose-format-toolbar { display:none; width:fit-content; margin:4px 18px 0; padding:6px 10px; border:1px solid var(--border); border-radius:10px; background:var(--surface); flex-wrap:wrap; gap:5px; }
 .compose-format-toolbar.open { display:flex; }
-.compose-format-btn { border:1px solid var(--border); background:var(--white); color:var(--text-mid); border-radius:6px; padding:5px 8px; font-family:'DM Sans',sans-serif; font-size:12px; cursor:pointer; transition:background 0.12s, color 0.12s; }
+.compose-format-btn { width:26px; height:26px; border-radius:999px; border:1px solid var(--border); background:var(--white); color:var(--text-mid); display:flex; align-items:center; justify-content:center; cursor:pointer; transition:background 0.12s, color 0.12s, border-color 0.12s; }
+.compose-format-btn svg { width:14px; height:14px; }
 .compose-format-btn:hover { background:var(--green-pale); color:var(--green); }
-.compose-format-btn.active { background:var(--green-pale); color:var(--green); border-color:var(--green-muted); font-weight:600; }
+.compose-format-btn.active { background:var(--green-pale); color:var(--green); border-color:var(--green-muted); }
 .compose-attachments { margin:0 18px 10px; display:flex; flex-wrap:wrap; gap:6px; min-height:20px; }
 .compose-attachment { display:inline-flex; align-items:center; gap:6px; padding:4px 8px; border-radius:999px; border:1px solid var(--green-muted); background:var(--green-pale); color:var(--green); font-size:11px; max-width:100%; }
 .compose-attachment-name { max-width:180px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -165,6 +166,7 @@ body.resizing { cursor:col-resize; user-select:none; }
 .modal-tool:hover { background:var(--surface); border-color:var(--border); color:var(--text); }
 .modal-tool svg { width:16px; height:16px; }
 .modal-tool.active { background:var(--green-pale); border-color:var(--green-muted); color:var(--green); }
+.modal-tool.compose-clear-btn:hover { background:#f5dede; color:#8a2e2e; border-color:#d79f9f; }
 .send-btn { padding:8px 18px; background:var(--green); color:white; border:none; border-radius:8px; font-family:'DM Sans',sans-serif; font-size:13px; font-weight:500; cursor:pointer; display:flex; align-items:center; gap:7px; transition:background 0.15s, transform 0.1s; }
 .send-btn:hover { background:var(--accent); transform:translateY(-1px); }
 .send-btn svg { width:15px; height:15px; }
