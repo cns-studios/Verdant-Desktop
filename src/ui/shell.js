@@ -27,39 +27,42 @@ export function renderShell() {
       <aside class="sidebar">
         <div class="sidebar-header">
           <div class="sidebar-menu-label">${t("sidebar.mailboxes")}</div>
+          <button class="sidebar-collapse-btn" id="sidebar-collapse-btn" title="${t("sidebar.collapse")}" aria-label="${t("sidebar.collapse")}">
+            ${icon("sidebar-collapse")}
+          </button>
         </div>
 
         <div class="sidebar-section">
           <div class="nav-item active" data-mailbox="INBOX">
             ${icon("inbox")}
-            ${t("sidebar.inbox")}
+            <span class="nav-text">${t("sidebar.inbox")}</span>
           </div>
           <div class="nav-item" data-mailbox="STARRED">
             ${icon("star")}
-            ${t("sidebar.starred")}
+            <span class="nav-text">${t("sidebar.starred")}</span>
           </div>
           <div class="nav-item" data-mailbox="ARCHIVE">
             ${icon("archive")}
-            ${t("sidebar.archive")}
+            <span class="nav-text">${t("sidebar.archive")}</span>
           </div>
           <div class="nav-item" data-mailbox="SENT">
             ${icon("send")}
-            ${t("sidebar.sent")}
+            <span class="nav-text">${t("sidebar.sent")}</span>
           </div>
           <div class="nav-item" data-mailbox="DRAFT">
             ${icon("file-text")}
-            ${t("sidebar.drafts")}
+            <span class="nav-text">${t("sidebar.drafts")}</span>
           </div>
           <div class="nav-item" data-mailbox="TRASH">
             ${icon("trash")}
-            ${t("sidebar.trash")}
+            <span class="nav-text">${t("sidebar.trash")}</span>
           </div>
         </div>
 
         <div class="compose-wrap">
           <button class="compose-btn" id="compose-open-btn">
             ${icon("plus")}
-            ${t("sidebar.compose")}
+            <span class="compose-btn-label">${t("sidebar.compose")}</span>
           </button>
         </div>
 

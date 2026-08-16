@@ -6,6 +6,7 @@ import { getHotkeys, saveHotkeys, defaultHotkeys, normalizeCombo, eventCombo } f
 import { syncMailboxInBackground, lastSynced } from "../lib/sync.js";
 import { t, getLang, setLang, getSupportedLanguages } from "../lib/i18n.js";
 import { icon } from "./icons.js";
+import { applySidebarCollapsed } from "./sidebar.js";
 import { getVersion } from "@tauri-apps/api/app";
 
 const UPDATE_PREFS_KEY = "verdant.updatePrefs";
@@ -77,6 +78,10 @@ export async function hydratePrefsFromBackend() {
     if (typeof config.update_channel === "string") {
       updatePrefs = { ...updatePrefs, channel: normalizeUpdateChannel(config.update_channel) };
       localStorage.setItem(UPDATE_PREFS_KEY, JSON.stringify(updatePrefs));
+    }
+
+    if (typeof config.sidebar_collapsed === "boolean") {
+      applySidebarCollapsed(config.sidebar_collapsed);
     }
   } catch (err) {
     console.error("Failed to hydrate prefs from backend config", err);

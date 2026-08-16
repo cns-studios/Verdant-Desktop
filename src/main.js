@@ -30,6 +30,7 @@ import { showOnboarding } from "./ui/onboarding.js";
 import {
     bindMailboxNav, bindPaneResizer, bindAppHeaderControls,
     refreshCounts, setUserProfile, bindUserRow, setListTitle, refreshAppHeaderSubtitle,
+    bindSidebarCollapse,
 } from "./ui/sidebar.js";
 import {
     renderReadingPane, bindReadingActions, setReadingPaneHidden,
@@ -726,6 +727,7 @@ async function initializeConnectedUI() {
     renderShell();
 
     bindAppHeaderControls(isComposeOpen, isSettingsOpen, () => currentMailbox);
+    bindSidebarCollapse();
     bindMailboxNav(async (mailbox) => {
         searchQuery = "";
         const input = document.getElementById("search-input");

@@ -15,6 +15,8 @@ const translations = {
     "onboarding.language.label": "Language",
 
     "sidebar.mailboxes": "Menu",
+    "sidebar.collapse": "Collapse sidebar",
+    "sidebar.expand": "Expand sidebar",
     "sidebar.inbox": "Inbox",
     "sidebar.starred": "Starred",
     "sidebar.archive": "Archive",
@@ -271,6 +273,8 @@ const translations = {
     "onboarding.language.label": "Sprache",
 
     "sidebar.mailboxes": "Menü",
+    "sidebar.collapse": "Seitenleiste einklappen",
+    "sidebar.expand": "Seitenleiste ausklappen",
     "sidebar.inbox": "Posteingang",
     "sidebar.starred": "Markiert",
     "sidebar.archive": "Archiv",

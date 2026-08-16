@@ -5,9 +5,11 @@ use tauri::Manager;
 use tokio::sync::Mutex;
 
 #[derive(serde::Deserialize, serde::Serialize, Clone)]
+#[serde(default)]
 pub struct AppConfig {
     pub run_in_background: bool,
     pub update_channel: String,
+    pub sidebar_collapsed: bool,
 }
 
 impl Default for AppConfig {
@@ -15,6 +17,7 @@ impl Default for AppConfig {
         Self {
             run_in_background: true,
             update_channel: "stable".to_string(),
+            sidebar_collapsed: false,
         }
     }
 }
@@ -23,6 +26,7 @@ impl Default for AppConfig {
 pub struct AppConfigPatch {
     pub run_in_background: Option<bool>,
     pub update_channel: Option<String>,
+    pub sidebar_collapsed: Option<bool>,
 }
 
 fn normalize_update_channel(raw: &str) -> String {
@@ -77,6 +81,9 @@ pub async fn update_app_config(
     }
     if let Some(update_channel) = config.update_channel {
         s.update_channel = normalize_update_channel(&update_channel);
+    }
+    if let Some(sidebar_collapsed) = config.sidebar_collapsed {
+        s.sidebar_collapsed = sidebar_collapsed;
     }
 
     persist_app_config(&app, &s)?;

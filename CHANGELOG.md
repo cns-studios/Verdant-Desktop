@@ -3,7 +3,8 @@
 ## [2.2.10]
 - Better Keyboard Controls throughout the app
 - Improved colors and element positioning
-- Sidebar improvements & Sidebar collabsable
+- Sidebar improvements & Sidebar is now collabsable
+- Better compose window options
 - Fixed minor bugs
 
 ## [2.2.19]

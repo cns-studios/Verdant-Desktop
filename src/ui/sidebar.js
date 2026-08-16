@@ -1,6 +1,49 @@
 import { getMailboxCounts } from "../api.js";
 import { mailboxTitle } from "../lib/format.js";
 import { t } from "../lib/i18n.js";
+import { icon } from "./icons.js";
+
+const SIDEBAR_COLLAPSED_KEY = "verdant.sidebarCollapsed";
+let pendingCollapsed = null;
+
+export function applySidebarCollapsed(collapsed) {
+    const btn = document.getElementById("sidebar-collapse-btn");
+    if (!btn) {
+        pendingCollapsed = collapsed;
+        return;
+    }
+    pendingCollapsed = null;
+    document.body.classList.toggle("sidebar-collapsed", collapsed);
+    btn.innerHTML = collapsed ? icon("sidebar-expand") : icon("sidebar-collapse");
+    const label = collapsed ? t("sidebar.expand") : t("sidebar.collapse");
+    btn.title = label;
+    btn.setAttribute("aria-label", label);
+    try { localStorage.setItem(SIDEBAR_COLLAPSED_KEY, collapsed ? "1" : "0"); } catch {}
+}
+
+function persistSidebarCollapsed(collapsed) {
+    import("@tauri-apps/api/core").then(({ invoke }) => {
+        invoke("update_app_config", { config: { sidebar_collapsed: collapsed } })
+            .catch(err => console.error("Failed to persist sidebar state:", err));
+    });
+}
+
+export function bindSidebarCollapse() {
+    const btn = document.getElementById("sidebar-collapse-btn");
+    if (!btn) return;
+
+    if (pendingCollapsed !== null) {
+        applySidebarCollapsed(pendingCollapsed);
+    } else {
+        try { applySidebarCollapsed(localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1"); } catch {}
+    }
+
+    btn.addEventListener("click", () => {
+        const next = !document.body.classList.contains("sidebar-collapsed");
+        applySidebarCollapsed(next);
+        persistSidebarCollapsed(next);
+    });
+}
 
 export function setAppHeaderSubtitle(label) {
     const subtitle = document.querySelector(".app-subtitle");
