@@ -88,6 +88,7 @@ export function renderThreadList(threads, activeFilter, searchQuery, animate = f
 
     row.innerHTML = `
       ${thread.is_read ? "" : '<div class="unread-dot"></div>'}
+      ${thread.starred ? `<span class="star-badge">${icon("star-filled", 18)}</span>` : ""}
       <div class="email-item-main">
         <div class="sender-avatar"></div>
         <div class="email-item-inner">
@@ -533,6 +534,10 @@ function resetReadingPane() {
 
 export function getSelectedThreadId() {
   return selectedThreadId;
+}
+
+export function getThreadById(threadId) {
+  return currentThreads.find((t) => t.thread_id === threadId) || null;
 }
 
 export function getSelectedThreadLatestMessage() {

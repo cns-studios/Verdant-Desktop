@@ -25,6 +25,7 @@ import "./ui/styles/onboarding.css";
 import "./ui/styles/accounts.css";
 import "./ui/styles/updates.css";
 import "./ui/styles/whatsnew.css";
+import "./ui/styles/contextmenu.css";
 import { renderShell } from "./ui/shell.js";
 import { showOnboarding } from "./ui/onboarding.js";
 import {
@@ -47,14 +48,16 @@ import {
 } from "./ui/settings.js";
 import { openAccountPopover, closeAccountPopover } from "./ui/accounts.js";
 import { openWhatsNewModal } from "./ui/whatsnew.js";
+import { bindEmailListContextMenu } from "./ui/contextmenu.js";
 import { appPrefs } from "./ui/settings.js";
 import { checkForUpdates, downloadLatestUpdate, switchAccount, listAccounts } from "./api.js";
 import { getInboxThreads } from "./api.js";
 import {
     renderThreadList,
-    getSelectedThreadId, getSelectedThreadLatestMessage, clearSelectedThread,
+    getSelectedThreadId, getSelectedThreadLatestMessage, clearSelectedThread, getThreadById,
 } from "./ui/thread.js";
 import { t, initLang } from "./lib/i18n.js";
+import { icon } from "./ui/icons.js";
 
 const PERIODIC_UPDATE_CHECK_INTERVAL_MS = 30 * 60 * 1000;
 
@@ -92,6 +95,7 @@ let isSyncing = false;
 const mailboxCache = new Map();
 let inboxThreadsCache = null;
 let lastAnimatedRenderAt = 0;
+const ANIMATION_WINDOW_MS = 1800;
 
 function showBootScreen() {
     if (document.getElementById("boot-screen")) return;
@@ -291,6 +295,7 @@ function renderEmailList(animate = false) {
         if (animate) row.style.animationDelay = `${Math.min(i * 40, 1200)}ms`;
         row.innerHTML = `
             ${email.is_read ? "" : '<div class="unread-dot"></div>'}
+            ${email.starred ? `<span class="star-badge">${icon("star-filled", 18)}</span>` : ""}
             <div class="email-item-main">
                 <div class="sender-avatar"></div>
                 <div class="email-item-inner">
@@ -399,11 +404,20 @@ async function openMailbox(mailbox, animate = false, forceSync = true) {
         : Promise.resolve();
     await loadPromise;
     await syncPromise;
-    if (currentMailbox === mailbox) loadLocalMailbox(mailbox, false).catch(console.error);
+    if (currentMailbox === mailbox) {
+        const wait = Math.max(0, ANIMATION_WINDOW_MS - (Date.now() - lastAnimatedRenderAt));
+        if (wait > 0) {
+            setTimeout(() => {
+                if (currentMailbox === mailbox) loadLocalMailbox(mailbox, false).catch(console.error);
+            }, wait);
+        } else {
+            loadLocalMailbox(mailbox, false).catch(console.error);
+        }
+    }
 }
 
 function onSynced(mailbox, latestEmails) {
-  if (Date.now() - lastAnimatedRenderAt < 1800) return;
+  if (Date.now() - lastAnimatedRenderAt < ANIMATION_WINDOW_MS) return;
   if (currentMailbox === mailbox) {
     if (mailbox === "INBOX") {
       getInboxThreads().then(threads => {
@@ -421,6 +435,7 @@ function onSynced(mailbox, latestEmails) {
 }
 
 async function refreshFromSyncedEvent() {
+  if (Date.now() - lastAnimatedRenderAt < ANIMATION_WINDOW_MS) return;
   console.log("Backend synced emails, refreshing UI...");
   try {
     if (currentMailbox === "INBOX") {
@@ -525,7 +540,7 @@ function patchInboxThreadCache(email) {
     else inboxThreadsCache.splice(idx, 0, thread);
 }
 
-async function refreshAfterAction(removedIds = [], movedTo = null, movedEmail = null) {
+async function refreshAfterAction(removedIds = [], movedTo = null, movedEmail = null, removedThreadId = null) {
     const list = document.getElementById("email-list");
     if (removedIds.length) {
         for (const m of Array.from(mailboxCache.keys())) {
@@ -544,7 +559,10 @@ async function refreshAfterAction(removedIds = [], movedTo = null, movedEmail = 
         const activeRow = list.querySelector(".email-item.active");
         let rows = [];
         if (currentMailbox === "INBOX") {
-            if (activeRow) {
+            if (removedThreadId) {
+                rows = Array.from(list.querySelectorAll(".email-item[data-thread-id]"))
+                    .filter((r) => r.dataset.threadId === removedThreadId);
+            } else if (activeRow) {
                 rows = [activeRow];
             } else {
                 const tid = getSelectedThreadId();
@@ -560,7 +578,7 @@ async function refreshAfterAction(removedIds = [], movedTo = null, movedEmail = 
         }
         if (rows.length) {
             if (currentMailbox === "INBOX") {
-                const tid = rows[0]?.dataset.threadId;
+                const tid = removedThreadId || rows[0]?.dataset.threadId;
                 if (tid && inboxThreadsCache) {
                     inboxThreadsCache = inboxThreadsCache.filter((t) => t.thread_id !== tid);
                 }
@@ -581,7 +599,7 @@ async function refreshAfterAction(removedIds = [], movedTo = null, movedEmail = 
     }
     if (removedIds.length && !isDeepSearchActive) {
         if (currentMailbox === "INBOX") {
-            const tid = getSelectedThreadId();
+            const tid = removedThreadId || getSelectedThreadId();
             if (tid && inboxThreadsCache) {
                 inboxThreadsCache = inboxThreadsCache.filter((t) => t.thread_id !== tid);
                 renderThreadList(inboxThreadsCache, activeFilter, searchQuery, false);
@@ -933,6 +951,12 @@ async function initializeConnectedUI() {
         () => getSelectedThreadId(),
         () => getSelectedThreadLatestMessage(),
     );
+    bindEmailListContextMenu({
+        getMailbox: () => currentMailbox,
+        resolveThread: getThreadById,
+        resolveEmail: (emailId) => currentEmails.find((e) => e.id === emailId) || null,
+        onRefresh: refreshAfterAction,
+    });
     bindFilterChips();
     bindSearch();
     bindPaneResizer();

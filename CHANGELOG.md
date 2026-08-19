@@ -1,5 +1,10 @@
 # Changelog
 
+## [2.2.21]
+- Added a right-click menu (context menu) for mails
+- Better star/unstar system
+- Improved email loading performance
+
 ## [2.2.20]
 - Better Keyboard Controls throughout the app
 - Improved colors and element positioning
