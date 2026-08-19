@@ -100,10 +100,10 @@ function parseMarkdown(text) {
         .replace(/`(.+?)`/g, '<code>$1</code>');
 }
 
-export async function openWhatsNewModal(version) {
+export async function openWhatsNewModal(version, force = false) {
     if (_whatsNewOpen) return;
     
-    if (await wasDismissed(version)) {
+    if (!force && await wasDismissed(version)) {
         return;
     }
 

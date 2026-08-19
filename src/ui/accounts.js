@@ -119,7 +119,7 @@ export async function openAccountPopover(onSwitch, onAddAccount) {
         try {
             const { invoke } = await import("@tauri-apps/api/core");
             const updateInfo = await invoke("check_for_updates");
-            await openWhatsNewModal(updateInfo.currentVersion);
+            await openWhatsNewModal(updateInfo.currentVersion, true);
         } catch (err) {
             showToast(String(err), "error");
         }
