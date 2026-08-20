@@ -87,11 +87,26 @@ export function renderShell() {
             ${icon("search")}
             <input type="text" placeholder="${t("list.search.placeholder")}" id="search-input">
           </div>
-          <div class="filter-chips">
-            <div class="chip active" data-filter="Important">${t("list.filter.important")}</div>
-            <div class="chip" data-filter="All">${t("list.filter.all")}</div>
-            <div class="chip" data-filter="Unread">${t("list.filter.unread")}</div>
-            <div class="chip" data-filter="Attachments">${t("list.filter.attachments")}</div>
+          <div class="filter-bar">
+            <div class="filter-chips">
+              <div class="chip active" data-filter="Important">${t("list.filter.important")}</div>
+              <div class="chip" data-filter="All">${t("list.filter.all")}</div>
+              <div class="chip" data-filter="Unread">${t("list.filter.unread")}</div>
+              <div class="chip" data-filter="Attachments">${t("list.filter.attachments")}</div>
+            </div>
+            <div class="bulk-bar" id="bulk-bar">
+              <button class="bulk-master" id="bulk-master" title="${t("bulk.select_all")}">
+                <span class="bulk-master-box">
+                  <span class="bulk-ic-check">${icon("check", 12)}</span>
+                  <span class="bulk-ic-dash">${icon("minus", 12)}</span>
+                </span>
+              </button>
+              <div class="bulk-actions">
+                <button class="bulk-action" data-bulk="archive" title="${t("bulk.archive")}">${icon("archive", 14)}<span>${t("bulk.archive")}</span></button>
+                <button class="bulk-action danger" data-bulk="delete" title="${t("bulk.delete")}">${icon("trash", 14)}<span>${t("bulk.delete")}</span></button>
+                <button class="bulk-action" data-bulk="star" title="${t("bulk.star")}">${icon("star", 14)}<span>${t("bulk.star")}</span></button>
+              </div>
+            </div>
           </div>
         </div>
 

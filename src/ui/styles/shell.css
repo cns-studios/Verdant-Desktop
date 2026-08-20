@@ -117,8 +117,46 @@ body.resizing { cursor:col-resize; user-select:none; }
 .search-bar svg { width:15px; height:15px; color:var(--text-muted); flex-shrink:0; }
 .search-bar input { flex:1; border:none; background:none; font-family:'DM Sans',sans-serif; font-size:13px; color:var(--text); outline:none; -webkit-user-select:text; user-select:text; }
 .search-bar input::placeholder { color:var(--text-muted); }
-.filter-chips { display:flex; gap:6px; overflow-x:auto; scrollbar-width:none; padding-bottom:2px; }
+.filter-chips { display:flex; gap:6px; overflow-x:auto; scrollbar-width:none; padding-bottom:2px; transition:opacity .18s ease, transform .18s ease; }
 .filter-chips::-webkit-scrollbar { display:none; }
+.filter-bar { position:relative; min-height:32px; }
+.filter-bar.bulk-mode .filter-chips { opacity:0; transform:translateY(4px); pointer-events:none; }
+.bulk-bar {
+  position:absolute; left:0; right:0; top:0;
+  display:flex; align-items:center; justify-content:flex-start; gap:8px;
+  opacity:0; visibility:hidden; transform:translateY(-4px);
+  transition:opacity .18s ease, transform .18s ease, visibility .18s;
+}
+.filter-bar.bulk-mode .bulk-bar { opacity:1; visibility:visible; transform:translateY(0); }
+.bulk-master {
+  width:28px; height:26px; display:flex; align-items:center; justify-content:center;
+  appearance:none; -webkit-appearance:none; border:none; background:transparent; cursor:pointer; color:var(--text-mid);
+  transition:background .12s, color .12s;
+}
+.bulk-master:hover { background:var(--surface2); }
+.bulk-master-box {
+  position:relative;
+  width:16px; height:16px; border:1.5px solid var(--border); border-radius:5px;
+  background:var(--white); display:flex; align-items:center; justify-content:center; color:var(--green);
+  transition:background .12s, border-color .12s, color .12s;
+}
+.bulk-ic-check, .bulk-ic-dash { position:absolute; display:flex; align-items:center; justify-content:center; }
+.bulk-master-box svg { width:11px; height:11px; opacity:0; transition:opacity .12s; }
+.bulk-master.state-all .bulk-master-box { background:var(--green); border-color:var(--green); color:#fff; }
+.bulk-master.state-all .bulk-ic-check svg { opacity:1; }
+.bulk-master.state-some .bulk-ic-dash svg { opacity:1; }
+.bulk-actions { display:flex; align-items:center; gap:6px; }
+.bulk-action {
+  padding:5px 8px; border-radius:7px; font-size:12px; white-space:nowrap; cursor:pointer;
+  appearance:none; -webkit-appearance:none; border:none; background:transparent; color:var(--text-mid);
+  display:inline-flex; align-items:center; gap:5px;
+  transition:all 0.12s;
+}
+.bulk-action:hover { background:var(--surface2); color:var(--text); }
+.bulk-action svg { width:14px; height:14px; }
+.bulk-action.danger:hover { background:#f3dfdf; color:#8a2e2e; }
+.bulk-action.active { background:var(--green-pale); color:var(--green); }
+.bulk-bar.empty .bulk-action { opacity:.45; pointer-events:none; }
 .chip { padding:4px 10px; border-radius:20px; font-size:12px; white-space:nowrap; cursor:pointer; border:1px solid var(--border); background:transparent; color:var(--text-mid); transition:all 0.12s; }
 .chip:hover { background:var(--surface2); }
 .chip.active { background:var(--green-pale); border-color:var(--green-muted); color:var(--green); font-weight:500; }
@@ -126,6 +164,25 @@ body.resizing { cursor:col-resize; user-select:none; }
 .email-item { padding:13px 18px; border-bottom:1px solid var(--surface); cursor:pointer; transition:background 0.1s; position:relative; }
 .email-item:hover { background:var(--surface); }
 .email-item.active { background:var(--green-pale); border-left:2px solid var(--green); }
+.email-list.multi-select .email-item { padding-left:40px; }
+.email-list.multi-select .unread-dot { display:none; }
+.email-item.selected { background:var(--green-pale); }
+.email-checkbox {
+  position:absolute; left:8px; top:50%;
+  transform:translateY(-50%);
+  width:16px; height:16px;
+  border:1.5px solid var(--border);
+  border-radius:5px;
+  background:var(--white);
+  color:#fff;
+  display:none; align-items:center; justify-content:center;
+  pointer-events:none;
+  transition:background .12s, border-color .12s;
+}
+.email-list.multi-select .email-checkbox { display:flex; }
+.email-checkbox svg { width:11px; height:11px; opacity:0; transition:opacity .12s; }
+.email-item.selected .email-checkbox { background:var(--green); border-color:var(--green); }
+.email-item.selected .email-checkbox svg { opacity:1; }
 .email-item.unread .email-sender { font-weight:600; color:var(--text); }
 .email-item.unread .email-subject { font-weight:500; }
 .star-badge {

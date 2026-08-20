@@ -2,6 +2,7 @@
 
 ## [2.2.21]
 - Added a right-click menu (context menu) for mails
+- Added bulk options for mails (try dragging inside the mail list :)
 - Better star/unstar system
 - Improved email loading performance
 

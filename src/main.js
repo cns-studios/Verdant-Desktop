@@ -49,6 +49,8 @@ import {
 import { openAccountPopover, closeAccountPopover } from "./ui/accounts.js";
 import { openWhatsNewModal } from "./ui/whatsnew.js";
 import { bindEmailListContextMenu } from "./ui/contextmenu.js";
+import { bindMultiSelect, checkboxHtml, exitMultiSelect as clearMultiSelection, refresh as refreshMultiSelect } from "./ui/multiselect.js";
+import { bindBulkBar } from "./ui/bulkbar.js";
 import { appPrefs } from "./ui/settings.js";
 import { checkForUpdates, downloadLatestUpdate, switchAccount, listAccounts } from "./api.js";
 import { getInboxThreads } from "./api.js";
@@ -294,6 +296,7 @@ function renderEmailList(animate = false) {
         row.dataset.emailId = email.id;
         if (animate) row.style.animationDelay = `${Math.min(i * 40, 1200)}ms`;
         row.innerHTML = `
+            ${checkboxHtml()}
             ${email.is_read ? "" : '<div class="unread-dot"></div>'}
             ${email.starred ? `<span class="star-badge">${icon("star-filled", 18)}</span>` : ""}
             <div class="email-item-main">
@@ -318,6 +321,8 @@ function renderEmailList(animate = false) {
         }
         list.appendChild(row);
     }
+
+    refreshMultiSelect(list);
 
     if (selectedRow && selectedRowEmail) {
         selectedEmail = selectedRowEmail;
@@ -349,6 +354,7 @@ async function loadLocalMailbox(mailbox, animate = false) {
         selectedEmail = null;
         clearSelectedThread();
         isDeepSearchActive = false;
+        clearMultiSelection();
         setReadingPaneHidden(true);
     }
     currentMailbox = mailbox;
@@ -954,6 +960,13 @@ async function initializeConnectedUI() {
         resolveEmail: (emailId) => currentEmails.find((e) => e.id === emailId) || null,
         onRefresh: refreshAfterAction,
     });
+    bindBulkBar({
+        getMailbox: () => currentMailbox,
+        resolveThread: getThreadById,
+        resolveEmail: (emailId) => currentEmails.find((e) => e.id === emailId) || null,
+        onRefresh: refreshAfterAction,
+    });
+    bindMultiSelect();
     bindFilterChips();
     bindSearch();
     bindPaneResizer();

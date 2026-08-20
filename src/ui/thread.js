@@ -8,6 +8,7 @@ import { downloadAttachment } from "../api.js";
 import { openComposeForReply, openComposeForForward } from "./compose.js";
 import { refreshCounts } from "./sidebar.js";
 import { icon } from "./icons.js";
+import { checkboxHtml, refresh as refreshMultiSelect } from "./multiselect.js";
 
 
 let currentThreads = [];
@@ -87,6 +88,7 @@ export function renderThreadList(threads, activeFilter, searchQuery, animate = f
       : "";
 
     row.innerHTML = `
+      ${checkboxHtml()}
       ${thread.is_read ? "" : '<div class="unread-dot"></div>'}
       ${thread.starred ? `<span class="star-badge">${icon("star-filled", 18)}</span>` : ""}
       <div class="email-item-main">
@@ -107,6 +109,8 @@ export function renderThreadList(threads, activeFilter, searchQuery, animate = f
     row.addEventListener("click", () => selectThread(thread, row));
     list.appendChild(row);
   }
+
+  refreshMultiSelect(list);
 }
 
 
