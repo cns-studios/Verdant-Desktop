@@ -717,13 +717,14 @@ function bindSearch() {
         deepBtn.id = "deep-search-btn";
         deepBtn.className = "deep-search-btn";
         deepBtn.textContent = t("list.search.deep");
-        searchBar.appendChild(deepBtn);
         searchBar.classList.add("has-deep-btn");
-    }
 
-    const updateDeepButtonVisibility = () => {
-        if (deepBtn) deepBtn.hidden = !searchQuery.trim();
-    };
+        const row = document.createElement("div");
+        row.className = "search-row";
+        searchBar.parentNode.insertBefore(row, searchBar);
+        row.appendChild(searchBar);
+        row.appendChild(deepBtn);
+    }
 
     deepBtn?.addEventListener("click", async () => {
         if (!searchQuery.trim()) return;
@@ -741,7 +742,6 @@ function bindSearch() {
         } finally {
             deepBtn.disabled = false;
             deepBtn.textContent = t("list.search.deep");
-            updateDeepButtonVisibility();
         }
     });
 
@@ -753,10 +753,7 @@ function bindSearch() {
         } else {
             renderEmailList(false);
         }
-        updateDeepButtonVisibility();
     });
-
-    updateDeepButtonVisibility();
 }
 
 function bindFilterChips() {
