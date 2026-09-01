@@ -117,7 +117,7 @@ pub fn run() {
                 })
                 .build(app)?;
 
-            // workaround: tauri dev sometimes loads tauri://localhost instead of devUrl
+
             #[cfg(debug_assertions)]
             {
                 if let Some(window) = app.get_webview_window("main") {

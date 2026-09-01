@@ -138,6 +138,8 @@ const translations = {
     "toast.permanently_deleted": "Email permanently deleted",
     "toast.unsubscribed": "Successfully unsubscribed",
     "toast.unsubscribe_failed": "Unsubscribe request failed, try to click the Link in the mail manually (Link might be corrupted)",
+    "toast.sending_hold": "Sending...",
+    "toast.cancel": "Cancel",
 
     "settings.title": "Settings",
     "settings.tab.app": "App",
@@ -407,6 +409,8 @@ const translations = {
     "toast.permanently_deleted": "E-Mail endgültig gelöscht",
     "toast.unsubscribed": "Erfolgreich abbestellt",
     "toast.unsubscribe_failed": "Abbestellanfrage fehlgeschlagen, versuche es selbst über den Link in der Mail (Der Link könnte Fehlerhaft sein)",
+    "toast.sending_hold": "Senden...",
+    "toast.cancel": "Abbrechen",
 
     "settings.title": "Einstellungen",
     "settings.tab.app": "App",

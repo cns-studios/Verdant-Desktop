@@ -17,6 +17,12 @@ export let composeSendMode = "plain";
 export let composeDraftId = null;
 let _suppressNextReset = false;
 
+let sendingHoldTimeout = null;
+let sendingHoldAbortController = null;
+let sendingHoldPayload = null;
+let sendingHoldResolve = null;
+let sendingHoldReject = null;
+
 const composeRecipients = { to: [], cc: [] };
 const recipientSuggestState = {
   to: { items: [], activeIndex: -1 },
@@ -42,6 +48,8 @@ export function closeCompose() {
   const modal = document.getElementById("composeModal");
   if (modal) modal.classList.remove("open");
   window.dispatchEvent(new CustomEvent("verdant-compose-closed"));
+
+  cancelSendingHold();
 }
 
 export function openComposeForDraft(email) {
@@ -697,6 +705,101 @@ export function bindComposeWindowControls() {
   document.getElementById("compose-open-btn")?.addEventListener("click", openCompose);
 }
 
+function showSendingPopup() {
+  let popup = document.getElementById("sending-popup");
+  if (!popup) {
+    popup = document.createElement("div");
+    popup.id = "sending-popup";
+    popup.className = "sending-popup";
+    popup.innerHTML = `
+      <div class="spinner"></div>
+      <span class="text">${t("toast.sending_hold")}</span>
+      <button class="cancel-btn" type="button">${t("toast.cancel")}</button>
+    `;
+    document.body.appendChild(popup);
+
+    popup.querySelector(".cancel-btn").addEventListener("click", cancelSendingHold);
+  }
+  requestAnimationFrame(() => popup.classList.add("open"));
+}
+
+function hideSendingPopup() {
+  const popup = document.getElementById("sending-popup");
+  if (popup) {
+    popup.classList.remove("open");
+    setTimeout(() => popup.remove(), 300);
+  }
+}
+
+function cancelSendingHold() {
+  if (sendingHoldTimeout) {
+    clearTimeout(sendingHoldTimeout);
+    sendingHoldTimeout = null;
+  }
+  if (sendingHoldAbortController) {
+    sendingHoldAbortController.abort();
+    sendingHoldAbortController = null;
+  }
+  hideSendingPopup();
+
+  if (sendingHoldReject) {
+    sendingHoldReject(new Error("cancelled"));
+    sendingHoldResolve = null;
+    sendingHoldReject = null;
+  }
+
+  sendingHoldPayload = null;
+
+  const sendBtn = document.getElementById("compose-send-btn");
+  if (sendBtn) sendBtn.disabled = false;
+}
+
+function startSendingHold(payload) {
+  return new Promise((resolve, reject) => {
+    sendingHoldPayload = payload;
+    sendingHoldResolve = resolve;
+    sendingHoldReject = reject;
+
+    sendingHoldAbortController = new AbortController();
+
+    showSendingPopup();
+
+   
+    const sendBtn = document.getElementById("compose-send-btn");
+    if (sendBtn) sendBtn.disabled = true;
+
+   
+    sendingHoldTimeout = setTimeout(() => {
+      sendingHoldTimeout = null;
+      hideSendingPopup();
+      resolve();
+    }, 10000);
+  });
+}
+
+async function executeSend(payload) {
+  if (composeDraftId) {
+    const saved = await saveDraft({
+      to: payload.to, cc: payload.cc, subject: payload.subject,
+      body: payload.body, mode: composeSendMode,
+      bodyHtml: composeSendMode === "html" ? payload.bodyHtml : null,
+      attachments: composeAttachments, draftId: composeDraftId,
+    });
+    await sendExistingDraft(saved.draft_id || composeDraftId);
+  } else {
+    await sendEmail({
+      to: payload.to, cc: payload.cc, subject: payload.subject,
+      body: payload.body, mode: composeSendMode,
+      bodyHtml: composeSendMode === "html" ? payload.bodyHtml : null,
+      attachments: composeAttachments,
+      inReplyTo: composeInReplyTo || null,
+      references: composeReferences || null,
+    });
+  }
+  parseContactsFromHeader(payload.to).forEach((c) => upsertContact(c.email, c.name));
+  parseContactsFromHeader(payload.cc).forEach((c) => upsertContact(c.email, c.name));
+}
+
 export function bindComposeSend(onAfterSend) {
   const sendBtn = document.getElementById("compose-send-btn");
   if (!sendBtn) return;
@@ -706,38 +809,34 @@ export function bindComposeSend(onAfterSend) {
     const payload = collectComposePayload();
     if (!payload.to) { showToast(t("toast.recipient_required"), "error"); return; }
 
-    sendBtn.disabled = true;
-    showToast(t("toast.sending"));
     try {
-      if (composeDraftId) {
-        const saved = await saveDraft({
-          to: payload.to, cc: payload.cc, subject: payload.subject,
-          body: payload.body, mode: composeSendMode,
-          bodyHtml: composeSendMode === "html" ? payload.bodyHtml : null,
-          attachments: composeAttachments, draftId: composeDraftId,
-        });
-        await sendExistingDraft(saved.draft_id || composeDraftId);
-      } else {
-        await sendEmail({
-          to: payload.to, cc: payload.cc, subject: payload.subject,
-          body: payload.body, mode: composeSendMode,
-          bodyHtml: composeSendMode === "html" ? payload.bodyHtml : null,
-          attachments: composeAttachments,
-          inReplyTo: composeInReplyTo || null,
-          references: composeReferences || null,
-        });
-      }
-      parseContactsFromHeader(payload.to).forEach((c) => upsertContact(c.email, c.name));
-      parseContactsFromHeader(payload.cc).forEach((c) => upsertContact(c.email, c.name));
+     
+      await startSendingHold(payload);
+
+     
+     
+      await executeSend(payload);
+
       showToast(t("toast.sent"));
       localStorage.removeItem("verdant.localDraft");
       resetComposeState();
       closeCompose();
       await onAfterSend();
     } catch (err) {
+      if (err.message === "cancelled") {
+       
+        return;
+      }
       showToast(String(err), "error", 4000);
     } finally {
-      sendBtn.disabled = false;
+     
+      sendingHoldTimeout = null;
+      sendingHoldAbortController = null;
+      sendingHoldPayload = null;
+      sendingHoldResolve = null;
+      sendingHoldReject = null;
+      const btn = document.getElementById("compose-send-btn");
+      if (btn) btn.disabled = false;
     }
   };
 

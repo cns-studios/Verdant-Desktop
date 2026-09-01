@@ -154,7 +154,6 @@ async function runStartupUpdateCheck() {
         const info = await checkForUpdates(channel);
         if (!info?.updateAvailable) return;
 
-        // Nightly dedup: don't re-notify for same build
         if (channel === "nightly") {
             const lastUrl = localStorage.getItem("verdant.lastNightlyUrl");
             if (info.downloadUrl === lastUrl) return;

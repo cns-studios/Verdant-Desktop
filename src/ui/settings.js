@@ -122,7 +122,7 @@ export async function checkForAppUpdates(options = {}) {
   try {
     const info = await checkForUpdates(channel);
 
-    // Nightly dedup: don't notify/download the same build twice
+
     if (channel === "nightly" && info.updateAvailable) {
         const lastUrl = localStorage.getItem(LAST_NIGHTLY_URL_KEY);
         if (info.downloadUrl === lastUrl) {
