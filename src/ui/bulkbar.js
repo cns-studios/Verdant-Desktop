@@ -130,6 +130,7 @@ export function bindBulkBar(c) {
             if (action === "archive") void bulkArchive();
             else if (action === "delete") void bulkDelete();
             else if (action === "star") void bulkStar();
+            else if (action === "close") void exitMultiSelect();
         });
     });
 }

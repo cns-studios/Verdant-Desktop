@@ -157,6 +157,24 @@ body.resizing { cursor:col-resize; user-select:none; }
 .bulk-action.danger:hover { background:#f3dfdf; color:#8a2e2e; }
 .bulk-action.active { background:var(--green-pale); color:var(--green); }
 .bulk-bar.empty .bulk-action { opacity:.45; pointer-events:none; }
+.bulk-action.close {
+  margin-left: auto;
+  padding: 5px 8px;
+  border-radius: 7px;
+  font-size: 12px;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.bulk-action.close:hover {
+  background: var(--surface2);
+  color: var(--text);
+}
+.bulk-action.close svg {
+  width: 14px;
+  height: 14px;
+}
 .chip { padding:4px 10px; border-radius:20px; font-size:12px; white-space:nowrap; cursor:pointer; border:1px solid var(--border); background:transparent; color:var(--text-mid); transition:all 0.12s; }
 .chip:hover { background:var(--surface2); }
 .chip.active { background:var(--green-pale); border-color:var(--green-muted); color:var(--green); font-weight:500; }

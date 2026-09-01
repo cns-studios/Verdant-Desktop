@@ -105,6 +105,7 @@ export function renderShell() {
                 <button class="bulk-action" data-bulk="archive" title="${t("bulk.archive")}">${icon("archive", 14)}<span>${t("bulk.archive")}</span></button>
                 <button class="bulk-action danger" data-bulk="delete" title="${t("bulk.delete")}">${icon("trash", 14)}<span>${t("bulk.delete")}</span></button>
                 <button class="bulk-action" data-bulk="star" title="${t("bulk.star")}">${icon("star", 14)}<span>${t("bulk.star")}</span></button>
+                <button class="bulk-action close" data-bulk="close" title="${t("bulk.close")}">${icon("x", 14)}<span>${t("bulk.close")}</span></button>
               </div>
             </div>
           </div>
