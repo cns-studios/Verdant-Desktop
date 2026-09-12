@@ -3,7 +3,7 @@ import { escapeHtml, sanitizeUnicodeNoise, formatListDate, formatReadingDate } f
 import { sanitizeEmailHtml } from "../lib/sanitize.js";
 import { showToast } from "../lib/toast.js";
 import { t } from "../lib/i18n.js";
-import { applySenderAvatar, buildActionMenu, buildRecipientsDetailsHtml } from "./reading.js";
+import { applySenderAvatar, buildActionMenu, buildRecipientsDetailsHtml, setReadingPaneHidden } from "./reading.js";
 import { downloadAttachment } from "../api.js";
 import { openComposeForReply, openComposeForForward } from "./compose.js";
 import { refreshCounts } from "./sidebar.js";
@@ -122,7 +122,7 @@ async function selectThread(thread, row) {
   row.classList.add("active");
   row.classList.remove("unread");
   row.querySelector(".unread-dot")?.remove();
-  document.body.classList.remove("reading-pane-hidden");
+  setReadingPaneHidden(false);
 
   const readingBody = document.querySelector(".reading-body");
   if (readingBody) {

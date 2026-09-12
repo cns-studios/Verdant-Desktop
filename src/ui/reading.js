@@ -8,6 +8,18 @@ import { fetchRemoteImage } from "../api.js";
 import { icon } from "./icons.js";
 import { t } from "../lib/i18n.js";
 
+const READING_PANE_STATE_KEY = "verdant.readingPaneState";
+
+function loadReadingPaneState() {
+  try {
+    const raw = localStorage.getItem(READING_PANE_STATE_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    return { hidden: parsed.hidden !== false };
+  } catch {
+    return { hidden: true };
+  }
+}
+
 function senderInitials(sender) {
   const raw = sanitizeUnicodeNoise(sender || "?").replace(/<.*?>/g, "").trim();
   const parts = raw.split(/\s+/).filter(Boolean);
@@ -495,7 +507,20 @@ export function updateTopActionStates(email, mailbox) {
 }
 
 export function setReadingPaneHidden(hidden) {
-  document.body.classList.toggle("reading-pane-hidden", !!hidden);
+  const isHidden = !!hidden;
+  document.body.classList.toggle("reading-pane-hidden", isHidden);
+  try {
+    localStorage.setItem(
+      READING_PANE_STATE_KEY,
+      JSON.stringify({ ...loadReadingPaneState(), hidden: isHidden }),
+    );
+  } catch (error) {
+    console.error("Failed to persist reading pane visibility", error);
+  }
+}
+
+export function getReadingPaneHidden() {
+  return loadReadingPaneState().hidden;
 }
 
 export function bindReadingActions(getSelected, setSelected, onRefresh, openCompose, getCurrentMailbox, getThreadId, getThreadLatestEmail) {

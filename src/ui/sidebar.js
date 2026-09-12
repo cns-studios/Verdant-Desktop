@@ -211,14 +211,18 @@ export function bindPaneResizer() {
 
     const STORAGE_KEY = "verdant.listPaneWidth";
     const minWidth = 260;
-    const maxWidth = () => Math.min(window.innerWidth * 0.68, 760);
+    const maxWidth = () => Math.max(minWidth, Math.min(window.innerWidth * 0.68, 760));
 
     const applyWidth = (width) => {
         const next = Math.max(minWidth, Math.min(Math.round(width), maxWidth()));
         pane.style.width = `${next}px`;
         pane.style.minWidth = `${next}px`;
         pane.style.flex = `0 0 ${next}px`;
-        localStorage.setItem(STORAGE_KEY, String(next));
+        try {
+            localStorage.setItem(STORAGE_KEY, String(next));
+        } catch (error) {
+            console.error("Failed to persist list pane width", error);
+        }
     };
 
     const saved = Number(localStorage.getItem(STORAGE_KEY));

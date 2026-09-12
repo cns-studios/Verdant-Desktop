@@ -15,8 +15,20 @@ const defaultUpdatePrefs = { autoCheck: true, autoDownload: false, channel: "sta
 export let updatePrefs = loadUpdatePrefs();
 
 const APP_PREFS_KEY = "verdant.appPrefs";
-const defaultAppPrefs = { runInBackground: true, autostart: false, showNotifications: true, notificationImportance: "all" };
+const defaultAppPrefs = {
+  runInBackground: true,
+  autostart: false,
+  showNotifications: true,
+  notificationImportance: "all",
+  textSize: "small",
+};
 export let appPrefs = loadAppPrefs();
+
+const TEXT_SIZE_VALUES = ["small", "medium", "large"];
+
+function normalizeTextSize(value) {
+  return TEXT_SIZE_VALUES.includes(value) ? value : "small";
+}
 
 function normalizeUpdateChannel(value) {
   const normalized = String(value || "").trim().toLowerCase();
@@ -48,10 +60,17 @@ export function saveUpdatePrefs(next) {
 function loadAppPrefs() {
   try {
     const raw = localStorage.getItem(APP_PREFS_KEY);
-    return raw ? { ...defaultAppPrefs, ...JSON.parse(raw) } : { ...defaultAppPrefs };
+    const prefs = raw ? { ...defaultAppPrefs, ...JSON.parse(raw) } : { ...defaultAppPrefs };
+    prefs.textSize = normalizeTextSize(prefs.textSize);
+    return prefs;
   } catch {
     return { ...defaultAppPrefs };
   }
+}
+
+export function applyTextSize(value) {
+  const textSize = normalizeTextSize(value);
+  document.body?.setAttribute("data-text-size", textSize);
 }
 
 export function saveAppPrefs(next) {
@@ -316,19 +335,38 @@ function buildBehaviorTab() {
 }
 
 function buildAppearenceTab() {
+  const textSize = normalizeTextSize(appPrefs.textSize);
+  const textSizeIndex = TEXT_SIZE_VALUES.indexOf(textSize);
   return `
     <section class="settings-pane" data-pane="appearence">
       <div class="settings-section-label">${escapeHtml(t("settings.appearance.title"))}</div>
       <div class="settings-card">
-        <div class="settings-radio-group" id="colorscheme-group">
-          <label class="settings-radio">
+        <div class="theme-tabs" id="colorscheme-group" role="tablist" aria-label="${escapeHtml(t("settings.appearance.title"))}">
+          <label class="theme-tab ${!appPrefs.useDarkMode ? "active" : ""}" data-theme="light">
             <input type="radio" name="colorscheme" value="light" ${!appPrefs.useDarkMode ? "checked" : ""}>
-            ${escapeHtml(t("settings.appearence.light"))}
+            <span class="theme-tab-icon theme-tab-icon-light" aria-hidden="true"></span>
+            <span>${escapeHtml(t("settings.appearence.light"))}</span>
           </label>
-          <label class="settings-radio">
+          <label class="theme-tab ${appPrefs.useDarkMode ? "active" : ""}" data-theme="dark">
             <input type="radio" name="colorscheme" value="dark" ${appPrefs.useDarkMode ? "checked" : ""}>
-            ${escapeHtml(t("settings.appearence.dark"))}
+            <span class="theme-tab-icon theme-tab-icon-dark" aria-hidden="true"></span>
+            <span>${escapeHtml(t("settings.appearence.dark"))}</span>
           </label>
+        </div>
+      </div>
+      <div class="settings-section-label">${escapeHtml(t("settings.appearance.text_size"))}</div>
+      <div class="settings-card settings-text-size-card">
+        <div class="settings-text-size-heading">
+          <span>${escapeHtml(t("settings.appearance.text_size_description"))}</span>
+          <strong id="settings-text-size-value">${escapeHtml(t(`settings.appearance.text_size.${textSize}`))}</strong>
+        </div>
+        <div class="settings-range-wrap">
+          <input class="settings-range" id="settings-text-size" type="range" min="0" max="2" step="1" value="${textSizeIndex}" style="--range-position:${textSizeIndex * 50}%;" aria-label="${escapeHtml(t("settings.appearance.text_size"))}">
+          <div class="settings-range-labels" aria-hidden="true">
+            <span>${escapeHtml(t("settings.appearance.text_size.small"))}</span>
+            <span>${escapeHtml(t("settings.appearance.text_size.medium"))}</span>
+            <span>${escapeHtml(t("settings.appearance.text_size.large"))}</span>
+          </div>
         </div>
       </div>
     </section>
@@ -609,7 +647,21 @@ export async function openSettingsModal(profile, currentMailbox, onLogout, onSyn
       const isDarkMode = e.target.value === "dark";
       saveAppPrefs({ ...appPrefs, useDarkMode: isDarkMode });
       document.documentElement.classList.toggle("dark", isDarkMode);
+      panel.querySelectorAll(".theme-tab").forEach((tab) => {
+        tab.classList.toggle("active", tab.dataset.theme === (isDarkMode ? "dark" : "light"));
+      });
+      document.documentElement.classList.add("theme-switching");
+      window.setTimeout(() => document.documentElement.classList.remove("theme-switching"), 360);
     });
+  });
+
+  panel.querySelector("#settings-text-size")?.addEventListener("input", (e) => {
+    const textSize = TEXT_SIZE_VALUES[Number(e.target.value)] || "small";
+    e.target.style.setProperty("--range-position", `${TEXT_SIZE_VALUES.indexOf(textSize) * 50}%`);
+    saveAppPrefs({ ...appPrefs, textSize });
+    applyTextSize(textSize);
+    const value = panel.querySelector("#settings-text-size-value");
+    if (value) value.textContent = t(`settings.appearance.text_size.${textSize}`);
   });
 
   panel.querySelector("#settings-check-update")?.addEventListener("click", async () => {

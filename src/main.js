@@ -34,7 +34,7 @@ import {
     bindSidebarCollapse,
 } from "./ui/sidebar.js";
 import {
-    renderReadingPane, bindReadingActions, setReadingPaneHidden,
+    renderReadingPane, bindReadingActions, setReadingPaneHidden, getReadingPaneHidden,
     applySenderAvatar, hasEmailAttachments, updateTopActionStates,
 } from "./ui/reading.js";
 import {
@@ -43,7 +43,7 @@ import {
     bindComposeWindowControls, bindComposeSend, bindComposeDraftSave, bindComposeClear,
 } from "./ui/compose.js";
 import {
-    openSettingsModal, isSettingsOpen, closeOverlay,
+    openSettingsModal, isSettingsOpen, closeOverlay, applyTextSize,
     updatePrefs, hydratePrefsFromBackend, runAutomaticUpdateFlow,
 } from "./ui/settings.js";
 import { openAccountPopover, closeAccountPopover } from "./ui/accounts.js";
@@ -980,7 +980,8 @@ async function initializeConnectedUI() {
     bindHotkeys();
     bindGlobalExternalLinkInterception();
 
-    setReadingPaneHidden(true);
+    applyTextSize(appPrefs.textSize);
+    setReadingPaneHidden(getReadingPaneHidden());
     bindUserRow(() => {
         openAccountPopover(
             handleAccountSwitch,

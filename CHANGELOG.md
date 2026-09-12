@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.2.22]
+- You are now able to change the font size in Verdant
+- Improved the bulk options menu
+- Improved general User Experience
+- Minor performance improvements
+- You can now cancel sending an email after actually sending it, for a short time
+
 ## [2.2.21]
 - Added a right-click menu (context menu) for mails
 - Added bulk options for mails (try dragging inside the mail list :)

@@ -545,3 +545,165 @@ body.reading-pane-hidden .email-list-pane { flex:1 1 auto !important; width:auto
   accent-color: var(--green);
   margin: 0;
 }
+.theme-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface2);
+}
+.theme-tab {
+  position: relative;
+  z-index: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 42px;
+  border-radius: 9px;
+  color: var(--text-muted);
+  font: 500 12px 'DM Sans', sans-serif;
+  cursor: pointer;
+  transition: color .22s ease, transform .22s ease;
+}
+.theme-tab::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border: 1px solid transparent;
+  border-radius: inherit;
+  background: transparent;
+  transform: scale(.94);
+  opacity: 0;
+  transition: transform .28s cubic-bezier(.34, 1.56, .64, 1), opacity .2s ease, background .22s ease, border-color .22s ease;
+}
+.theme-tab:hover { color: var(--text); }
+.theme-tab.active {
+  color: var(--green);
+  transform: translateY(-1px);
+}
+.theme-tab.active::before {
+  border-color: var(--green-muted);
+  background: var(--green-pale);
+  box-shadow: 0 3px 10px rgba(50, 90, 55, .1);
+  transform: scale(1);
+  opacity: 1;
+}
+.theme-tab input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.theme-tab:has(input:focus-visible) {
+  outline: 2px solid var(--green-light);
+  outline-offset: 2px;
+}
+.theme-tab-icon {
+  width: 16px;
+  height: 16px;
+  position: relative;
+  display: inline-block;
+  flex-shrink: 0;
+}
+.theme-tab-icon-light {
+  border: 2px solid currentColor;
+  border-radius: 50%;
+}
+.theme-tab-icon-light::before,
+.theme-tab-icon-light::after {
+  content: "";
+  position: absolute;
+  inset: -5px;
+  border-top: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  border-radius: 50%;
+}
+.theme-tab-icon-light::after { transform: rotate(90deg); }
+.theme-tab-icon-dark {
+  border-radius: 50%;
+  background: currentColor;
+  overflow: hidden;
+}
+.theme-tab-icon-dark::before {
+  content: "";
+  position: absolute;
+  width: 15px;
+  height: 15px;
+  top: -3px;
+  left: 4px;
+  border-radius: 50%;
+  background: var(--surface2);
+  transition: background .22s ease;
+}
+@keyframes theme-switch {
+  0% { filter: saturate(.8); }
+  45% { filter: saturate(1.25); }
+  100% { filter: saturate(1); }
+}
+html.theme-switching body { animation: theme-switch .36s ease both; }
+.settings-text-size-card {
+  display: grid;
+  gap: 16px;
+}
+.settings-text-size-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  font: 400 12px 'DM Sans', sans-serif;
+  color: var(--text-mid);
+}
+.settings-text-size-heading strong {
+  color: var(--green);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.settings-range-wrap {
+  display: grid;
+  gap: 8px;
+}
+.settings-range {
+  --range-position: 0%;
+  width: 100%;
+  height: 6px;
+  appearance: none;
+  -webkit-appearance: none;
+  border-radius: 999px;
+  outline: none;
+  cursor: grab;
+  background: linear-gradient(to right, var(--green) var(--range-position), var(--surface2) var(--range-position));
+  transition: background .22s ease;
+}
+.settings-range:active { cursor: grabbing; }
+.settings-range::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 20px;
+  height: 20px;
+  border: 3px solid var(--white);
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 2px 8px rgba(37, 60, 37, .24), 0 0 0 1px var(--green-muted);
+  transition: transform .2s cubic-bezier(.34, 1.56, .64, 1), box-shadow .2s ease;
+}
+.settings-range::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border: 3px solid var(--white);
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 2px 8px rgba(37, 60, 37, .24), 0 0 0 1px var(--green-muted);
+}
+.settings-range:hover::-webkit-slider-thumb,
+.settings-range:focus-visible::-webkit-slider-thumb { transform: scale(1.14); }
+.settings-range-labels {
+  display: flex;
+  justify-content: space-between;
+  font: 400 10px 'DM Sans', sans-serif;
+  color: var(--text-muted);
+}
+body[data-text-size="medium"] #root { zoom: 1.06; }
+body[data-text-size="large"] #root { zoom: 1.12; }
