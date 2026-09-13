@@ -5,7 +5,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tokio::sync::Mutex;
 
 use crate::auth;
-use crate::db::{get_account_by_id, update_gmail_token, StoredToken};
+use crate::db::{get_account_by_id, update_gmail_token, StoredToken, Account};
 
 pub struct DbState {
     pub conn: Mutex<Connection>,
@@ -159,4 +159,11 @@ pub async fn persist_token_for(
 pub async fn persist_token(state: &DbState, token: StoredToken) -> Result<StoredToken, String> {
     let id = get_active_id(state).await;
     persist_token_for(state, id, token).await
+}
+
+impl DbState {
+    pub async fn get_fresh_account(&self, account_id: i64) -> Result<Option<Account>, String> {
+        let conn = self.conn.lock().await;
+        crate::db::get_account_by_id(&conn, account_id).map_err(|e| e.to_string())
+    }
 }

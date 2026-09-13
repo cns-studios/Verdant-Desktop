@@ -60,28 +60,37 @@ async fn run_gmail_sync_loop(
     account: Account,
     mut shutdown: oneshot::Receiver<()>,
 ) {
-    use crate::commands::mail::sync_mailbox_internal_for;
-
     let account_id = account.id;
     let mut cycle: u32 = 0;
 
     sync_gmail_account(&app, &state, &account, cycle).await;
 
     loop {
-        tokio::select! {
-            _ = tokio::time::sleep(Duration::from_secs(GMAIL_SYNC_INTERVAL_SECS)) => {
-                let fresh = get_fresh_account(&state, account_id).await;
-                let Some(acc) = fresh else { break; };
-                cycle = cycle.wrapping_add(1);
+        match state.get_fresh_account(account_id).await {
+            Ok(Some(acc)) => {
+                tokio::select! {
+                    _ = tokio::time::sleep(Duration::from_secs(GMAIL_SYNC_INTERVAL_SECS)) => {
+                        cycle = cycle.wrapping_add(1);
 
-                if crate::state::rate_limited_remain(&state, account_id).is_some() {
-                    log::warn!("Gmail account={} rate limited — skipping sync cycle", account_id);
-                    continue;
+                        if crate::state::rate_limited_remain(&state, account_id).is_some() {
+                            log::warn!("Gmail account={} rate limited — skipping sync cycle", account_id);
+                            continue;
+                        }
+
+                        sync_gmail_account(&app, &state, &acc, cycle).await;
+                    }
+                    _ = &mut shutdown => break,
                 }
-
-                sync_gmail_account(&app, &state, &acc, cycle).await;
             }
-            _ = &mut shutdown => break,
+            Ok(None) => {
+                log::info!("Gmail account {} not found in DB, stopping sync", account_id);
+                break;
+            }
+            Err(e) => {
+                log::error!("Failed to refresh Gmail account {}: {}", account_id, e);
+                tokio::time::sleep(Duration::from_secs(1)).await;
+                continue;
+            }
         }
     }
     let _ = app;
@@ -120,27 +129,44 @@ async fn run_imap_sync_loop(
     let retry_delay = Duration::from_secs(300);
 
     loop {
-        let account = get_fresh_account(&state, account_id).await;
-        let Some(_account) = account else { break; };
-
-        tokio::select! {
-            _ = tokio::time::sleep(retry_delay) => {
-                let account = get_fresh_account(&state, account_id).await;
-                if let Some(acc) = account {
-                    if !sync_imap_account(&app, &state, &acc).await {
-                        break;
+        match state.get_fresh_account(account_id).await {
+            Ok(Some(acc)) => {
+                // Proceed to sync cycle
+                tokio::select! {
+                    _ = tokio::time::sleep(retry_delay) => {
+                        match state.get_fresh_account(account_id).await {
+                            Ok(Some(acc2)) => {
+                                if !sync_imap_account(&app, &state, &acc2).await {
+                                    break;
+                                }
+                            }
+                            Ok(None) => {
+                                log::info!("Account {} not found in DB during cycle, stopping sync", account_id);
+                                break;
+                            }
+                            Err(e) => {
+                                log::error!("Failed to refresh account {} during cycle: {}", account_id, e);
+                                tokio::time::sleep(Duration::from_secs(1)).await;
+                                continue;
+                            }
+                        }
                     }
-                } else { break; }
+                    _ = &mut shutdown => break,
+                }
             }
-            _ = &mut shutdown => break,
+            Ok(None) => {
+                log::info!("Account {} not found in DB, stopping sync", account_id);
+                break;
+            }
+            Err(e) => {
+                log::error!("Failed to refresh account {}: {}", account_id, e);
+                tokio::time::sleep(Duration::from_secs(1)).await;
+                continue;
+            }
         }
     }
 }
 
-async fn get_fresh_account(state: &DbState, account_id: i64) -> Option<Account> {
-    let conn = state.conn.lock().await;
-    crate::db::get_account_by_id(&conn, account_id).ok().flatten()
-}
 
 async fn try_imap_idle(account: &Account, timeout: Duration) -> bool {
     let creds = match ImapCredentials::from_account(account) {
@@ -259,11 +285,10 @@ async fn sync_imap_account(app: &tauri::AppHandle, state: &DbState, account: &Ac
             }
             Ok(Err(e)) => {
                 if e.contains("connect failed") || e.contains("connect error") {
-                    // The fallback performs another full connection attempt and
-                    // makes an unavailable server block every mailbox in turn.
-                    log::debug!("IMAP server unavailable account={} mailbox={}: {}", account_id, mailbox, e);
-                    emit_notifications_and_event(app_clone, state, account, had_new_emails).await;
-                    return false;
+                    log::warn!("IMAP server unavailable account={} mailbox={}: {}", account_id, mailbox, e);
+                    // Skip fallback for connection errors to avoid hammering server
+                    // Continue to other mailboxes in case issue resolves
+                    continue;
                 }
                 log::error!("IMAP sync error account={} mailbox={}: {}", account_id, mailbox, e);
                 fallback_sync(app, state, account, mailbox).await;
