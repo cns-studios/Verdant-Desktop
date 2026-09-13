@@ -6,6 +6,8 @@
 - Improved general User Experience
 - Minor performance improvements
 - You can now cancel sending an email after actually sending it, for a short time
+- Fixed IMAP Sync Errors
+- Fixed an issue where previous Thread Messages couldnt load
 
 ## [2.2.21]
 - Added a right-click menu (context menu) for mails
@@ -69,4 +71,3 @@
 ## [2.2.12]
 - Improved Notification system
 - Local Database performance
-

@@ -1161,8 +1161,53 @@ pub async fn get_thread_messages(
          FROM emails WHERE thread_id=?1 AND account_id=?2 ORDER BY internal_ts ASC, rowid ASC"
     ).map_err(|e| e.to_string())?;
 
-    let emails = stmt.query_map(rusqlite::params![thread_id, account_id], map_email_row)
-        .map_err(|e| e.to_string())?.filter_map(Result::ok).collect();
+    let mut emails: Vec<Email> = stmt
+        .query_map(rusqlite::params![thread_id, account_id], map_email_row)
+        .map_err(|e| e.to_string())?
+        .filter_map(Result::ok)
+        .collect();
+
+    if emails.len() <= 1 {
+        if let Some(seed) = emails.first() {
+            let normalize_subject = |subject: &str| {
+                let mut normalized = subject.trim().to_lowercase();
+                loop {
+                    let next = normalized
+                        .strip_prefix("re:")
+                        .or_else(|| normalized.strip_prefix("fw:"))
+                        .or_else(|| normalized.strip_prefix("fwd:"));
+                    match next {
+                        Some(value) => normalized = value.trim().to_string(),
+                        None => break,
+                    }
+                }
+                normalized
+            };
+            let target = normalize_subject(&seed.subject);
+            let mut fallback_stmt = conn.prepare(
+                "SELECT id,account_id,draft_id,thread_id,subject,sender,to_recipients,cc_recipients,
+                        snippet,body_html,attachments_json,has_attachments,date,is_read,starred,mailbox,labels,internal_ts,notified,
+                        list_unsubscribe,unsubscribed,bcc_recipients
+                 FROM emails
+                 WHERE account_id=?1
+                 ORDER BY internal_ts ASC, rowid ASC",
+            ).map_err(|e| e.to_string())?;
+            let fallback = fallback_stmt
+                .query_map(rusqlite::params![account_id], map_email_row)
+                .map_err(|e| e.to_string())?
+                .filter_map(Result::ok)
+                .filter(|email| normalize_subject(&email.subject) == target);
+
+            let existing_ids: std::collections::HashSet<String> =
+                emails.iter().map(|email| email.id.clone()).collect();
+            for email in fallback {
+                if !existing_ids.contains(&email.id) {
+                    emails.push(email);
+                }
+            }
+        }
+    }
+
     Ok(emails)
 }
 

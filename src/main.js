@@ -405,7 +405,9 @@ async function openMailbox(mailbox, animate = false, forceSync = true) {
     const loadPromise = loadLocalMailbox(mailbox, animate).catch(console.error);
     if (animate) lastAnimatedRenderAt = Date.now();
     const syncPromise = forceSync
-        ? syncMailboxInBackground(mailbox, true, onSynced).catch(console.error)
+        ? syncMailboxInBackground(mailbox, true, onSynced).catch((error) => {
+            console.warn("Background mailbox sync unavailable; using local cache", error);
+        })
         : Promise.resolve();
     await loadPromise;
     await syncPromise;

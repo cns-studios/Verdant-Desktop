@@ -163,10 +163,7 @@ function renderThreadPane(thread, messages) {
   const readingBody = document.querySelector(".reading-body");
   if (!readingBody) return;
 
-  expandedMessageIds = new Set();
-  if (messages.length > 0) {
-    expandedMessageIds.add(messages[messages.length - 1].id);
-  }
+  expandedMessageIds = new Set(messages.map((message) => message.id));
 
   readingBody.innerHTML = "";
 
@@ -292,12 +289,21 @@ function buildMessageBubble(message, allMessages) {
 }
 
 function buildCollapsedBubble(message, senderName) {
+  const preview = sanitizeUnicodeNoise(message.snippet || "")
+    || sanitizeUnicodeNoise(message.body_html || "")
+      .replace(/<style[\s\S]*?<\/style>/gi, " ")
+      .replace(/<script[\s\S]*?<\/script>/gi, " ")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/&nbsp;/gi, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 180);
   return `
     <div class="thread-bubble-header" role="button" tabindex="0" aria-expanded="false">
       <div class="thread-bubble-avatar"></div>
       <div class="thread-bubble-meta-collapsed">
         <span class="thread-bubble-sender">${escapeHtml(senderName)}</span>
-        <span class="thread-bubble-preview">${escapeHtml(sanitizeUnicodeNoise(message.snippet || ""))}</span>
+        <span class="thread-bubble-preview">${escapeHtml(preview)}</span>
       </div>
       <span class="thread-bubble-date">${escapeHtml(formatListDate(message.date))}</span>
       ${message.has_attachments ? '<span class="thread-bubble-attach-icon">📎</span>' : ""}

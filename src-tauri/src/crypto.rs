@@ -55,15 +55,28 @@ fn keyring_key() -> Result<Option<Vec<u8>>, String> {
     }
 }
 
+fn valid_key(key: Vec<u8>) -> Result<Vec<u8>, String> {
+    if key.len() == 32 {
+        Ok(key)
+    } else {
+        Err("Invalid encryption key length".to_string())
+    }
+}
+
 fn get_or_create_key() -> Result<Vec<u8>, String> {
     let _guard = KEY_GUARD.lock().unwrap_or_else(|p| p.into_inner());
 
-    if let Some(key) = read_fallback_key()? {
-        return Ok(key);
+    // Prefer the keyring when it is available. A fallback file may have been
+    // created during a temporary keyring outage and must not shadow the
+    // existing keyring key.
+    if let Ok(Some(key)) = keyring_key() {
+        if let Ok(key) = valid_key(key) {
+            return Ok(key);
+        }
     }
 
-    if let Ok(Some(key)) = keyring_key() {
-        return Ok(key);
+    if let Some(key) = read_fallback_key()? {
+        return valid_key(key);
     }
 
     let mut key_bytes = vec![0u8; 32];
@@ -112,6 +125,9 @@ pub fn decrypt_password(encoded: &str) -> Result<String, String> {
     let nonce_bytes = STANDARD.decode(parts[0]).map_err(|e| e.to_string())?;
     let ciphertext = STANDARD.decode(parts[1]).map_err(|e| e.to_string())?;
 
+    if nonce_bytes.len() != 12 {
+        return Err("Invalid encrypted password nonce".to_string());
+    }
     let nonce = Nonce::from_slice(&nonce_bytes);
     let plaintext = cipher
         .decrypt(nonce, ciphertext.as_slice())

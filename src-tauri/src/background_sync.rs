@@ -114,26 +114,22 @@ async fn run_imap_sync_loop(
     mut shutdown: oneshot::Receiver<()>,
 ) {
     let account_id = account.id;
-    let interval = Duration::from_secs(IMAP_SYNC_INTERVAL_SECS);
-
-    sync_imap_account(&app, &state, &account).await;
+    if !sync_imap_account(&app, &state, &account).await {
+        return;
+    }
+    let retry_delay = Duration::from_secs(300);
 
     loop {
         let account = get_fresh_account(&state, account_id).await;
-        let Some(ref acc) = account else { break; };
-
-        let idle_result = try_imap_idle(acc, Duration::from_secs(IDLE_TIMEOUT_SECS)).await;
-
-        if idle_result {
-            sync_imap_account(&app, &state, acc).await;
-            continue;
-        }
+        let Some(_account) = account else { break; };
 
         tokio::select! {
-            _ = tokio::time::sleep(interval) => {
+            _ = tokio::time::sleep(retry_delay) => {
                 let account = get_fresh_account(&state, account_id).await;
                 if let Some(acc) = account {
-                    sync_imap_account(&app, &state, &acc).await;
+                    if !sync_imap_account(&app, &state, &acc).await {
+                        break;
+                    }
                 } else { break; }
             }
             _ = &mut shutdown => break,
@@ -153,7 +149,7 @@ async fn try_imap_idle(account: &Account, timeout: Duration) -> bool {
     };
 
     let result = tokio::task::spawn_blocking(move || -> Result<bool, String> {
-        let mut session = connect_with_timeout(&creds, 15)?;
+        let mut session = connect_with_timeout(&creds, 8)?;
 
         let folders: Vec<String> = session
             .list(None, Some("*"))
@@ -227,7 +223,7 @@ async fn emit_notifications_and_event_gmail(app: tauri::AppHandle, state: &DbSta
     }
 }
 
-async fn sync_imap_account(app: &tauri::AppHandle, state: &DbState, account: &Account) {
+async fn sync_imap_account(app: &tauri::AppHandle, state: &DbState, account: &Account) -> bool {
     use crate::imap_sync::sync_imap_mailbox_incremental;
 
     let account_id = account.id;
@@ -262,6 +258,13 @@ async fn sync_imap_account(app: &tauri::AppHandle, state: &DbState, account: &Ac
                 upsert_sync_result(state, account_id, sync_result, &mb_for_fallback).await;
             }
             Ok(Err(e)) => {
+                if e.contains("connect failed") || e.contains("connect error") {
+                    // The fallback performs another full connection attempt and
+                    // makes an unavailable server block every mailbox in turn.
+                    log::debug!("IMAP server unavailable account={} mailbox={}: {}", account_id, mailbox, e);
+                    emit_notifications_and_event(app_clone, state, account, had_new_emails).await;
+                    return false;
+                }
                 log::error!("IMAP sync error account={} mailbox={}: {}", account_id, mailbox, e);
                 fallback_sync(app, state, account, mailbox).await;
             }
@@ -272,6 +275,7 @@ async fn sync_imap_account(app: &tauri::AppHandle, state: &DbState, account: &Ac
     }
 
     emit_notifications_and_event(app_clone, state, account, had_new_emails).await;
+    true
 }
 
 async fn fallback_sync(_app: &tauri::AppHandle, state: &DbState, account: &Account, mailbox: &str) {

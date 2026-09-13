@@ -29,7 +29,7 @@ impl ImapCredentials {
 
 type TlsSession = imap::Session<native_tls::TlsStream<std::net::TcpStream>>;
 
-const CONNECT_TIMEOUT_SECS: u64 = 15;
+const CONNECT_TIMEOUT_SECS: u64 = 8;
 
 pub fn connect(creds: &ImapCredentials) -> Result<TlsSession, String> {
     connect_with_timeout(creds, CONNECT_TIMEOUT_SECS)
@@ -64,18 +64,18 @@ pub fn connect_with_timeout(creds: &ImapCredentials, timeout_secs: u64) -> Resul
 
 pub fn retry_connect(creds: &ImapCredentials) -> Result<TlsSession, String> {
     let mut last_err = String::new();
-    for attempt in 0..3 {
+    for attempt in 0..2 {
         match connect_with_timeout(creds, CONNECT_TIMEOUT_SECS) {
             Ok(session) => return Ok(session),
             Err(e) => {
                 last_err = e;
-                if attempt < 2 {
+                if attempt < 1 {
                     std::thread::sleep(Duration::from_millis(500 * (attempt as u64 + 1)));
                 }
             }
         }
     }
-    Err(format!("IMAP connect failed after 3 retries: {}", last_err))
+    Err(format!("IMAP connect failed after 2 retries: {}", last_err))
 }
 
 fn decode_imap_utf7(input: &str) -> String {
@@ -176,6 +176,31 @@ fn extract_html(parsed: &mailparse::ParsedMail) -> String {
     html_result.or(plain_result).unwrap_or_default()
 }
 
+fn extract_snippet(parsed: &mailparse::ParsedMail) -> String {
+    if parsed.subparts.is_empty() {
+        let ct = parsed.ctype.mimetype.to_lowercase();
+        if ct == "text/plain" || ct == "text/html" {
+            return parsed.get_body().unwrap_or_default();
+        }
+        return String::new();
+    }
+
+    let mut html_fallback = String::new();
+    for part in &parsed.subparts {
+        let snippet = extract_snippet(part);
+        if snippet.is_empty() {
+            continue;
+        }
+        if part.ctype.mimetype.eq_ignore_ascii_case("text/plain") {
+            return snippet;
+        }
+        if html_fallback.is_empty() {
+            html_fallback = snippet;
+        }
+    }
+    html_fallback
+}
+
 fn collect_embedded_images(parsed: &mailparse::ParsedMail) -> std::collections::HashMap<String, String> {
     let mut images = std::collections::HashMap::new();
     collect_images_recursive(parsed, &mut images);
@@ -217,6 +242,20 @@ fn replace_cid_with_data_uris(html: &str, images: &std::collections::HashMap<Str
 
 fn html_escape(input: &str) -> String {
     input.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;")
+}
+
+fn canonical_thread_id(headers: &mailparse::headers::Headers<'_>, message_id: &str) -> String {
+    headers
+        .get_first_value("References")
+        .and_then(|references| references.split_whitespace().next().map(str::to_string))
+        .or_else(|| {
+            headers
+                .get_first_value("In-Reply-To")
+                .and_then(|reply_to| reply_to.split_whitespace().next().map(str::to_string))
+        })
+        .unwrap_or_else(|| message_id.to_string())
+        .trim_matches(|c: char| c == '<' || c == '>')
+        .to_string()
 }
 
 fn collect_imap_attachments(parsed: &mailparse::ParsedMail, uid: &str) -> Vec<serde_json::Value> {
@@ -342,8 +381,7 @@ fn parse_imap_messages(
         let uid = msg.uid.map(|u| u.to_string())
             .unwrap_or_else(|| msg.message.to_string());
         let body_bytes = msg.body().unwrap_or(b"");
-        let min_size = if mailbox_label == "INBOX" { 500 } else { 50 };
-        if body_bytes.len() < min_size { continue; }
+        if body_bytes.is_empty() { continue; }
         if !seen_uids.insert(uid.clone()) { continue; }
 
         let parsed = match parse_mail(body_bytes) { Ok(p) => p, Err(_) => continue };
@@ -357,12 +395,11 @@ fn parse_imap_messages(
         let list_unsubscribe = headers.get_first_value("List-Unsubscribe").unwrap_or_default();
         let message_id = headers.get_first_value("Message-ID")
             .unwrap_or_else(|| format!("imap-{}-{}-{}", account.id, mailbox_label, uid));
-        let thread_id = headers.get_first_value("In-Reply-To")
-            .unwrap_or_else(|| message_id.clone());
+        let thread_id = canonical_thread_id(&headers, &message_id);
 
         let is_read = msg.flags().iter().any(|f| matches!(f, imap::types::Flag::Seen));
         let body_html = parse_body(&parsed);
-        let snippet: String = parsed.get_body().unwrap_or_default()
+        let snippet: String = extract_snippet(&parsed)
             .chars().take(180).collect::<String>().replace('\n', " ");
         let attachments = collect_imap_attachments(&parsed, &uid);
         let has_attachments = !attachments.is_empty();
@@ -374,7 +411,7 @@ fn parse_imap_messages(
             id,
             account_id: account.id,
             draft_id: None,
-            thread_id: thread_id.trim_matches(|c: char| c == '<' || c == '>').to_string(),
+            thread_id,
             subject: strip_noise(&subject),
             sender: strip_noise(&sender),
             to_recipients: strip_noise(&to_recipients),
