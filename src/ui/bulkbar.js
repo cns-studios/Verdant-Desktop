@@ -1,7 +1,9 @@
-import { archiveEmail, trashEmail, toggleStarred, permanentDeleteEmail, getThreadMessages } from "../api.js";
+import { archiveEmail, trashEmail, toggleStarred, permanentDeleteEmail, getThreadMessages, getInboxCategories, moveEmailsToCategory } from "../api.js";
 import { showToast } from "../lib/toast.js";
 import { t } from "../lib/i18n.js";
 import { refreshCounts } from "./sidebar.js";
+import { showCategoryPopup } from "./categorypopup.js";
+import { isSmartInboxEnabled, ensureSmartInboxEnabled } from "../lib/smartInbox.js";
 import {
     subscribe, getMasterState, getSelectedRows, selectionCount,
     isActive, selectAllVisible, deselectAllVisible, exitMultiSelect,
@@ -41,6 +43,7 @@ function updateBulkBar() {
     master.title = state === "all" ? t("bulk.deselect_all") : t("bulk.select_all");
 
     bar.classList.toggle("empty", selectionCount() === 0);
+    bar.querySelector('[data-bulk="move"]')?.toggleAttribute("hidden", !isSmartInboxEnabled());
 
     const rows = getSelectedRows();
     const allStarred = rows.length > 0 && rows.every((row) => {
@@ -88,7 +91,6 @@ async function bulkStar() {
         const target = resolveTarget(row);
         if (target) target.starred = next;
         const ids = await resolveIds(row);
-        if (target && target.starred === next) return;
         await Promise.all(ids.map((id) => toggleStarred(id)));
     });
     refreshCounts().catch(() => {});
@@ -100,6 +102,23 @@ async function bulkStar() {
     } else {
         updateBulkBar();
     }
+
+}
+
+async function bulkMove(event) {
+    if (selectionCount() === 0) return;
+    if (!await ensureSmartInboxEnabled()) return;
+    const categories = await getInboxCategories();
+    if (!categories.length) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    showCategoryPopup(categories, rect.left, rect.bottom + 4, async category => {
+        await runPerSelectedRow(async row => {
+            const ids = await resolveIds(row);
+            if (ids.length) await moveEmailsToCategory(ids, category.slug);
+        });
+        showToast(t("toast.moved_to_category", { category: category.name }));
+        await refreshAfterBulk();
+    });
 }
 
 async function refreshAfterBulk() {
@@ -114,6 +133,7 @@ export function bindBulkBar(c) {
     if (!bar || !master) return;
 
     subscribe(updateBulkBar);
+    window.addEventListener("smart-inbox-enabled", updateBulkBar);
     updateBulkBar();
 
     master.addEventListener("click", () => {
@@ -125,12 +145,14 @@ export function bindBulkBar(c) {
     });
 
     bar.querySelectorAll("[data-bulk]").forEach((btn) => {
-        btn.addEventListener("click", () => {
+        btn.addEventListener("click", (event) => {
             const action = btn.dataset.bulk;
             if (action === "archive") void bulkArchive();
             else if (action === "delete") void bulkDelete();
             else if (action === "star") void bulkStar();
+            else if (action === "move") void bulkMove(event);
             else if (action === "close") void exitMultiSelect();
         });
     });
+    updateBulkBar();
 }

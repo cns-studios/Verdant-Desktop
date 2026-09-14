@@ -41,3 +41,8 @@
     margin: 5px 8px;
     opacity: .5;
 }
+.category-popup { position:fixed; z-index:1000; min-width:190px; padding:6px; border:1px solid var(--border); border-radius:10px; background:var(--white); box-shadow:var(--shadow-lg); }
+.category-popup-title { padding:6px 9px 5px; color:var(--text-muted); font-size:11px; }
+.category-popup-item { width:100%; display:flex; align-items:center; gap:8px; padding:8px 9px; border:0; border-radius:6px; background:transparent; color:var(--text); text-align:left; font:inherit; font-size:12px; cursor:pointer; }
+.category-popup-item:hover { background:var(--surface2); }
+.category-popup-dot { width:8px; height:8px; border-radius:50%; background:var(--category-color); flex-shrink:0; }

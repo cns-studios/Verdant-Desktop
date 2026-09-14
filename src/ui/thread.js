@@ -17,6 +17,11 @@ let selectedThreadMessages = [];
 let expandedMessageIds = new Set();
 let onRefreshCallback = null;
 let onCountsRefreshCallback = null;
+let renderGeneration = 0;
+
+function yieldToBrowser() {
+  return new Promise(resolve => requestAnimationFrame(() => resolve()));
+}
 
 
 function formatParticipants(rawSenders, maxDisplay = 3) {
@@ -44,10 +49,11 @@ function formatParticipants(rawSenders, maxDisplay = 3) {
 }
 
 
-export function renderThreadList(threads, activeFilter, searchQuery, animate = false) {
+export async function renderThreadList(threads, activeFilter, searchQuery, animate = false) {
   currentThreads = threads || [];
   const list = document.getElementById("email-list");
   if (!list) return;
+  const generation = ++renderGeneration;
 
   list.innerHTML = "";
   list.classList.toggle("suppress-anim", !animate);
@@ -75,6 +81,7 @@ export function renderThreadList(threads, activeFilter, searchQuery, animate = f
   if (countEl) countEl.textContent = t("list.count", { n: visible.length });
 
   for (let i = 0; i < visible.length; i++) {
+    if (generation !== renderGeneration || !list.isConnected) return;
     const thread = visible[i];
     const row = document.createElement("div");
     const isActive = thread.thread_id === selectedThreadId;
@@ -108,8 +115,10 @@ export function renderThreadList(threads, activeFilter, searchQuery, animate = f
     applySenderAvatar(row.querySelector(".sender-avatar"), firstSender, "INBOX");
     row.addEventListener("click", () => selectThread(thread, row));
     list.appendChild(row);
+    if ((i + 1) % 24 === 0) await yieldToBrowser();
   }
 
+  if (generation !== renderGeneration) return;
   refreshMultiSelect(list);
 }
 

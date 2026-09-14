@@ -1,7 +1,9 @@
-import { setEmailReadStatus, toggleStarred, archiveEmail, trashEmail } from "../api.js";
+import { setEmailReadStatus, toggleStarred, archiveEmail, trashEmail, getInboxCategories, moveEmailsToCategory } from "../api.js";
 import { escapeHtml, sanitizeUnicodeNoise, formatReadingDate, formatAttachmentSize } from "../lib/format.js";
 import { sanitizeEmailHtml } from "../lib/sanitize.js";
 import { showToast } from "../lib/toast.js";
+import { showCategoryPopup } from "./categorypopup.js";
+import { ensureSmartInboxEnabled } from "../lib/smartInbox.js";
 import { downloadAttachment } from "../api.js";
 import { openExternalUrl } from "../api.js";
 import { fetchRemoteImage } from "../api.js";
@@ -524,6 +526,9 @@ export function getReadingPaneHidden() {
 }
 
 export function bindReadingActions(getSelected, setSelected, onRefresh, openCompose, getCurrentMailbox, getThreadId, getThreadLatestEmail) {
+  window.addEventListener("smart-inbox-enabled", (event) => {
+    if (!event.detail?.enabled) document.getElementById("action-menu")?.remove();
+  });
   const buttons = Array.from(document.querySelectorAll(".reading-actions .icon-btn"));
 
   for (const button of buttons) {
@@ -644,6 +649,7 @@ export function bindReadingActions(getSelected, setSelected, onRefresh, openComp
       }
 
       if (action === "more") {
+        const smartEnabled = await ensureSmartInboxEnabled();
         const threadId = getThreadId?.();
         const messageIds = threadId 
           ? Array.from(document.querySelectorAll(".thread-bubble")).map(b => b.dataset.messageId).filter(Boolean)
@@ -653,6 +659,18 @@ export function bindReadingActions(getSelected, setSelected, onRefresh, openComp
         const isTrash = email?.mailbox?.toUpperCase().includes("TRASH") || currentBox.includes("TRASH");
 
         const entries = [
+          ...(smartEnabled ? [{
+            label: t("reading.move_to_category"),
+            onClick: async () => {
+              const categories = await getInboxCategories();
+              const rect = document.querySelector('[data-action="more"]')?.getBoundingClientRect();
+              showCategoryPopup(categories, rect?.left || 20, (rect?.bottom || 40) + 4, async category => {
+                await moveEmailsToCategory(threadId && messageIds.length ? messageIds : (email ? [email.id] : []), category.slug);
+                showToast(t("toast.moved_to_category", { category: category.name }));
+                await onRefresh();
+              });
+            },
+          }] : []),
           {
             label: t("reading.mark_read"),
             onClick: async () => {

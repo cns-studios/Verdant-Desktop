@@ -8,6 +8,7 @@ mod imap_sync;
 mod mime;
 mod smtp_send;
 mod state;
+mod smart_inbox;
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -181,6 +182,16 @@ pub fn run() {
             commands::mail::get_inbox_threads,
             commands::mail::get_thread_messages,
             commands::mail::mark_thread_read,
+            smart_inbox::get_inbox_categories,
+            smart_inbox::get_smart_inbox_enabled,
+            smart_inbox::categorize_inbox,
+            smart_inbox::abort_categorize_inbox,
+            smart_inbox::get_categorize_progress,
+            smart_inbox::rename_inbox_category,
+            smart_inbox::get_category_emails,
+            smart_inbox::get_category_threads,
+            smart_inbox::move_emails_to_category,
+            smart_inbox::set_smart_inbox_enabled,
             
             commands::compose::send_email,
             commands::compose::save_draft,

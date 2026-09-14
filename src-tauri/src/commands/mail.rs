@@ -112,6 +112,15 @@ fn message_id_of(msg: &Value) -> Option<String> {
     msg.get("id").and_then(Value::as_str).map(str::to_string)
 }
 
+fn history_message_id(msg: &Value) -> Option<String> {
+    message_id_of(msg).or_else(|| msg.get("message").and_then(message_id_of))
+}
+
+fn history_message_labels(msg: &Value) -> Vec<String> {
+    let source = msg.get("message").unwrap_or(msg);
+    labels_of(source)
+}
+
 async fn fetch_and_store_messages(
     state: &DbState,
     account_id: i64,
@@ -276,6 +285,11 @@ async fn fetch_and_store_messages(
         }
     }
     let _ = full_len;
+    // Assign newly synced inbox messages without blocking the sync network work.
+    {
+        let conn = state.conn.lock().await;
+        let _ = crate::smart_inbox::assign_unassigned(&conn, account_id);
+    }
     Ok(())
 }
 
@@ -407,10 +421,10 @@ async fn history_sync_mailbox(state: &DbState, account_id: i64, mailbox: &str) -
                 for field in ["messagesAdded", "messages"] {
                     if let Some(items) = record.get(field).and_then(Value::as_array) {
                         for m in items {
-                            if let Some(mid) = message_id_of(m) {
+                            if let Some(mid) = history_message_id(m) {
                                 added_ids.insert(mid.clone());
                                 let delta = label_changes.entry(mid).or_default();
-                                for l in labels_of(m) {
+                                for l in history_message_labels(m) {
                                     if !delta.added.contains(&l) {
                                         delta.added.push(l);
                                     }
@@ -1419,6 +1433,11 @@ pub async fn sync_imap_mailbox_page(
                     ],
                 ) {
                     log::error!("sync_imap_mailbox_page upsert failed: {}", e);
+                }
+            }
+            if mailbox == "INBOX" {
+                if let Err(e) = crate::smart_inbox::assign_unassigned(&conn, account_id) {
+                    log::error!("Smart Inbox assignment after Gmail page sync failed: {}", e);
                 }
             }
             Ok(has_more)

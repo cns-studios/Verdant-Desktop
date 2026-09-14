@@ -36,7 +36,10 @@ export function renderShell() {
           <div class="nav-item active" data-mailbox="INBOX">
             ${icon("inbox")}
             <span class="nav-text">${t("sidebar.inbox")}</span>
+            <button class="inbox-expand-btn" id="inbox-expand-btn" aria-label="${t("smart.expand")}">${icon("chevron-down")}</button>
           </div>
+          <div class="smart-categories" id="smart-categories"></div>
+          <button class="smart-organize-btn" id="smart-organize-btn">${icon("sparkles")}<span>${t("smart.organize")}</span>${icon("chevron-right")}</button>
           <div class="nav-item" data-mailbox="STARRED">
             ${icon("star")}
             <span class="nav-text">${t("sidebar.starred")}</span>
@@ -105,6 +108,7 @@ export function renderShell() {
                 <button class="bulk-action" data-bulk="archive" title="${t("bulk.archive")}">${icon("archive", 14)}<span>${t("bulk.archive")}</span></button>
                 <button class="bulk-action danger" data-bulk="delete" title="${t("bulk.delete")}">${icon("trash", 14)}<span>${t("bulk.delete")}</span></button>
                 <button class="bulk-action" data-bulk="star" title="${t("bulk.star")}">${icon("star", 14)}<span>${t("bulk.star")}</span></button>
+                <button class="bulk-action smart-move-action" data-bulk="move" title="${t("bulk.move")}">${icon("folder", 14)}<span>${t("bulk.move")}</span></button>
                 <button class="bulk-action close" data-bulk="close" title="${t("bulk.close")}">${icon("x", 14)}<span>${t("bulk.close")}</span></button>
               </div>
             </div>
