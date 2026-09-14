@@ -1,5 +1,6 @@
-import { getMailboxCounts } from "../api.js";
-import { mailboxTitle } from "../lib/format.js";
+import { getMailboxCounts, getInboxCategories, categorizeInbox, abortCategorizeInbox, getCategorizeProgress, renameInboxCategory } from "../api.js";
+import { refreshSmartInboxEnabled, setSmartInboxEnabled } from "../lib/smartInbox.js";
+import { mailboxTitle, escapeHtml } from "../lib/format.js";
 import { t } from "../lib/i18n.js";
 import { icon } from "./icons.js";
 
@@ -154,6 +155,8 @@ function setBadge(navItem, value, mailbox) {
     
     if (mailbox === "INBOX") {
         badge.classList.remove("subtle");
+        const chevron = navItem.querySelector("#inbox-expand-btn");
+        if (chevron && badge.nextSibling !== chevron) navItem.insertBefore(badge, chevron);
     } else {
         badge.classList.add("subtle");
     }
@@ -182,11 +185,199 @@ export function bindMailboxNav(onMailboxSelect) {
         const mailbox = item.dataset.mailbox;
         if (!mailbox) continue;
         item.addEventListener("click", async () => {
-            items.forEach((n) => n.classList.remove("active"));
+            document.querySelectorAll(".sidebar .nav-item").forEach((n) => n.classList.remove("active"));
             item.classList.add("active");
             await onMailboxSelect(mailbox);
         });
     }
+}
+
+export async function bindSmartInbox(onMailboxSelect) {
+    const list = document.getElementById("smart-categories");
+    const toggle = document.getElementById("inbox-expand-btn");
+    const organize = document.getElementById("smart-organize-btn");
+    const inbox = document.querySelector('[data-mailbox="INBOX"]');
+    if (!list || !toggle || !organize || !inbox) return;
+    let categories = [];
+    let enabled = true;
+    let expanded = localStorage.getItem("verdant.smartInboxExpanded") !== "0";
+
+    const setExpanded = (next) => {
+        expanded = !!next;
+        localStorage.setItem("verdant.smartInboxExpanded", expanded ? "1" : "0");
+        render();
+    };
+
+    const render = () => {
+        list.hidden = !enabled || !expanded || categories.length === 0;
+        organize.hidden = enabled || !expanded;
+        toggle.hidden = false;
+        toggle.innerHTML = icon(expanded ? "chevron-up" : "chevron-down");
+        toggle.title = expanded ? t("smart.collapse") : t("smart.expand");
+        toggle.setAttribute("aria-label", toggle.title);
+        list.innerHTML = categories.map(c => `
+          <div class="nav-item smart-category" data-category="${escapeHtml(c.slug)}">
+            <span class="smart-category-dot" style="--category-color: ${escapeHtml(c.color || "#6c7065")}"></span>
+            <span class="nav-text smart-category-name">${escapeHtml(c.name)}</span>
+            <button class="smart-rename" data-rename="${escapeHtml(c.slug)}" title="${escapeHtml(t("smart.rename"))}" aria-label="${escapeHtml(t("smart.rename"))}">${icon("pencil")}</button>
+            ${c.unread_count ? `<span class="nav-badge subtle">${c.unread_count}</span>` : ""}
+          </div>`).join("");
+        list.querySelectorAll(".smart-category").forEach(item => item.addEventListener("click", e => {
+            if (e.target.closest("[data-rename]") || item.classList.contains("editing")) return;
+            onMailboxSelect(`CATEGORY:${item.dataset.category}`);
+        }));
+        list.querySelectorAll("[data-rename]").forEach(btn => btn.addEventListener("click", async e => {
+            e.stopPropagation();
+            const item = btn.closest(".smart-category");
+            const category = categories.find(c => c.slug === btn.dataset.rename);
+            if (!category || item.classList.contains("editing")) return;
+            item.classList.add("editing");
+            const name = item.querySelector(".smart-category-name");
+            name.innerHTML = `<input class="smart-rename-input" value="${escapeHtml(category.name)}" maxlength="40" aria-label="${escapeHtml(t("smart.rename"))}">`;
+            btn.innerHTML = icon("check");
+            btn.title = t("smart.confirm_rename");
+            const input = item.querySelector("input");
+            input.focus();
+            input.select();
+            const save = async () => {
+                const next = input.value.trim();
+                if (!next || next === category.name) { render(); return; }
+                try {
+                    await renameInboxCategory(category.slug, next);
+                    categories = await getInboxCategories();
+                    render();
+                } catch (error) {
+                    console.error("Failed to rename smart inbox category", error);
+                    render();
+                }
+            };
+            btn.onclick = save;
+            input.addEventListener("keydown", event => {
+                if (event.key === "Enter") save();
+                if (event.key === "Escape") render();
+            });
+        }));
+    };
+    const refresh = async () => {
+        try {
+            enabled = await refreshSmartInboxEnabled();
+            categories = enabled ? await getInboxCategories() : [];
+            render();
+        }
+        catch (error) { console.error("Failed to load smart inbox", error); }
+    };
+    toggle.addEventListener("click", event => {
+        event.stopPropagation();
+        setExpanded(!expanded);
+    });
+    organize.addEventListener("click", async () => {
+        try {
+            await setSmartInboxEnabled(true);
+            await refresh();
+            openSmartInboxSetup(refresh);
+        } catch (error) {
+            console.error("Failed to enable smart inbox", error);
+        }
+    });
+    window.addEventListener("smart-inbox-enabled", event => {
+        enabled = !!event.detail?.enabled;
+        categories = enabled ? categories : [];
+        render();
+        refresh();
+        if (enabled && event.detail?.openOnboarding) {
+            setExpanded(true);
+            openSmartInboxSetup(refresh);
+        }
+    });
+    window.addEventListener("smart-inbox-request-onboarding", () => {
+        enabled = true;
+        setExpanded(true);
+        openSmartInboxSetup(refresh);
+    });
+    await refresh();
+}
+
+function closeSmartInboxSetup() {
+    document.querySelectorAll(".smart-modal-overlay").forEach((overlay) => overlay.remove());
+}
+
+function openSmartInboxSetup(refresh) {
+    const overlay = document.createElement("div");
+    overlay.className = "smart-modal-overlay";
+    overlay.innerHTML = `
+      <section class="smart-modal" role="dialog" aria-modal="true" aria-labelledby="smart-modal-title">
+        <button class="smart-modal-close" aria-label="${escapeHtml(t("reading.close"))}">${icon("x")}</button>
+        <div class="smart-modal-step" data-step="intro">
+          <div class="smart-modal-icon">${icon("sparkles")}</div>
+          <h2 id="smart-modal-title">${escapeHtml(t("smart.title"))}</h2>
+          <p>${escapeHtml(t("smart.subtitle"))}</p>
+          <div class="smart-demo"><span>${icon("mail")}</span><i></i><span class="smart-demo-card">${escapeHtml(t("smart.demo_work"))}</span><span class="smart-demo-card">${escapeHtml(t("smart.demo_news"))}</span><span class="smart-demo-card">${escapeHtml(t("smart.demo_other"))}</span></div>
+          <p class="smart-modal-note">${icon("info-circle")} ${escapeHtml(t("smart.notice"))}</p>
+          <div class="smart-modal-actions"><button class="verdant-btn smart-start">${escapeHtml(t("smart.start"))}</button></div>
+        </div>
+        <div class="smart-modal-step" data-step="progress" hidden>
+          <div class="smart-modal-icon is-spinning">${icon("sparkles")}</div>
+          <h2>${escapeHtml(t("smart.progress_title"))}</h2>
+          <p class="smart-progress-label">${escapeHtml(t("smart.progress_body"))}</p>
+          <div class="smart-progress"><div></div></div>
+          <div class="smart-progress-percent">0%</div>
+          <div class="smart-modal-actions"><button class="smart-abort verdant-btn secondary">${escapeHtml(t("smart.abort"))}</button></div>
+        </div>
+        <div class="smart-modal-step" data-step="done" hidden>
+          <div class="smart-modal-icon smart-done">${icon("check")}</div>
+          <h2>${escapeHtml(t("smart.done"))}</h2>
+          <p class="smart-done-body"></p>
+          <div class="smart-modal-actions"><button class="verdant-btn smart-finish">${escapeHtml(t("smart.finish"))}</button></div>
+        </div>
+      </section>`;
+    document.body.appendChild(overlay);
+    requestAnimationFrame(() => overlay.classList.add("open"));
+    const modal = overlay.querySelector(".smart-modal");
+    const close = () => { overlay.classList.remove("open"); setTimeout(() => overlay.remove(), 180); };
+    const setStep = step => overlay.querySelectorAll(".smart-modal-step").forEach(el => { el.hidden = el.dataset.step !== step; });
+    overlay.querySelector(".smart-modal-close").onclick = close;
+    overlay.addEventListener("click", event => { if (event.target === overlay && !overlay.querySelector('[data-step="progress"]:not([hidden])')) close(); });
+    overlay.querySelector(".smart-finish").onclick = async () => { await refresh(); close(); };
+    overlay.querySelector(".smart-start").onclick = async () => {
+        // Persist activation before analysis, including onboarding opened by
+        // another caller rather than the sidebar button.
+        await setSmartInboxEnabled(true);
+        await refresh();
+        setStep("progress");
+        overlay.querySelector(".smart-modal-close").hidden = true;
+        const bar = overlay.querySelector(".smart-progress > div");
+        const percent = overlay.querySelector(".smart-progress-percent");
+        let progressTimer = null;
+        const poll = async () => {
+            try {
+                const p = await getCategorizeProgress();
+                const done = Number(p?.processed || 0), total = Number(p?.total || 0);
+                const value = total ? Math.min(100, Math.round(done * 100 / total)) : 0;
+                bar.style.width = `${value}%`;
+                percent.textContent = total ? `${done} / ${total} (${value}%)` : "0%";
+                overlay.querySelector(".smart-progress-label").textContent = t("smart.progress", { done, total });
+            } catch {}
+        };
+        progressTimer = setInterval(poll, 180);
+        poll();
+        try {
+            const result = await categorizeInbox();
+            clearInterval(progressTimer);
+            bar.style.width = "100%";
+            percent.textContent = "100%";
+            overlay.querySelector(".smart-done-body").textContent = t("smart.done_body", { n: result?.assigned || 0 });
+            setStep("done");
+        } catch (error) {
+            clearInterval(progressTimer);
+            console.error("Smart inbox analysis failed", error);
+            close();
+        }
+    };
+    overlay.querySelector(".smart-abort").onclick = async () => {
+        await abortCategorizeInbox();
+        overlay.querySelector(".smart-progress-label").textContent = t("smart.abort");
+        close();
+    };
 }
 
 export function setUserProfile(profile) {

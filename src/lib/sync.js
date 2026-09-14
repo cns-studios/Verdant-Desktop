@@ -1,4 +1,4 @@
-import { syncMailboxPage, getEmails, getActiveAccountInfo, syncImapMailboxPage } from "../api.js";
+import { syncMailbox, syncMailboxPage, getEmails, getActiveAccountInfo, syncImapMailboxPage } from "../api.js";
 import { ingestContactsFromEmails } from "./contacts.js";
 import { t } from "./i18n.js";
 
@@ -86,19 +86,30 @@ export async function syncMailboxInBackground(mailbox, force = false, onSynced =
     }
 
     
-    if (mailbox !== "STARRED" && mailbox !== "ARCHIVE") {
-      const next = await withTimeout(
-        syncMailboxPage(mailbox, null),
+    // Refresh the newest messages through the incremental/history sync.
+    // The page API is reserved for explicit list pagination; reusing its
+    // stored next-page token here eventually walks past new mail.
+    const syncTarget = mailbox.startsWith("CATEGORY:") ? "INBOX" : mailbox;
+    await withTimeout(
+      syncMailbox(syncTarget),
+      SYNC_TIMEOUT_MS,
+      `Mailbox sync timed out for ${syncTarget}`,
+    );
+    if (syncTarget === "INBOX") {
+      // History is the fast path, but Gmail can expire or truncate a history
+      // cursor. Always reconcile the newest page so mail cannot disappear
+      // simply because the cursor missed a messagesAdded record.
+      await withTimeout(
+        syncMailboxPage("INBOX", null),
         SYNC_TIMEOUT_MS,
-        `Mailbox sync timed out for ${mailbox}`,
+        "Inbox newest-page reconciliation timed out",
       );
-      mailboxNextPageToken.set(mailbox, next || null);
     }
 
-    const latest = await withTimeout(
-      getEmails(mailbox),
+    const latest = syncTarget === "INBOX" ? [] : await withTimeout(
+      getEmails(syncTarget),
       SYNC_TIMEOUT_MS,
-      `Loading ${mailbox} timed out`,
+      `Loading ${syncTarget} timed out`,
     );
     ingestContactsFromEmails(latest);
 

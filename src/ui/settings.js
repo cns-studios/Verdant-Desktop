@@ -1,4 +1,5 @@
-import { logout, clearLocalData, getMailboxCounts, authStatus, listAccounts, removeAccount } from "../api.js";
+import { logout, clearLocalData, getMailboxCounts, authStatus, listAccounts, removeAccount, getInboxCategories, renameInboxCategory, categorizeInbox } from "../api.js";
+import { refreshSmartInboxEnabled, setSmartInboxEnabled } from "../lib/smartInbox.js";
 import { checkForUpdates, downloadLatestUpdate } from "../api.js";
 import { escapeHtml } from "../lib/format.js";
 import { showToast } from "../lib/toast.js";
@@ -438,13 +439,30 @@ function buildAdvancedTab() {
   `;
 }
 
+function buildSmartTab(categories, enabled) {
+  return `<section class="settings-pane" data-pane="smart">
+    <div class="settings-section-label">${escapeHtml(t("settings.smart.title"))}</div>
+    <div class="settings-card">
+      <label class="settings-switch"><input id="settings-smart-enabled" type="checkbox" ${enabled ? "checked" : ""}><span>${escapeHtml(t("settings.smart.enabled"))}</span></label>
+      <p class="settings-help">${escapeHtml(t("settings.smart.description"))}</p>
+      <div class="settings-smart-controls" ${enabled ? "" : "hidden"}>
+        <div class="settings-grid smart-settings-categories">${categories.map(c => `<div class="settings-row"><span>${escapeHtml(c.name)}</span><input data-smart-slug="${escapeHtml(c.slug)}" value="${escapeHtml(c.name)}" maxlength="40"></div>`).join("")}</div>
+        <button class="verdant-btn" id="settings-smart-reanalyze">${escapeHtml(t("settings.smart.reanalyze"))}</button>
+      </div>
+    </div>
+  </section>`;
+}
+
 export async function openSettingsModal(profile, currentMailbox, onLogout, onSync) {
   let auth = { connected: true };
   let counts = { inbox_total: 0, inbox_unread: 0, starred_total: 0, sent_total: 0, drafts_total: 0, archive_total: 0, trash_total: 0 };
   let accounts = [];
+  let smartCategories = [];
+  let smartEnabled = true;
 
   try {
     [auth, counts, accounts] = await Promise.all([authStatus(), getMailboxCounts(), listAccounts()]);
+    [smartCategories, smartEnabled] = await Promise.all([getInboxCategories(), refreshSmartInboxEnabled()]);
   } catch {}
 
   const langs = getSupportedLanguages();
@@ -470,6 +488,7 @@ export async function openSettingsModal(profile, currentMailbox, onLogout, onSyn
           <button class="settings-tab active" data-tab="app">${escapeHtml(t("settings.tab.app"))}</button>
           <button class="settings-tab" data-tab="behavior">${escapeHtml(t("settings.tab.behavior"))}</button>
           <button class="settings-tab" data-tab="appearence">${escapeHtml(t("settings.tab.appearence"))}</button>
+          <button class="settings-tab" data-tab="smart">${escapeHtml(t("settings.tab.smart"))}</button>
           <button class="settings-tab" data-tab="shortcuts">${escapeHtml(t("settings.tab.shortcuts"))}</button>
           <button class="settings-tab" data-tab="advanced">${escapeHtml(t("settings.tab.advanced"))}</button>
         </div>
@@ -478,6 +497,7 @@ export async function openSettingsModal(profile, currentMailbox, onLogout, onSyn
         ${buildAppearenceTab()}
         ${buildShortcutsTab()}
         ${buildAdvancedTab()}
+        ${buildSmartTab(smartCategories, smartEnabled)}
       </div>
     </div>
   `;
@@ -518,6 +538,28 @@ export async function openSettingsModal(profile, currentMailbox, onLogout, onSyn
     setLang(e.target.value);
     closeOverlay();
     showLanguageReloadOverlay();
+  });
+
+  panel.querySelector("#settings-smart-enabled")?.addEventListener("change", (e) => {
+    const enabled = !!e.target.checked;
+    setSmartInboxEnabled(enabled).then(() => {
+      const controls = panel.querySelector(".settings-smart-controls");
+      if (controls) controls.hidden = !enabled;
+      if (enabled) {
+        closeOverlay();
+        window.dispatchEvent(new CustomEvent("smart-inbox-request-onboarding"));
+      }
+    }).catch(err => {
+      e.target.checked = !enabled;
+      showToast(String(err), "error");
+    });
+  });
+  panel.querySelectorAll("[data-smart-slug]").forEach(input => input.addEventListener("change", async () => {
+    try { await renameInboxCategory(input.dataset.smartSlug, input.value.trim()); } catch (err) { showToast(String(err), "error"); }
+  }));
+  panel.querySelector("#settings-smart-reanalyze")?.addEventListener("click", async () => {
+    try { await setSmartInboxEnabled(true); await categorizeInbox(); showToast(t("settings.smart.reanalyzed")); }
+    catch (err) { showToast(String(err), "error"); }
   });
 
   panel.querySelector("#app-show-notifications")?.addEventListener("change", (e) => {

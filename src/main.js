@@ -31,7 +31,7 @@ import { showOnboarding } from "./ui/onboarding.js";
 import {
     bindMailboxNav, bindPaneResizer, bindAppHeaderControls,
     refreshCounts, setUserProfile, bindUserRow, setListTitle, refreshAppHeaderSubtitle,
-    bindSidebarCollapse,
+    bindSidebarCollapse, bindSmartInbox,
 } from "./ui/sidebar.js";
 import {
     renderReadingPane, bindReadingActions, setReadingPaneHidden, getReadingPaneHidden,
@@ -53,7 +53,7 @@ import { bindMultiSelect, checkboxHtml, exitMultiSelect as clearMultiSelection, 
 import { bindBulkBar } from "./ui/bulkbar.js";
 import { appPrefs } from "./ui/settings.js";
 import { checkForUpdates, downloadLatestUpdate, switchAccount, listAccounts } from "./api.js";
-import { getInboxThreads } from "./api.js";
+import { getInboxThreads, getCategoryThreads } from "./api.js";
 import {
     renderThreadList,
     getSelectedThreadId, getSelectedThreadLatestMessage, clearSelectedThread, getThreadById,
@@ -95,9 +95,25 @@ let isFetchingMore = false;
 let isSyncing = false;
 
 const mailboxCache = new Map();
+const categoryThreadsCache = new Map();
 let inboxThreadsCache = null;
 let lastAnimatedRenderAt = 0;
 const ANIMATION_WINDOW_MS = 1800;
+let listRenderGeneration = 0;
+const renderedEmailViews = new Map();
+let renderedEmailViewState = null;
+
+function yieldToBrowser() {
+    return new Promise(resolve => requestAnimationFrame(() => resolve()));
+}
+
+function deferNonVisualWork(work) {
+    if (typeof window.requestIdleCallback === "function") {
+        window.requestIdleCallback(() => work(), { timeout: 250 });
+    } else {
+        window.setTimeout(work, 0);
+    }
+}
 
 function showBootScreen() {
     if (document.getElementById("boot-screen")) return;
@@ -114,6 +130,9 @@ function hideBootScreen() {
 
 function resetMailboxCaches() {
     mailboxCache.clear();
+    categoryThreadsCache.clear();
+    renderedEmailViews.clear();
+    renderedEmailViewState = null;
     inboxThreadsCache = null;
     currentEmails = [];
     mailboxNextPageToken.clear();
@@ -127,6 +146,12 @@ function showListLoading(visible = true) {
     } else if (list.querySelector(".list-loading")) {
         list.innerHTML = "";
     }
+}
+
+function setListSwitching(switching) {
+    const list = document.getElementById("email-list");
+    if (!list) return;
+    list.classList.toggle("list-switching", switching);
 }
 
 async function loadInboxThreads(animate = false) {
@@ -277,18 +302,50 @@ function visibleEmails() {
     return (currentEmails || []).filter(emailMatchesFilter);
 }
 
-function renderEmailList(animate = false) {
+async function renderEmailList(animate = false) {
     const list = document.getElementById("email-list");
     if (!list) return;
+    const generation = ++listRenderGeneration;
+    const emails = visibleEmails();
+    const viewKey = `${currentMailbox}|${activeFilter}|${searchQuery}`;
+    const signature = emails.map(email => `${email.id}:${email.is_read ? 1 : 0}:${email.starred ? 1 : 0}`).join(",");
+
+    if (renderedEmailViewState && renderedEmailViewState.key !== viewKey && renderedEmailViewState.complete) {
+        renderedEmailViews.set(renderedEmailViewState.key, {
+            signature: renderedEmailViewState.signature,
+            nodes: Array.from(list.children),
+        });
+    }
+    const cachedView = currentMailbox.startsWith("CATEGORY:")
+        ? renderedEmailViews.get(viewKey)
+        : null;
+    if (cachedView?.signature === signature) {
+        list.replaceChildren(...cachedView.nodes);
+        list.classList.remove("suppress-anim");
+        renderedEmailViewState = { key: viewKey, signature, complete: true };
+        setListTitle(currentMailbox, emails.length);
+        list.querySelectorAll(".email-item.active").forEach(row => row.classList.remove("active"));
+        const selectedRow = selectedEmail
+            ? list.querySelector(`.email-item[data-email-id="${CSS.escape(String(selectedEmail.id))}"]`)
+            : null;
+        if (selectedRow) {
+            selectedRow.classList.add("active");
+            renderReadingPane(selectedEmail, currentMailbox);
+        }
+        refreshMultiSelect(list);
+        return;
+    }
+
+    renderedEmailViews.delete(viewKey);
+    renderedEmailViewState = { key: viewKey, signature, complete: false };
     list.innerHTML = "";
     list.classList.toggle("suppress-anim", !animate);
-
-    const emails = visibleEmails();
     setListTitle(currentMailbox, emails.length);
     const selectedId = selectedEmail?.id || null;
     let selectedRow = null, selectedRowEmail = null;
 
     for (let i = 0; i < emails.length; i++) {
+        if (generation !== listRenderGeneration || !list.isConnected) return;
         const email = emails[i];
         const row = document.createElement("div");
         row.className = `email-item ${email.is_read ? "" : "unread"}`.trim();
@@ -319,10 +376,13 @@ function renderEmailList(animate = false) {
             selectedRowEmail = email;
         }
         list.appendChild(row);
+        if ((i + 1) % 24 === 0) await yieldToBrowser();
     }
 
     refreshMultiSelect(list);
 
+    if (generation !== listRenderGeneration) return;
+    renderedEmailViewState.complete = true;
     if (selectedRow && selectedRowEmail) {
         selectedEmail = selectedRowEmail;
         renderReadingPane(selectedRowEmail, currentMailbox);
@@ -358,7 +418,29 @@ async function loadLocalMailbox(mailbox, animate = false) {
     }
     currentMailbox = mailbox;
 
-    if (mailbox === "INBOX") {
+    if (mailbox.startsWith("CATEGORY:")) {
+        const slug = mailbox.slice("CATEGORY:".length);
+        const cached = categoryThreadsCache.get(mailbox);
+        if (cached) {
+            setListSwitching(false);
+            renderThreadList(cached, activeFilter, searchQuery, animate);
+        } else {
+          // Keep the current list visible while the category query runs.
+          // Replacing it with a spinner makes navigation feel blocked.
+          setListTitle(mailbox, 0);
+          setListSwitching(true);
+          try {
+            const fetched = await getCategoryThreads(slug);
+            categoryThreadsCache.set(mailbox, fetched);
+            if (currentMailbox !== mailbox) return;
+            renderThreadList(fetched, activeFilter, searchQuery, animate);
+          } catch (e) {
+            console.error(`Failed to load category ${slug}`, e);
+          } finally {
+            if (currentMailbox === mailbox) setListSwitching(false);
+          }
+        }
+    } else if (mailbox === "INBOX") {
         setListTitle(mailbox, 0);
         if (inboxThreadsCache) {
             renderThreadList(inboxThreadsCache, activeFilter, searchQuery, animate);
@@ -387,7 +469,7 @@ async function loadLocalMailbox(mailbox, animate = false) {
                 mailboxCache.set(mailbox, fetched);
                 if (currentMailbox !== mailbox) return;
                 currentEmails = fetched;
-                ingestContactsFromEmails(fetched);
+                deferNonVisualWork(() => ingestContactsFromEmails(fetched));
                 renderEmailList(animate);
             } catch (e) {
                 console.error(`Failed to load mailbox ${mailbox}`, e);
@@ -411,7 +493,7 @@ async function openMailbox(mailbox, animate = false, forceSync = true) {
         : Promise.resolve();
     await loadPromise;
     await syncPromise;
-    if (currentMailbox === mailbox) {
+    if (forceSync && currentMailbox === mailbox) {
         const wait = Math.max(0, ANIMATION_WINDOW_MS - (Date.now() - lastAnimatedRenderAt));
         if (wait > 0) {
             setTimeout(() => {
@@ -432,6 +514,10 @@ function onSynced(mailbox, latestEmails) {
         renderThreadList(threads, activeFilter, searchQuery, false);
         refreshCounts().catch(console.error);
       }).catch(console.error);
+    } else if (mailbox.startsWith("CATEGORY:")) {
+      categoryThreadsCache.delete(mailbox);
+      loadLocalMailbox(mailbox, false).catch(console.error);
+      refreshCounts().catch(console.error);
     } else {
       currentEmails = latestEmails || currentEmails;
       mailboxCache.set(mailbox, currentEmails);
@@ -550,6 +636,7 @@ function patchInboxThreadCache(email) {
 async function refreshAfterAction(removedIds = [], movedTo = null, movedEmail = null, removedThreadId = null) {
     const list = document.getElementById("email-list");
     if (removedIds.length) {
+        categoryThreadsCache.clear();
         for (const m of Array.from(mailboxCache.keys())) {
             if (m !== currentMailbox) mailboxCache.delete(m);
         }
@@ -592,6 +679,7 @@ async function refreshAfterAction(removedIds = [], movedTo = null, movedEmail = 
             } else {
                 currentEmails = (currentEmails || []).filter((e) => !removed.has(e.id));
                 mailboxCache.set(currentMailbox, currentEmails);
+                renderedEmailViews.delete(`${currentMailbox}|${activeFilter}|${searchQuery}`);
             }
             const countEl = document.querySelector(".list-count");
             if (countEl) {
@@ -621,6 +709,9 @@ async function refreshAfterAction(removedIds = [], movedTo = null, movedEmail = 
             refreshCounts().catch(console.error);
             return;
         }
+    }
+    if (currentMailbox.startsWith("CATEGORY:")) {
+      categoryThreadsCache.delete(currentMailbox);
     }
     await loadLocalMailbox(currentMailbox, false);
     syncMailboxInBackground(currentMailbox, false, onSynced).catch(() => {});
@@ -946,6 +1037,11 @@ async function initializeConnectedUI() {
         if (input) { input.value = ""; input.dispatchEvent(new Event("input")); }
         await openMailbox(mailbox, true);
     });
+    bindSmartInbox(async (mailbox) => {
+        document.querySelectorAll(".sidebar .nav-item").forEach(n => n.classList.remove("active"));
+        document.querySelector(`[data-category="${mailbox.slice(9)}"]`)?.classList.add("active");
+        await openMailbox(mailbox, true, false);
+    });
     bindReadingActions(
         () => selectedEmail,
         (v) => { selectedEmail = v; },
@@ -1009,7 +1105,7 @@ async function initializeConnectedUI() {
     }
 
     inboxNowPromise.then(async (inboxNow) => {
-        ingestContactsFromEmails(inboxNow);
+        deferNonVisualWork(() => ingestContactsFromEmails(inboxNow));
         const { notifyNewEmails } = await import("./lib/sync.js");
         await notifyNewEmails(inboxNow);
     }).catch(console.error);

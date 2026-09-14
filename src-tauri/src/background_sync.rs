@@ -108,6 +108,19 @@ async fn sync_gmail_account(app: &tauri::AppHandle, state: &DbState, account: &A
     for mailbox in mailboxes {
         if let Err(e) = sync_mailbox_internal_for(state, account.id, mailbox).await {
             log::error!("Gmail sync error account={} mailbox={}: {}", account.id, mailbox, e);
+            continue;
+        }
+        if *mailbox == "INBOX" {
+            // History is incremental, but a stale/truncated cursor can miss
+            // an incoming message. Reconcile the newest Gmail page too.
+            if let Err(e) = crate::commands::mail::sync_mailbox_page_internal_for(
+                state,
+                account.id,
+                mailbox,
+                None,
+            ).await {
+                log::error!("Gmail Inbox newest-page reconciliation failed account={}: {}", account.id, e);
+            }
         }
     }
 
@@ -463,6 +476,12 @@ pub async fn upsert_emails(state: &DbState, account_id: i64, emails: Vec<crate::
 
         if let Err(e) = conn.execute(&sql, rusqlite::params_from_iter(params)) {
             log::error!("IMAP upsert OTHER marking failed: {}", e);
+        }
+    }
+
+    if mailbox == "INBOX" {
+        if let Err(e) = crate::smart_inbox::assign_unassigned(&conn, account_id) {
+            log::error!("Smart Inbox assignment after IMAP sync failed: {}", e);
         }
     }
 }

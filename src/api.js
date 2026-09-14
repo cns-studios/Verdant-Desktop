@@ -79,3 +79,14 @@ export const getStartupFlags = () => invoke("get_startup_flags");
 export const hideMainWindow = () => invoke("hide_main_window");
 
 export const unsubscribeFromList = (emailId) => invoke("unsubscribe_from_list", { emailId });
+
+export const getInboxCategories = () => invoke("get_inbox_categories");
+export const getSmartInboxEnabled = () => invoke("get_smart_inbox_enabled");
+export const categorizeInbox = () => invoke("categorize_inbox");
+export const abortCategorizeInbox = () => invoke("abort_categorize_inbox");
+export const getCategorizeProgress = () => invoke("get_categorize_progress");
+export const renameInboxCategory = (slug, name) => invoke("rename_inbox_category", { slug, name });
+export const getCategoryEmails = (slug) => invoke("get_category_emails", { slug });
+export const getCategoryThreads = (slug) => invoke("get_category_threads", { slug });
+export const moveEmailsToCategory = (emailIds, slug) => invoke("move_emails_to_category", { emailIds, slug });
+export const setSmartInboxEnabled = (enabled) => invoke("set_smart_inbox_enabled", { enabled });

@@ -172,6 +172,44 @@ pub fn init_db(conn: &Connection) -> Result<()> {
     let _ = conn.execute("ALTER TABLE emails ADD COLUMN notified INTEGER NOT NULL DEFAULT 0", []);
     let _ = conn.execute("ALTER TABLE emails ADD COLUMN list_unsubscribe TEXT NOT NULL DEFAULT ''", []);
     let _ = conn.execute("ALTER TABLE emails ADD COLUMN unsubscribed INTEGER NOT NULL DEFAULT 0", []);
+    let _ = conn.execute("ALTER TABLE emails ADD COLUMN category_id INTEGER", []);
+
+    conn.execute_batch("
+        CREATE TABLE IF NOT EXISTS inbox_categories (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            slug TEXT NOT NULL UNIQUE,
+            name TEXT NOT NULL,
+            icon TEXT NOT NULL DEFAULT 'tag',
+            color TEXT NOT NULL DEFAULT '#6c7065',
+            sort_order INTEGER NOT NULL DEFAULT 0,
+            is_fixed INTEGER NOT NULL DEFAULT 1
+        );
+        CREATE TABLE IF NOT EXISTS inbox_smart_state (
+            account_id INTEGER PRIMARY KEY,
+            initialized INTEGER NOT NULL DEFAULT 0,
+            enabled INTEGER NOT NULL DEFAULT 1
+        );
+    ")?;
+    let _ = conn.execute("ALTER TABLE inbox_categories ADD COLUMN color TEXT NOT NULL DEFAULT '#6c7065'", []);
+    let _ = conn.execute("ALTER TABLE inbox_smart_state ADD COLUMN enabled INTEGER NOT NULL DEFAULT 1", []);
+    let fixed = [
+        ("work", "Work", "briefcase", "#5c7356", 0),
+        ("personal", "Personal", "user", "#6d7fa8", 1),
+        ("finance", "Finance", "coin", "#b58a4a", 2),
+        ("news", "News", "news", "#9a6c9c", 3),
+        ("other", "Other", "tag", "#7b8075", 4),
+    ];
+    for (slug, name, icon, color, order) in fixed {
+        conn.execute(
+            "INSERT OR IGNORE INTO inbox_categories (slug,name,icon,color,sort_order,is_fixed) VALUES (?1,?2,?3,?4,?5,1)",
+            params![slug, name, icon, color, order],
+        )?;
+    }
+    conn.execute(
+        "INSERT OR IGNORE INTO inbox_smart_state (account_id, initialized)
+         SELECT id, 0 FROM accounts",
+        [],
+    )?;
 
     conn.execute_batch("
         CREATE TABLE IF NOT EXISTS mailbox_sync_state (

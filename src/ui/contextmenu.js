@@ -2,11 +2,14 @@ import {
     getThreadMessages,
     archiveEmail, trashEmail, toggleStarred, setEmailReadStatus,
     restoreFromTrash, moveToInbox, permanentDeleteEmail,
+    getInboxCategories, moveEmailsToCategory,
 } from "../api.js";
 import { showToast } from "../lib/toast.js";
 import { t } from "../lib/i18n.js";
 import { icon } from "./icons.js";
 import { refreshCounts } from "./sidebar.js";
+import { showCategoryPopup } from "./categorypopup.js";
+import { isSmartInboxEnabled, ensureSmartInboxEnabled } from "../lib/smartInbox.js";
 
 let _menu = null;
 
@@ -147,6 +150,19 @@ async function actionMarkUnread(ctx, row) {
     await ctx.onRefresh();
 }
 
+async function actionMoveCategory(ctx, row, x, y) {
+    if (!isSmartInboxEnabled()) return;
+    const categories = await getInboxCategories();
+    if (!categories.length) return;
+    closeMenu();
+    showCategoryPopup(categories, x, y, async c => {
+            const ids = await resolveMessageIds(ctx, row);
+            await moveEmailsToCategory(ids, c.slug);
+            showToast(t("toast.moved_to_category", { category: c.name }));
+            await ctx.onRefresh(ids, `CATEGORY:${c.slug}`, null, removedThreadId(row));
+    });
+}
+
 function updateStarBadge(row, starred) {
     if (!row) return;
     let badge = row.querySelector(".star-badge");
@@ -191,6 +207,8 @@ function actionToggleStar(ctx, row) {
 }
 
 async function openMenu(row, x, y, ctx) {
+    const smartEnabled = await ensureSmartInboxEnabled();
+    if (!smartEnabled) closeMenu();
     const mailbox = (ctx.getMailbox() || "INBOX").toUpperCase();
     const isTrash = mailbox.includes("TRASH");
     const isArchive = mailbox.includes("ARCHIVE");
@@ -223,12 +241,15 @@ async function openMenu(row, x, y, ctx) {
         items.push({ icon: "mail", label: t("reading.mark_unread"), onClick: () => actionMarkUnread(ctx, row) });
     }
 
-    if (!isDraft && !isSent && !isTrash) {
+    if (smartEnabled && !isDraft && !isSent && !isTrash) {
         items.push({
             icon: "star",
             label: isStarred ? t("reading.unstar") : t("reading.star"),
             onClick: () => actionToggleStar(ctx, row),
         });
+    }
+    if (!isDraft && !isSent && !isTrash) {
+        items.push({ icon: "folder", label: t("reading.move_to_category"), onClick: () => actionMoveCategory(ctx, row, x, y) });
     }
 
     if (!items.length) return;
@@ -238,6 +259,7 @@ async function openMenu(row, x, y, ctx) {
 export function bindEmailListContextMenu(ctx) {
     const list = document.getElementById("email-list");
     if (!list) return;
+    window.addEventListener("smart-inbox-enabled", closeMenu);
 
     list.addEventListener("contextmenu", (event) => {
         const target = event.target instanceof Element ? event.target : event.target?.parentElement;
