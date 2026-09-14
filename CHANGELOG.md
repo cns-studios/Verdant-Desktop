@@ -1,5 +1,8 @@
 # Changelog
 
+## [2.2.23]
+- You can now sort your mailbox locally and dynamically using Machine Learning 
+
 ## [2.2.22]
 - You are now able to change the font size in Verdant
 - Improved the bulk options menu
