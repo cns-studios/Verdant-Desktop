@@ -177,6 +177,7 @@ pub fn init_db(conn: &Connection) -> Result<()> {
     conn.execute_batch("
         CREATE TABLE IF NOT EXISTS inbox_categories (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            account_id INTEGER,
             slug TEXT NOT NULL UNIQUE,
             name TEXT NOT NULL,
             icon TEXT NOT NULL DEFAULT 'tag',
@@ -191,7 +192,16 @@ pub fn init_db(conn: &Connection) -> Result<()> {
         );
     ")?;
     let _ = conn.execute("ALTER TABLE inbox_categories ADD COLUMN color TEXT NOT NULL DEFAULT '#6c7065'", []);
+    let _ = conn.execute("ALTER TABLE inbox_categories ADD COLUMN account_id INTEGER", []);
     let _ = conn.execute("ALTER TABLE inbox_smart_state ADD COLUMN enabled INTEGER NOT NULL DEFAULT 1", []);
+
+    // Reset initialized status for accounts without modern account-scoped categories so they can be freshly organized
+    let _ = conn.execute(
+        "UPDATE inbox_smart_state SET initialized = 0 WHERE account_id NOT IN (
+            SELECT DISTINCT account_id FROM inbox_categories WHERE account_id IS NOT NULL AND slug LIKE 'account-%'
+         )",
+        [],
+    );
     let fixed = [
         ("work", "Work", "briefcase", "#5c7356", 0),
         ("personal", "Personal", "user", "#6d7fa8", 1),

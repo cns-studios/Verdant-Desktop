@@ -209,8 +209,9 @@ export async function bindSmartInbox(onMailboxSelect) {
     };
 
     const render = () => {
-        list.hidden = !enabled || !expanded || categories.length === 0;
-        organize.hidden = enabled || !expanded;
+        const hasCategories = enabled && categories.length > 0;
+        list.hidden = !expanded || !hasCategories;
+        organize.hidden = !expanded || hasCategories;
         toggle.hidden = false;
         toggle.innerHTML = icon(expanded ? "chevron-up" : "chevron-down");
         toggle.title = expanded ? t("smart.collapse") : t("smart.expand");
@@ -294,6 +295,7 @@ export async function bindSmartInbox(onMailboxSelect) {
         setExpanded(true);
         openSmartInboxSetup(refresh);
     });
+    window.addEventListener("account-switched", refresh);
     await refresh();
 }
 
@@ -352,10 +354,12 @@ function openSmartInboxSetup(refresh) {
             try {
                 const p = await getCategorizeProgress();
                 const done = Number(p?.processed || 0), total = Number(p?.total || 0);
-                const value = total ? Math.min(100, Math.round(done * 100 / total)) : 0;
-                bar.style.width = `${value}%`;
-                percent.textContent = total ? `${done} / ${total} (${value}%)` : "0%";
-                overlay.querySelector(".smart-progress-label").textContent = t("smart.progress", { done, total });
+                if (total > 0) {
+                    const value = Math.min(100, Math.round(done * 100 / total));
+                    bar.style.width = `${value}%`;
+                    percent.textContent = `${done} / ${total} (${value}%)`;
+                    overlay.querySelector(".smart-progress-label").textContent = t("smart.progress", { done, total });
+                }
             } catch {}
         };
         progressTimer = setInterval(poll, 180);
@@ -370,7 +374,13 @@ function openSmartInboxSetup(refresh) {
         } catch (error) {
             clearInterval(progressTimer);
             console.error("Smart inbox analysis failed", error);
-            close();
+            overlay.querySelector(".smart-modal-close").hidden = false;
+            overlay.querySelector(".smart-done").innerHTML = icon("alert-circle");
+            overlay.querySelector('[data-step="done"] h2').textContent = t("smart.analysis_failed");
+            const detail = error instanceof Error ? error.message : String(error || "");
+            overlay.querySelector(".smart-done-body").textContent =
+                `${t("smart.analysis_failed_body")}${detail ? ` (${detail})` : ""}`;
+            setStep("done");
         }
     };
     overlay.querySelector(".smart-abort").onclick = async () => {

@@ -723,6 +723,7 @@ async function switchActiveAccount(accountId) {
     try {
         await switchAccount(accountId);
     } catch {}
+    window.dispatchEvent(new CustomEvent("account-switched"));
     resetMailboxCaches();
     try {
         const profile = await getUserProfile();
@@ -736,6 +737,7 @@ async function handleAccountSwitch(accountId) {
     if (accountId !== null) {
         await switchActiveAccount(accountId);
     } else {
+        window.dispatchEvent(new CustomEvent("account-switched"));
         await openMailbox("INBOX", true);
         await refreshCounts();
     }

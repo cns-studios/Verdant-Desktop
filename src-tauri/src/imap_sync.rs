@@ -950,12 +950,19 @@ mod tests {
         // Mock account
         let account = Account {
             id: 1,
+            email: "test@example.com".to_string(),
             provider: "imap".to_string(),
-            host: "test.imap.com".to_string(),
-            port: 993,
-            username: "test@example.com".to_string(),
-            encrypted_password: "encrypted".to_string(),
             display_name: Some("Test User".to_string()),
+            is_active: true,
+            access_token: None,
+            refresh_token: None,
+            expires_at_epoch: None,
+            imap_host: Some("test.imap.com".to_string()),
+            imap_port: Some(993),
+            smtp_host: None,
+            smtp_port: None,
+            username: Some("test@example.com".to_string()),
+            encrypted_password: Some("encrypted".to_string()),
         };
 
         // The actual test would require mocking the IMAP connection
