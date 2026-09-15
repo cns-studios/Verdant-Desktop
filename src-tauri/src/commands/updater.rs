@@ -1,5 +1,7 @@
 use semver::Version;
 use serde_json::Value;
+#[cfg(unix)]
+use std::ffi::CStr;
 use std::env;
 use std::path::PathBuf;
 
@@ -27,8 +29,37 @@ pub struct UpdateDownloadResult {
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum UpdateChannel { Stable, Nightly }
 
+fn updater_data_dir() -> Option<PathBuf> {
+    #[cfg(unix)]
+    {
+        if let Ok(raw_uid) = env::var("SUDO_UID") {
+            if let Ok(uid) = raw_uid.parse::<libc::uid_t>() {
+                let passwd = unsafe { libc::getpwuid(uid) };
+                if !passwd.is_null() {
+                    let home_dir = unsafe { (*passwd).pw_dir };
+                    if !home_dir.is_null() {
+                        if let Ok(home) = unsafe { CStr::from_ptr(home_dir) }.to_str() {
+                            let path = PathBuf::from(home);
+                            if cfg!(target_os = "macos") {
+                                return Some(path.join("Library").join("Application Support"));
+                            } else {
+                                return Some(env::var_os("XDG_DATA_HOME")
+                                    .map(PathBuf::from)
+                                    .filter(|data_dir| data_dir.starts_with(&path))
+                                    .unwrap_or_else(|| path.join(".local").join("share")));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    dirs::data_dir()
+}
+
 fn load_saved_update_channel() -> String {
-    let config_path = dirs::data_dir()
+    let config_path = updater_data_dir()
         .map(|d| d.join("com.cns-studios.verdant").join("app-config.json"));
 
     match config_path {

@@ -1,7 +1,8 @@
 # Changelog
 
 ## [2.2.23]
-- You can now sort your mailbox locally and dynamically using Machine Learning 
+- You can now sort your mailbox locally and dynamically using Machine Learning
+- Fix an issue where elevated CLI Updating defaulted the update channel to "Stable" 
 
 ## [2.2.22]
 - You are now able to change the font size in Verdant
