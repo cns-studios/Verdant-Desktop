@@ -555,11 +555,21 @@ export async function openSettingsModal(profile, currentMailbox, onLogout, onSyn
     });
   });
   panel.querySelectorAll("[data-smart-slug]").forEach(input => input.addEventListener("change", async () => {
-    try { await renameInboxCategory(input.dataset.smartSlug, input.value.trim()); } catch (err) { showToast(String(err), "error"); }
+    try {
+      await renameInboxCategory(input.dataset.smartSlug, input.value.trim());
+      window.dispatchEvent(new CustomEvent("smart-inbox-changed"));
+    } catch (err) { showToast(String(err), "error"); }
   }));
-  panel.querySelector("#settings-smart-reanalyze")?.addEventListener("click", async () => {
-    try { await setSmartInboxEnabled(true); await categorizeInbox(); showToast(t("settings.smart.reanalyzed")); }
+  panel.querySelector("#settings-smart-reanalyze")?.addEventListener("click", async (e) => {
+    const button = e.currentTarget;
+    button.disabled = true;
+    try {
+      await categorizeInbox();
+      window.dispatchEvent(new CustomEvent("smart-inbox-changed"));
+      showToast(t("settings.smart.reanalyzed"));
+    }
     catch (err) { showToast(String(err), "error"); }
+    finally { button.disabled = false; }
   });
 
   panel.querySelector("#app-show-notifications")?.addEventListener("change", (e) => {

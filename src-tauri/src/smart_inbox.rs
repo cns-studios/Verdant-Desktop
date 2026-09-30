@@ -112,8 +112,9 @@ fn slugify(text: &str) -> String {
 
 enum SenderClass {
     Personal,
-    Newsletter,
-    Domain(String),
+    /// An organisation's domain, plus whether this message carried a
+    /// `List-Unsubscribe` header (i.e. is bulk mail).
+    Domain { domain: String, bulk: bool },
     Unknown,
 }
 
@@ -122,13 +123,7 @@ enum SenderClass {
 fn classify_sender(sender: &str, list_unsubscribe: &str) -> SenderClass {
     match sender_domain(sender) {
         Some(domain) if PERSONAL_PROVIDERS.contains(&domain.as_str()) => SenderClass::Personal,
-        Some(domain) => {
-            if !list_unsubscribe.trim().is_empty() {
-                SenderClass::Newsletter
-            } else {
-                SenderClass::Domain(domain)
-            }
-        }
+        Some(domain) => SenderClass::Domain { domain, bulk: !list_unsubscribe.trim().is_empty() },
         None => SenderClass::Unknown,
     }
 }
@@ -143,8 +138,11 @@ const PALETTE: &[&str] = &["#5c7356", "#6d7fa8", "#b58a4a", "#9a6c9c", "#4f8f8a"
 /// on a handful of words per subject is not.
 fn dynamic_categories(conn: &Connection, account_id: i64) -> rusqlite::Result<()> {
     let mut personal_count = 0usize;
-    let mut newsletter_count = 0usize;
-    let mut domain_counts = std::collections::HashMap::<String, usize>::new();
+    // Per brand: (all messages, bulk messages). Bulk mail counts towards its
+    // sender's brand too; otherwise a sender that mostly sends notifications
+    // (GitHub, Amazon, a bank) could never become its own category and was
+    // swallowed by "Newsletters" instead.
+    let mut brand_counts = std::collections::HashMap::<String, (usize, usize)>::new();
     {
         let mut stmt = conn.prepare(
             "SELECT sender, COALESCE(list_unsubscribe,'') FROM emails WHERE account_id=?1 AND mailbox='INBOX'",
@@ -156,23 +154,34 @@ fn dynamic_categories(conn: &Connection, account_id: i64) -> rusqlite::Result<()
             let (sender, list_unsubscribe) = row?;
             match classify_sender(&sender, &list_unsubscribe) {
                 SenderClass::Personal => personal_count += 1,
-                SenderClass::Newsletter => newsletter_count += 1,
-                SenderClass::Domain(domain) => *domain_counts.entry(domain).or_default() += 1,
+                SenderClass::Domain { domain, bulk } => {
+                    // Merge domains that share a brand (mail.foo.com and
+                    // notifications.foo.com both become "foo").
+                    let entry = brand_counts.entry(domain_brand(&domain)).or_default();
+                    entry.0 += 1;
+                    if bulk {
+                        entry.1 += 1;
+                    }
+                }
                 SenderClass::Unknown => {}
             }
         }
     }
+    let mut brands: Vec<(String, (usize, usize))> = brand_counts.into_iter().collect();
+    brands.sort_by(|a, b| b.1 .0.cmp(&a.1 .0).then_with(|| a.0.cmp(&b.0)));
+    // A one-off sender is not worth a category of its own.
+    let eligible = brands.iter().take_while(|(_, (total, _))| *total >= 2).count();
 
-    // Merge domains that share the same brand (e.g. mail.foo.com and
-    // notifications.foo.com both become "foo") before ranking them.
-    let mut brand_counts = std::collections::HashMap::<String, usize>::new();
-    for (domain, count) in &domain_counts {
-        *brand_counts.entry(domain_brand(domain)).or_default() += count;
+    // Keep the total at 3-5: up to 3 organisations, plus Personal and
+    // Newsletters when they would not be empty, plus Other.
+    let bulk_left = |chosen: usize| brands.iter().skip(chosen).map(|(_, (_, bulk))| bulk).sum::<usize>();
+    let mut chosen = eligible.min(2);
+    if eligible > 2 && (personal_count == 0 || bulk_left(3) == 0) {
+        chosen = 3;
     }
-    let mut brands: Vec<(String, usize)> = brand_counts.into_iter().collect();
-    brands.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+    let newsletter_count = bulk_left(chosen);
 
-    conn.execute("UPDATE emails SET category_id=NULL WHERE account_id=?1 AND mailbox='INBOX'", [account_id])?;
+    conn.execute("UPDATE emails SET category_id=NULL WHERE account_id=?1", [account_id])?;
     conn.execute("DELETE FROM inbox_categories WHERE account_id=?1", [account_id])?;
     let mut sort_order = 0i64;
     let mut palette_index = 0usize;
@@ -182,14 +191,7 @@ fn dynamic_categories(conn: &Connection, account_id: i64) -> rusqlite::Result<()
         color
     };
 
-    // Reserve at most 4 organisation categories so there is always room for
-    // the fixed Personal/Newsletters/Other buckets, keeping the total in the
-    // 3-5 range the feature is scoped to.
-    let max_brand_categories = if personal_count > 0 && newsletter_count > 0 { 2 } else { 3 };
-    for (brand, count) in brands.iter().take(max_brand_categories) {
-        if *count < 2 {
-            continue;
-        }
+    for (brand, _) in brands.iter().take(chosen) {
         let name = brand
             .chars()
             .next()
@@ -223,18 +225,78 @@ fn dynamic_categories(conn: &Connection, account_id: i64) -> rusqlite::Result<()
     Ok(())
 }
 
-/// Steady-state assignment: classify one message's sender and map it to
-/// whichever existing category owns that bucket. Never creates or renames
-/// categories - if the bucket a message would belong to was not one of the
-/// ones discovered during the initial batch pass, it falls back to "Other".
-fn choose_dynamic_category(conn: &Connection, account_id: i64, sender: &str, list_unsubscribe: &str) -> Option<i64> {
-    let slug = match classify_sender(sender, list_unsubscribe) {
-        SenderClass::Personal => "personal".to_string(),
-        SenderClass::Newsletter => "newsletters".to_string(),
-        SenderClass::Domain(domain) => format!("org-{}", slugify(&domain_brand(&domain))),
-        SenderClass::Unknown => return None,
+/// Maps a message to one of the account's existing categories. Never creates
+/// or renames categories. Order: the category the rest of its conversation is
+/// already in (so a thread never shows up in two categories, and a thread the
+/// user moved stays moved), then the sender's organisation, then Newsletters
+/// or Personal, then Other.
+struct Assigner<'a> {
+    conn: &'a Connection,
+    account_id: i64,
+    slugs: std::collections::HashMap<String, i64>,
+    threads: std::collections::HashMap<String, i64>,
+}
+
+impl<'a> Assigner<'a> {
+    fn new(conn: &'a Connection, account_id: i64) -> rusqlite::Result<Self> {
+        let mut stmt = conn.prepare("SELECT slug, id FROM inbox_categories WHERE account_id=?1")?;
+        let slugs = stmt
+            .query_map([account_id], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?)))?
+            .collect::<rusqlite::Result<_>>()?;
+        Ok(Self { conn, account_id, slugs, threads: Default::default() })
+    }
+
+    fn slug(&self, slug: &str) -> Option<i64> {
+        self.slugs.get(&account_slug(self.account_id, slug)).copied()
+    }
+
+    fn thread_category(&mut self, thread_id: &str) -> Option<i64> {
+        if let Some(cid) = self.threads.get(thread_id) {
+            return Some(*cid);
+        }
+        let cid: Option<i64> = self.conn.query_row(
+            "SELECT e.category_id FROM emails e JOIN inbox_categories c ON c.id=e.category_id
+             WHERE e.account_id=?1 AND e.thread_id=?2 AND e.mailbox='INBOX' AND c.account_id=?1
+             ORDER BY e.internal_ts ASC LIMIT 1",
+            params![self.account_id, thread_id],
+            |r| r.get(0),
+        ).ok();
+        if let Some(cid) = cid {
+            self.threads.insert(thread_id.to_string(), cid);
+        }
+        cid
+    }
+
+    fn choose(&mut self, thread_id: &str, sender: &str, list_unsubscribe: &str) -> Option<i64> {
+        let cid = self.thread_category(thread_id).or_else(|| match classify_sender(sender, list_unsubscribe) {
+            SenderClass::Personal => self.slug("personal"),
+            SenderClass::Domain { domain, bulk } => self
+                .slug(&format!("org-{}", slugify(&domain_brand(&domain))))
+                .or_else(|| if bulk { self.slug("newsletters") } else { None }),
+            SenderClass::Unknown => None,
+        }).or_else(|| self.slug("other"))?;
+        self.threads.insert(thread_id.to_string(), cid);
+        Some(cid)
+    }
+}
+
+type PendingRow = (String, String, String, String);
+
+fn pending_rows(conn: &Connection, account_id: i64, only_unassigned: bool) -> rusqlite::Result<Vec<PendingRow>> {
+    // Oldest first, so a conversation takes the category of its first message.
+    let sql = if only_unassigned {
+        // Also picks up ids left dangling by a category that no longer exists.
+        "SELECT id,thread_id,sender,COALESCE(list_unsubscribe,'') FROM emails
+         WHERE account_id=?1 AND mailbox='INBOX' AND (category_id IS NULL
+            OR category_id NOT IN (SELECT id FROM inbox_categories WHERE account_id=?1))
+         ORDER BY internal_ts ASC"
+    } else {
+        "SELECT id,thread_id,sender,COALESCE(list_unsubscribe,'') FROM emails
+         WHERE account_id=?1 AND mailbox='INBOX' ORDER BY internal_ts ASC"
     };
-    category_id(conn, account_id, &account_slug(account_id, &slug))
+    let mut stmt = conn.prepare(sql)?;
+    let rows = stmt.query_map([account_id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))?;
+    rows.collect()
 }
 
 pub fn assign_unassigned(conn: &Connection, account_id: i64) -> rusqlite::Result<i64> {
@@ -246,23 +308,11 @@ pub fn assign_unassigned(conn: &Connection, account_id: i64) -> rusqlite::Result
     if initialized == 0 {
         return Ok(0);
     }
-    let rows: Vec<(String, String, String)> = {
-        let mut stmt = conn.prepare(
-            "SELECT id,sender,COALESCE(list_unsubscribe,'') FROM emails
-             WHERE account_id=?1 AND mailbox='INBOX' AND category_id IS NULL",
-        )?;
-        let rows = stmt.query_map([account_id], |r| {
-            Ok((r.get(0)?, r.get(1)?, r.get(2)?))
-        })?;
-        rows
-        .filter_map(Result::ok)
-        .collect()
-    };
+    let rows = pending_rows(conn, account_id, true)?;
+    let mut assigner = Assigner::new(conn, account_id)?;
     let mut count = 0;
-    for (id, sender, list_unsubscribe) in rows {
-        let cid = choose_dynamic_category(conn, account_id, &sender, &list_unsubscribe)
-            .or_else(|| category_id(conn, account_id, &account_slug(account_id, "other")));
-        if let Some(cid) = cid {
+    for (id, thread_id, sender, list_unsubscribe) in rows {
+        if let Some(cid) = assigner.choose(&thread_id, &sender, &list_unsubscribe) {
             conn.execute(
                 "UPDATE emails SET category_id=?1 WHERE id=?2 AND account_id=?3",
                 params![cid, id, account_id],
@@ -323,64 +373,58 @@ pub async fn get_smart_inbox_enabled(
 ) -> Result<bool, String> {
     let account_id = get_active_id(&state).await;
     let conn = state.conn.lock().await;
+    // No row yet (e.g. an account added this session) means "never turned
+    // off", which is the default.
     Ok(conn.query_row(
         "SELECT COALESCE(enabled, 1) FROM inbox_smart_state WHERE account_id=?1",
         [account_id],
         |r| r.get::<_, i64>(0),
-    ).unwrap_or(0) != 0)
+    ).unwrap_or(1) != 0)
 }
 
 #[tauri::command]
 pub async fn categorize_inbox(state: State<'_, Arc<DbState>>) -> Result<CategorizeResult, String> {
     let account_id = get_active_id(&state).await;
     CATEGORIZE_ABORT.store(false, Ordering::SeqCst);
-    let conn = state.conn.lock().await;
-    let total: i64 = conn
-        .query_row(
-            "SELECT COUNT(*) FROM emails WHERE account_id=?1 AND mailbox='INBOX'",
-            [account_id],
-            |r| r.get(0),
-        )
-        .map_err(|e| e.to_string())?;
-    CATEGORIZE_TOTAL.store(total, Ordering::SeqCst);
     CATEGORIZE_DONE.store(0, Ordering::SeqCst);
-    dynamic_categories(&conn, account_id).map_err(|e| e.to_string())?;
-    conn.execute(
-        "INSERT INTO inbox_smart_state (account_id, initialized, enabled) VALUES (?1,0,1)
-         ON CONFLICT(account_id) DO UPDATE SET enabled=1",
-        [account_id],
-    ).map_err(|e| e.to_string())?;
+    let conn = state.conn.lock().await;
+    let result = categorize_all(&conn, account_id);
+    CATEGORIZE_TOTAL.store(0, Ordering::SeqCst);
+    CATEGORIZE_DONE.store(0, Ordering::SeqCst);
+    result.map_err(|e| e.to_string())
+}
+
+/// Rebuilds all categories in a single transaction. Aborting (or any error)
+/// rolls back, leaving the previous categories exactly as they were instead
+/// of a half-sorted inbox.
+fn categorize_all(conn: &Connection, account_id: i64) -> rusqlite::Result<CategorizeResult> {
+    let tx = conn.unchecked_transaction()?;
+    dynamic_categories(&tx, account_id)?;
+    let rows = pending_rows(&tx, account_id, false)?;
+    let total = rows.len() as i64;
+    CATEGORIZE_TOTAL.store(total, Ordering::SeqCst);
+
+    let mut assigner = Assigner::new(&tx, account_id)?;
     let mut assigned = 0;
-    let rows: Vec<(String,String,String)> = {
-        let mut stmt = conn.prepare("SELECT id,sender,COALESCE(list_unsubscribe,'') FROM emails WHERE account_id=?1 AND mailbox='INBOX'").map_err(|e| e.to_string())?;
-        let rows = stmt.query_map([account_id], |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?))).map_err(|e| e.to_string())?;
-        rows.filter_map(Result::ok).collect()
-    };
-    let _ = conn.execute_batch("BEGIN TRANSACTION;");
-    for (index, (id, sender, list_unsubscribe)) in rows.into_iter().enumerate() {
-        if CATEGORIZE_ABORT.load(Ordering::SeqCst) { break; }
-        if let Some(cid) = choose_dynamic_category(&conn, account_id, &sender, &list_unsubscribe).or_else(|| category_id(&conn, account_id, &account_slug(account_id, "other"))) {
-            let _ = conn.execute("UPDATE emails SET category_id=?1 WHERE id=?2 AND account_id=?3", params![cid, id, account_id]);
+    for (id, thread_id, sender, list_unsubscribe) in rows {
+        if CATEGORIZE_ABORT.load(Ordering::SeqCst) {
+            // Dropping `tx` rolls everything back.
+            return Ok(CategorizeResult { processed: CATEGORIZE_DONE.load(Ordering::SeqCst), assigned: 0 });
+        }
+        if let Some(cid) = assigner.choose(&thread_id, &sender, &list_unsubscribe) {
+            tx.execute("UPDATE emails SET category_id=?1 WHERE id=?2 AND account_id=?3", params![cid, id, account_id])?;
             assigned += 1;
         }
         CATEGORIZE_DONE.fetch_add(1, Ordering::SeqCst);
-        if index > 0 && index % 100 == 0 {
-            let _ = conn.execute_batch("COMMIT; BEGIN TRANSACTION;");
-            tokio::task::yield_now().await;
-        }
     }
-    let _ = conn.execute_batch("COMMIT;");
-    let aborted = CATEGORIZE_ABORT.load(Ordering::SeqCst);
-    if aborted { return Ok(CategorizeResult { processed: CATEGORIZE_DONE.load(Ordering::SeqCst), assigned }); }
-    conn.execute(
-        "INSERT INTO inbox_smart_state (account_id, initialized) VALUES (?1, 1)
+    drop(assigner);
+    tx.execute(
+        "INSERT INTO inbox_smart_state (account_id, initialized, enabled) VALUES (?1, 1, 1)
          ON CONFLICT(account_id) DO UPDATE SET initialized=1, enabled=1",
         [account_id],
-    ).map_err(|e| e.to_string())?;
-    Ok(CategorizeResult {
-        processed: total,
-        assigned,
-    })
+    )?;
+    tx.commit()?;
+    Ok(CategorizeResult { processed: total, assigned })
 }
 
 #[tauri::command]
@@ -425,8 +469,15 @@ pub async fn move_emails_to_category(state: State<'_, Arc<DbState>>, email_ids: 
     let account_id = get_active_id(&state).await;
     let conn = state.conn.lock().await;
     let cid = category_id(&conn, account_id, &slug).ok_or_else(|| "Unknown category".to_string())?;
+    // Move whole conversations: a thread split across two categories showed
+    // up in both, and new replies followed whichever half was older.
     for id in email_ids {
-        conn.execute("UPDATE emails SET category_id=?1 WHERE id=?2 AND account_id=?3 AND mailbox='INBOX'", params![cid, id, account_id]).map_err(|e| e.to_string())?;
+        conn.execute(
+            "UPDATE emails SET category_id=?1 WHERE account_id=?3 AND mailbox='INBOX' AND thread_id IN (
+                SELECT thread_id FROM emails WHERE id=?2 AND account_id=?3
+             )",
+            params![cid, id, account_id],
+        ).map_err(|e| e.to_string())?;
     }
     Ok(())
 }
@@ -436,20 +487,28 @@ pub async fn set_smart_inbox_enabled(state: State<'_, Arc<DbState>>, enabled: bo
     let account_id = get_active_id(&state).await;
     let conn = state.conn.lock().await;
     if enabled {
+        // Re-enabling an already enabled inbox must not throw away its
+        // categories; only a previously disabled one starts from scratch.
         conn.execute(
             "INSERT INTO inbox_smart_state (account_id, initialized, enabled) VALUES (?1,0,1)
-             ON CONFLICT(account_id) DO UPDATE SET enabled=1, initialized=0",
+             ON CONFLICT(account_id) DO UPDATE SET
+                initialized = CASE WHEN enabled=1 THEN initialized ELSE 0 END,
+                enabled = 1",
             [account_id],
         ).map_err(|e| e.to_string())?;
     } else {
-        // Disabling is a full reset: assignments, renamed categories, and the
-        // per-account state must not survive until the next activation.
+        // Disabling is a full reset of assignments and renamed categories,
+        // but the row stays with enabled=0: deleting it let init_db recreate
+        // it as enabled on the next launch, silently turning the feature on.
         conn.execute("UPDATE emails SET category_id=NULL WHERE account_id=?1", [account_id])
-            .map_err(|e| e.to_string())?;
-        conn.execute("DELETE FROM inbox_smart_state WHERE account_id=?1", [account_id])
             .map_err(|e| e.to_string())?;
         conn.execute("DELETE FROM inbox_categories WHERE account_id=?1", [account_id])
             .map_err(|e| e.to_string())?;
+        conn.execute(
+            "INSERT INTO inbox_smart_state (account_id, initialized, enabled) VALUES (?1,0,0)
+             ON CONFLICT(account_id) DO UPDATE SET initialized=0, enabled=0",
+            [account_id],
+        ).map_err(|e| e.to_string())?;
     }
     Ok(())
 }
@@ -550,41 +609,88 @@ pub async fn get_category_threads(
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_dynamic_categories_and_assign() {
+    fn setup() -> Connection {
         let conn = Connection::open_in_memory().unwrap();
         crate::db::init_db(&conn).unwrap();
-
         conn.execute("INSERT OR IGNORE INTO accounts (id, email) VALUES (1, 'user1@example.com'), (2, 'user2@example.com')", []).unwrap();
+        conn
+    }
 
+    fn insert(conn: &Connection, id: &str, account: i64, thread: &str, sender: &str, unsub: &str, ts: i64) {
         conn.execute(
-            "INSERT INTO emails (id, account_id, thread_id, subject, sender, mailbox, body_html, date, is_read) VALUES
-             ('1', 1, 't1', 'Subj 1', 'Google <no-reply@google.com>', 'INBOX', '', '', 1),
-             ('2', 1, 't2', 'Subj 2', 'Friend <friend@gmail.com>', 'INBOX', '', '', 1),
-             ('3', 1, 't3', 'Subj 3', 'Promo <news@newsletter.com>', 'INBOX', '', '', 1)",
-            [],
+            "INSERT INTO emails (id, account_id, thread_id, subject, sender, mailbox, body_html, date, is_read, list_unsubscribe, internal_ts)
+             VALUES (?1, ?2, ?3, 'Subject', ?4, 'INBOX', '', '', 1, ?5, ?6)",
+            params![id, account, thread, sender, unsub, ts],
         ).unwrap();
+    }
 
-        conn.execute(
-            "INSERT INTO emails (id, account_id, thread_id, subject, sender, mailbox, body_html, date, is_read) VALUES
-             ('4', 2, 't4', 'Subj 4', 'Github <notifications@github.com>', 'INBOX', '', '', 1)",
-            [],
+    fn category_of(conn: &Connection, id: &str) -> Option<String> {
+        conn.query_row(
+            "SELECT c.slug FROM emails e JOIN inbox_categories c ON c.id=e.category_id WHERE e.id=?1",
+            [id],
+            |r| r.get(0),
+        ).ok()
+    }
+
+    #[test]
+    fn categories_are_per_account() {
+        let conn = setup();
+        insert(&conn, "1", 1, "t1", "Google <no-reply@google.com>", "", 1);
+        insert(&conn, "2", 1, "t2", "Friend <friend@gmail.com>", "", 2);
+        insert(&conn, "3", 1, "t3", "Promo <news@newsletter.com>", "<https://x>", 3);
+        insert(&conn, "4", 2, "t4", "Github <notifications@github.com>", "", 4);
+
+        categorize_all(&conn, 1).unwrap();
+        categorize_all(&conn, 2).unwrap();
+
+        let count = |account: i64| conn.query_row(
+            "SELECT COUNT(*) FROM inbox_categories WHERE account_id=?1", [account], |r| r.get::<_, i64>(0),
         ).unwrap();
+        assert!(count(1) > 0);
+        assert!(count(2) > 0);
+        assert!(category_of(&conn, "1").unwrap().starts_with("account-1-"));
+        assert!(category_of(&conn, "4").unwrap().starts_with("account-2-"));
+    }
 
-        dynamic_categories(&conn, 1).unwrap();
-        dynamic_categories(&conn, 2).unwrap();
+    #[test]
+    fn bulk_mail_from_a_top_sender_gets_its_own_category() {
+        let conn = setup();
+        for i in 0..4 {
+            insert(&conn, &format!("gh{i}"), 1, &format!("gh{i}"), "GitHub <notifications@github.com>", "<mailto:u@github.com>", i);
+        }
+        insert(&conn, "n1", 1, "n1", "Shop <deals@shop.example>", "<https://unsub>", 10);
+        categorize_all(&conn, 1).unwrap();
+        assert_eq!(category_of(&conn, "gh0").as_deref(), Some("account-1-org-github"));
+        assert_eq!(category_of(&conn, "n1").as_deref(), Some("account-1-newsletters"));
+    }
 
-        let count_acc1: i64 = conn.query_row("SELECT COUNT(*) FROM inbox_categories WHERE account_id=1", [], |r| r.get(0)).unwrap();
-        let count_acc2: i64 = conn.query_row("SELECT COUNT(*) FROM inbox_categories WHERE account_id=2", [], |r| r.get(0)).unwrap();
+    #[test]
+    fn replies_stay_in_their_conversations_category() {
+        let conn = setup();
+        insert(&conn, "a", 1, "thread", "GitHub <notifications@github.com>", "", 1);
+        insert(&conn, "b", 1, "other", "GitHub <notifications@github.com>", "", 2);
+        categorize_all(&conn, 1).unwrap();
+        // A friend replies in the GitHub thread after the initial analysis.
+        insert(&conn, "c", 1, "thread", "Friend <friend@gmail.com>", "", 3);
+        assign_unassigned(&conn, 1).unwrap();
+        assert_eq!(category_of(&conn, "c"), category_of(&conn, "a"));
+    }
 
-        assert!(count_acc1 > 0);
-        assert!(count_acc2 > 0);
+    #[test]
+    fn dangling_assignments_are_repaired() {
+        let conn = setup();
+        insert(&conn, "a", 1, "t", "GitHub <notifications@github.com>", "", 1);
+        insert(&conn, "b", 1, "u", "GitHub <notifications@github.com>", "", 2);
+        categorize_all(&conn, 1).unwrap();
+        conn.execute("UPDATE emails SET category_id=99999 WHERE id='a'", []).unwrap();
+        assert_eq!(assign_unassigned(&conn, 1).unwrap(), 1);
+        assert!(category_of(&conn, "a").is_some());
+    }
 
-        conn.execute("INSERT INTO inbox_smart_state (account_id, initialized, enabled) VALUES (1, 1, 1), (2, 1, 1)", []).unwrap();
-        let assigned1 = assign_unassigned(&conn, 1).unwrap();
-        let assigned2 = assign_unassigned(&conn, 2).unwrap();
-
-        assert_eq!(assigned1, 3);
-        assert_eq!(assigned2, 1);
+    #[test]
+    fn nothing_is_assigned_before_first_analysis() {
+        let conn = setup();
+        insert(&conn, "a", 1, "t", "GitHub <notifications@github.com>", "", 1);
+        assert_eq!(assign_unassigned(&conn, 1).unwrap(), 0);
     }
 }

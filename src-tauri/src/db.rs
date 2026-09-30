@@ -206,19 +206,15 @@ pub fn init_db(conn: &Connection) -> Result<()> {
          )",
         [],
     );
-    let fixed = [
-        ("work", "Work", "briefcase", "#5c7356", 0),
-        ("personal", "Personal", "user", "#6d7fa8", 1),
-        ("finance", "Finance", "coin", "#b58a4a", 2),
-        ("news", "News", "news", "#9a6c9c", 3),
-        ("other", "Other", "tag", "#7b8075", 4),
-    ];
-    for (slug, name, icon, color, order) in fixed {
-        conn.execute(
-            "INSERT OR IGNORE INTO inbox_categories (slug,name,icon,color,sort_order,is_fixed) VALUES (?1,?2,?3,?4,?5,1)",
-            params![slug, name, icon, color, order],
-        )?;
-    }
+    // Categories are per account now. The old global placeholder set
+    // (account_id NULL) is never shown; drop it together with any message
+    // assignment that points at a category which no longer exists.
+    let _ = conn.execute("DELETE FROM inbox_categories WHERE account_id IS NULL", []);
+    let _ = conn.execute(
+        "UPDATE emails SET category_id=NULL WHERE category_id IS NOT NULL
+         AND category_id NOT IN (SELECT id FROM inbox_categories)",
+        [],
+    );
     conn.execute(
         "INSERT OR IGNORE INTO inbox_smart_state (account_id, initialized)
          SELECT id, 0 FROM accounts",

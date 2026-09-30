@@ -667,6 +667,7 @@ export function bindReadingActions(getSelected, setSelected, onRefresh, openComp
               showCategoryPopup(categories, rect?.left || 20, (rect?.bottom || 40) + 4, async category => {
                 await moveEmailsToCategory(threadId && messageIds.length ? messageIds : (email ? [email.id] : []), category.slug);
                 showToast(t("toast.moved_to_category", { category: category.name }));
+                window.dispatchEvent(new CustomEvent("smart-inbox-changed"));
                 await onRefresh();
               });
             },

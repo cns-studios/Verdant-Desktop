@@ -635,8 +635,10 @@ function patchInboxThreadCache(email) {
 
 async function refreshAfterAction(removedIds = [], movedTo = null, movedEmail = null, removedThreadId = null) {
     const list = document.getElementById("email-list");
+    // Any action (read, star, move between categories) can change what a
+    // category shows, and switching to one serves its cached list first.
+    categoryThreadsCache.clear();
     if (removedIds.length) {
-        categoryThreadsCache.clear();
         for (const m of Array.from(mailboxCache.keys())) {
             if (m !== currentMailbox) mailboxCache.delete(m);
         }
