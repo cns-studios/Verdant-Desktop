@@ -12,6 +12,11 @@ const PRESETS = [
     },
     { domains: ["proton.me", "protonmail.com", "protonmail.ch", "pm.me"], kind: "unsupported", name: "Proton Mail", reason: "proton" },
     {
+        // Tuta offers no IMAP or API for other apps; it cannot work at all.
+        domains: ["tuta.com", "tuta.io", "tutanota.com", "tutanota.de", "tutamail.com", "keemail.me"],
+        kind: "unsupported", name: "Tuta", reason: "tuta",
+    },
+    {
         domains: ["gmx.de", "gmx.net", "gmx.at", "gmx.ch"],
         kind: "password", name: "GMX", hint: "enable_imap_gmx",
         imapHost: "imap.gmx.net", smtpHost: "mail.gmx.net", smtpPort: 587,
