@@ -117,6 +117,7 @@ async function bulkMove(event) {
             if (ids.length) await moveEmailsToCategory(ids, category.slug);
         });
         showToast(t("toast.moved_to_category", { category: category.name }));
+        window.dispatchEvent(new CustomEvent("smart-inbox-changed"));
         await refreshAfterBulk();
     });
 }

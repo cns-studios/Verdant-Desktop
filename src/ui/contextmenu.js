@@ -159,7 +159,13 @@ async function actionMoveCategory(ctx, row, x, y) {
             const ids = await resolveMessageIds(ctx, row);
             await moveEmailsToCategory(ids, c.slug);
             showToast(t("toast.moved_to_category", { category: c.name }));
-            await ctx.onRefresh(ids, `CATEGORY:${c.slug}`, null, removedThreadId(row));
+            window.dispatchEvent(new CustomEvent("smart-inbox-changed"));
+            // Only a category view loses the row; in the inbox the
+            // conversation is still there, just filed differently.
+            const mailbox = ctx.getMailbox();
+            const leavesView = mailbox.startsWith("CATEGORY:") && mailbox !== `CATEGORY:${c.slug}`;
+            if (leavesView) await ctx.onRefresh(ids, `CATEGORY:${c.slug}`, null, removedThreadId(row));
+            else await ctx.onRefresh();
     });
 }
 
