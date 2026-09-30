@@ -30,26 +30,48 @@ impl ImapCredentials {
 type TlsSession = imap::Session<native_tls::TlsStream<std::net::TcpStream>>;
 
 const CONNECT_TIMEOUT_SECS: u64 = 8;
-
-pub fn connect(creds: &ImapCredentials) -> Result<TlsSession, String> {
-    connect_with_timeout(creds, CONNECT_TIMEOUT_SECS)
-}
+/// Read/write timeout once logged in. FETCHing full bodies or a server-side
+/// SEARCH on a large mailbox routinely takes longer than the connect timeout,
+/// and hitting it mid-response surfaced as random "flaky" sync failures.
+const SESSION_IO_TIMEOUT_SECS: u64 = 60;
+/// How many of the newest messages per mailbox get their flags and presence
+/// re-checked on every sync (cheap: UID + FLAGS + ENVELOPE only).
+const RECONCILE_WINDOW: u32 = 200;
+/// How many recent messages to download when there is no usable sync state.
+const INITIAL_WINDOW: u32 = 50;
 
 pub fn connect_with_timeout(creds: &ImapCredentials, timeout_secs: u64) -> Result<TlsSession, String> {
     let tls = TlsConnector::builder()
         .build()
         .map_err(|e| format!("TLS build error: {}", e))?;
 
-    let addr = format!("{}:{}", creds.imap_host, creds.imap_port)
+    let addrs: Vec<std::net::SocketAddr> = format!("{}:{}", creds.imap_host, creds.imap_port)
         .to_socket_addrs()
         .map_err(|e| format!("DNS resolution error: {}", e))?
-        .next()
-        .ok_or_else(|| "DNS resolution returned no addresses".to_string())?;
-    let tcp = TcpStream::connect_timeout(&addr, Duration::from_secs(timeout_secs))
-        .map_err(|e| format!("IMAP connect error: {}", e))?;
+        .collect();
+    if addrs.is_empty() {
+        return Err("DNS resolution returned no addresses".to_string());
+    }
+    // Try every resolved address: hosts commonly publish an AAAA record that
+    // is unreachable on the user's network, and only trying the first one
+    // made connecting fail whenever the resolver happened to list IPv6 first.
+    let mut last_err = None;
+    let tcp = addrs
+        .iter()
+        .find_map(|addr| match TcpStream::connect_timeout(addr, Duration::from_secs(timeout_secs)) {
+            Ok(stream) => Some(stream),
+            Err(e) => {
+                last_err = Some(e);
+                None
+            }
+        })
+        .ok_or_else(|| format!("IMAP connect error: {}", last_err.map(|e| e.to_string()).unwrap_or_default()))?;
 
     let _ = tcp.set_read_timeout(Some(Duration::from_secs(timeout_secs)));
     let _ = tcp.set_write_timeout(Some(Duration::from_secs(timeout_secs)));
+    // Socket timeouts are per-socket, so a cloned handle lets us relax them
+    // after login even though the stream itself moves into the TLS wrapper.
+    let socket = tcp.try_clone().ok();
 
     let tls_stream = tls.connect(&creds.imap_host, tcp)
         .map_err(|e| format!("IMAP TLS error: {}", e))?;
@@ -59,6 +81,11 @@ pub fn connect_with_timeout(creds: &ImapCredentials, timeout_secs: u64) -> Resul
         .login(&creds.username, &creds.password)
         .map_err(|(e, _)| format!("IMAP login error: {}", e))?;
 
+    if let Some(socket) = socket {
+        let _ = socket.set_read_timeout(Some(Duration::from_secs(SESSION_IO_TIMEOUT_SECS)));
+        let _ = socket.set_write_timeout(Some(Duration::from_secs(SESSION_IO_TIMEOUT_SECS)));
+    }
+
     Ok(session)
 }
 
@@ -67,6 +94,9 @@ pub fn retry_connect(creds: &ImapCredentials) -> Result<TlsSession, String> {
     for attempt in 0..2 {
         match connect_with_timeout(creds, CONNECT_TIMEOUT_SECS) {
             Ok(session) => return Ok(session),
+            // Retrying a rejected password only brings the account closer to
+            // the provider's lockout threshold.
+            Err(e) if e.starts_with("IMAP login error") => return Err(e),
             Err(e) => {
                 last_err = e;
                 if attempt < 1 {
@@ -78,31 +108,116 @@ pub fn retry_connect(creds: &ImapCredentials) -> Result<TlsSession, String> {
     Err(format!("IMAP connect failed after 2 retries: {}", last_err))
 }
 
-fn decode_imap_utf7(input: &str) -> String {
-    input
-        .replace("&APw-", "ü")
-        .replace("&APY-", "ö")
-        .replace("&AOQ-", "ä")
-        .replace("&AOU-", "Ö")
-        .replace("&AMD-", "Ä")
-        .replace("&AUQ-", "Ü")
-        .replace("&AQ8-", "ß")
+/// A mailbox as returned by LIST, with its RFC 6154 special-use role.
+pub struct Folder {
+    pub name: String,
+    special: Option<&'static str>,
+    selectable: bool,
 }
 
-pub fn imap_folder_for_mailbox(mailbox: &str, folders: &[String]) -> Option<String> {
-    let target = mailbox.to_uppercase();
+pub fn list_folders(session: &mut TlsSession) -> Result<Vec<Folder>, String> {
+    use imap::types::NameAttribute;
+    let names = session
+        .list(None, Some("*"))
+        .map_err(|e| format!("IMAP LIST error: {}", e))?;
+    Ok(names
+        .iter()
+        .map(|n| {
+            let mut special = None;
+            let mut selectable = true;
+            for attr in n.attributes() {
+                match attr {
+                    NameAttribute::NoSelect => selectable = false,
+                    NameAttribute::Custom(flag) => {
+                        special = match flag.to_ascii_lowercase().as_str() {
+                            "\\sent" => Some("SENT"),
+                            "\\drafts" => Some("DRAFT"),
+                            "\\trash" => Some("TRASH"),
+                            "\\archive" => Some("ARCHIVE"),
+                            "\\all" => Some("ALL"),
+                            "\\junk" => Some("JUNK"),
+                            "\\noselect" | "\\nonexistent" => {
+                                selectable = false;
+                                special
+                            }
+                            _ => special,
+                        };
+                    }
+                    _ => {}
+                }
+            }
+            Folder { name: n.name().to_string(), special, selectable }
+        })
+        .collect())
+}
 
-    for folder in folders {
-        let decoded = decode_imap_utf7(folder);
-        if decoded.to_uppercase() == target {
-            return Some(folder.clone());
+/// Decodes an RFC 3501 "modified UTF-7" mailbox name (e.g. `Entw&APw-rfe`).
+fn decode_imap_utf7(input: &str) -> String {
+    use base64::Engine as _;
+    let mut out = String::new();
+    let mut rest = input;
+    while let Some(pos) = rest.find('&') {
+        out.push_str(&rest[..pos]);
+        let after = &rest[pos + 1..];
+        let Some(end) = after.find('-') else {
+            out.push_str(&rest[pos..]);
+            return out;
+        };
+        let chunk = &after[..end];
+        if chunk.is_empty() {
+            out.push('&');
+        } else {
+            let decoded = base64::engine::general_purpose::STANDARD_NO_PAD
+                .decode(chunk.replace(',', "/"))
+                .ok()
+                .filter(|bytes| bytes.len() % 2 == 0);
+            match decoded {
+                Some(bytes) => {
+                    let units: Vec<u16> = bytes.chunks(2).map(|c| u16::from_be_bytes([c[0], c[1]])).collect();
+                    out.push_str(&String::from_utf16_lossy(&units));
+                }
+                None => {
+                    out.push('&');
+                    out.push_str(chunk);
+                    out.push('-');
+                }
+            }
+        }
+        rest = &after[end + 1..];
+    }
+    out.push_str(rest);
+    out
+}
+
+pub fn imap_folder_for_mailbox(mailbox: &str, folders: &[Folder]) -> Option<String> {
+    let target = mailbox.to_uppercase();
+    let selectable = || folders.iter().filter(|f| f.selectable);
+
+    for folder in selectable() {
+        if decode_imap_utf7(&folder.name).to_uppercase() == target {
+            return Some(folder.name.clone());
+        }
+    }
+
+    // Servers that advertise special-use flags tell us exactly which folder
+    // is which, independent of the UI language the mailbox was created in.
+    let roles: &[&str] = match target.as_str() {
+        "SENT" => &["SENT"],
+        "DRAFT" => &["DRAFT"],
+        "TRASH" => &["TRASH"],
+        "ARCHIVE" => &["ARCHIVE", "ALL"],
+        _ => &[],
+    };
+    for role in roles {
+        if let Some(folder) = selectable().find(|f| f.special == Some(*role)) {
+            return Some(folder.name.clone());
         }
     }
 
     let candidates: &[&str] = match target.as_str() {
         "SENT" => &[
             "SENT", "SENT ITEMS", "SENT MESSAGES",
-            "GESENDET", "GESENDETE ELEMENTE",
+            "GESENDET", "GESENDETE ELEMENTE", "GESENDETE OBJEKTE",
             "[GMAIL]/SENT MAIL", "INBOX.SENT",
         ],
         "DRAFT" => &[
@@ -115,24 +230,23 @@ pub fn imap_folder_for_mailbox(mailbox: &str, folders: &[String]) -> Option<Stri
         ],
         "TRASH" => &[
             "TRASH", "DELETED", "DELETED MESSAGES", "DELETED ITEMS",
-            "PAPIERKORB", "[GMAIL]/TRASH", "INBOX.TRASH",
+            "PAPIERKORB", "GEL\u{00D6}SCHT", "GEL\u{00D6}SCHTE ELEMENTE",
+            "[GMAIL]/TRASH", "INBOX.TRASH",
         ],
         _ => return None,
     };
 
     for candidate in candidates {
-        for folder in folders {
-            let decoded = decode_imap_utf7(folder);
-            if decoded.to_uppercase() == *candidate {
-                return Some(folder.clone());
+        for folder in selectable() {
+            if decode_imap_utf7(&folder.name).to_uppercase() == *candidate {
+                return Some(folder.name.clone());
             }
         }
     }
 
-    for folder in folders {
-        let decoded = decode_imap_utf7(folder);
-        if decoded.to_uppercase().contains(&target) {
-            return Some(folder.clone());
+    for folder in selectable() {
+        if decode_imap_utf7(&folder.name).to_uppercase().contains(&target) {
+            return Some(folder.name.clone());
         }
     }
 
@@ -258,16 +372,17 @@ fn canonical_thread_id(headers: &mailparse::headers::Headers<'_>, message_id: &s
         .to_string()
 }
 
-fn collect_imap_attachments(parsed: &mailparse::ParsedMail, uid: &str) -> Vec<serde_json::Value> {
+fn collect_imap_attachments(parsed: &mailparse::ParsedMail, uid: &str, mailbox_label: &str) -> Vec<serde_json::Value> {
     let mut out = Vec::new();
     let mut idx = 0;
-    collect_imap_attachments_recursive(parsed, uid, &mut out, &mut idx);
+    collect_imap_attachments_recursive(parsed, uid, mailbox_label, &mut out, &mut idx);
     out
 }
 
 fn collect_imap_attachments_recursive(
     part: &mailparse::ParsedMail,
     uid: &str,
+    mailbox_label: &str,
     out: &mut Vec<serde_json::Value>,
     idx: &mut usize,
 ) {
@@ -287,14 +402,14 @@ fn collect_imap_attachments_recursive(
             out.push(serde_json::json!({
                 "filename": filename,
                 "mime_type": ct,
-                "attachment_id": format!("imap-{}-{}", uid, idx),
+                "attachment_id": format!("imap-{}-{}-{}", uid, idx, mailbox_label),
                 "size": size,
             }));
             *idx += 1;
         }
 
         if !sub.subparts.is_empty() {
-            collect_imap_attachments_recursive(sub, uid, out, idx);
+            collect_imap_attachments_recursive(sub, uid, mailbox_label, out, idx);
         }
     }
 }
@@ -322,6 +437,8 @@ fn rfc2822_to_epoch(date_str: &str) -> i64 {
     0
 }
 
+/// Downloads the newest `max_messages` of a mailbox in full. Used as the
+/// fallback when incremental sync fails; it reconciles nothing.
 pub fn sync_imap_mailbox(
     account: &Account,
     mailbox_label: &str,
@@ -329,11 +446,7 @@ pub fn sync_imap_mailbox(
 ) -> Result<Vec<Email>, String> {
     let creds = ImapCredentials::from_account(account)?;
     let mut session = retry_connect(&creds)?;
-
-    let folders: Vec<String> = session
-        .list(None, Some("*"))
-        .map_err(|e| format!("IMAP LIST error: {}", e))?
-        .iter().map(|n| n.name().to_string()).collect();
+    let folders = list_folders(&mut session)?;
 
     let folder = match imap_folder_for_mailbox(mailbox_label, &folders) {
         Some(f) => f,
@@ -343,7 +456,7 @@ pub fn sync_imap_mailbox(
     let mailbox_info = session.select(&folder)
         .map_err(|e| format!("IMAP SELECT error: {}", e))?;
 
-    let total = mailbox_info.exists as u32;
+    let total = mailbox_info.exists;
     if total == 0 { let _ = session.logout(); return Ok(vec![]); }
 
     let start = if total > max_messages { total - max_messages + 1 } else { 1 };
@@ -351,7 +464,7 @@ pub fn sync_imap_mailbox(
         .fetch(&format!("{}:{}", start, total), "(BODY.PEEK[] FLAGS UID)")
         .map_err(|e| format!("IMAP FETCH error: {}", e))?;
 
-    let emails = parse_imap_messages(&messages, account, mailbox_label);
+    let (emails, _) = parse_imap_messages(&messages, account, mailbox_label);
     let _ = session.logout();
     Ok(emails)
 }
@@ -364,18 +477,52 @@ fn strip_noise(input: &str) -> String {
     )).collect()
 }
 
+/// Server-side state of one message inside the reconcile window.
+pub struct WindowEntry {
+    pub uid: u32,
+    pub id: String,
+    pub is_read: bool,
+    pub starred: bool,
+}
+
+/// Every message the server holds in a mailbox with a UID >= `min_uid`.
+/// Anything stored locally for that mailbox in the same UID range that is
+/// not listed here has been deleted or moved away on the server.
+pub struct ReconcileWindow {
+    pub min_uid: u32,
+    pub entries: Vec<WindowEntry>,
+}
+
 pub struct SyncResult {
     pub emails: Vec<Email>,
     pub highest_uid: u32,
     pub uidvalidity: u32,
+    /// True when previously stored UIDs for this mailbox are meaningless
+    /// (first sync or UIDVALIDITY changed) and must be forgotten.
+    pub uids_reset: bool,
+    pub window: Option<ReconcileWindow>,
+}
+
+/// Local id for an IMAP message. Must stay stable across versions: it is the
+/// primary key messages are stored under.
+fn imap_email_id(account_id: i64, message_id: Option<&str>, mailbox_label: &str, uid: &str) -> String {
+    let message_id = message_id
+        .map(str::to_string)
+        .unwrap_or_else(|| format!("imap-{}-{}-{}", account_id, mailbox_label, uid));
+    format!("{}:{}", account_id, message_id.trim_matches(|c: char| c == '<' || c == '>'))
+}
+
+fn has_flag(msg: &imap::types::Fetch, wanted: &imap::types::Flag) -> bool {
+    msg.flags().iter().any(|f| f == wanted)
 }
 
 fn parse_imap_messages(
     messages: &imap::types::ZeroCopy<Vec<imap::types::Fetch>>,
     account: &Account,
     mailbox_label: &str,
-) -> Vec<Email> {
+) -> (Vec<Email>, Vec<WindowEntry>) {
     let mut emails = Vec::new();
+    let mut entries = Vec::new();
     let mut seen_uids = std::collections::HashSet::new();
     for msg in messages.iter() {
         let uid = msg.uid.map(|u| u.to_string())
@@ -385,12 +532,12 @@ fn parse_imap_messages(
         if !seen_uids.insert(uid.clone()) { continue; }
 
         let parsed = match parse_mail(body_bytes) {
-    Ok(p) => p,
-    Err(e) => {
-        log::warn!("Failed to parse IMAP message (uid={}): {}", uid, e);
-        continue;
-    }
-};
+            Ok(p) => p,
+            Err(e) => {
+                log::warn!("Failed to parse IMAP message (uid={}): {}", uid, e);
+                continue;
+            }
+        };
         let headers = parsed.get_headers();
         let subject = headers.get_first_value("Subject").unwrap_or_else(|| "(No Subject)".to_string());
         let sender = headers.get_first_value("From").unwrap_or_else(|| "Unknown Sender".to_string());
@@ -399,20 +546,24 @@ fn parse_imap_messages(
         let bcc_recipients = headers.get_first_value("Bcc").unwrap_or_default();
         let date = headers.get_first_value("Date").unwrap_or_default();
         let list_unsubscribe = headers.get_first_value("List-Unsubscribe").unwrap_or_default();
-        let message_id = headers.get_first_value("Message-ID")
-            .unwrap_or_else(|| format!("imap-{}-{}-{}", account.id, mailbox_label, uid));
+        let header_message_id = headers.get_first_value("Message-ID");
+        let id = imap_email_id(account.id, header_message_id.as_deref(), mailbox_label, &uid);
+        let message_id = id.splitn(2, ':').nth(1).unwrap_or_default().to_string();
         let thread_id = canonical_thread_id(&headers, &message_id);
 
-        let is_read = msg.flags().iter().any(|f| matches!(f, imap::types::Flag::Seen));
+        let is_read = has_flag(msg, &imap::types::Flag::Seen);
+        let starred = has_flag(msg, &imap::types::Flag::Flagged);
         let body_html = parse_body(&parsed);
         let snippet: String = extract_snippet(&parsed)
             .chars().take(180).collect::<String>().replace('\n', " ");
-        let attachments = collect_imap_attachments(&parsed, &uid);
+        let attachments = collect_imap_attachments(&parsed, &uid, mailbox_label);
         let has_attachments = !attachments.is_empty();
         let attachments_json = serde_json::to_string(&attachments).unwrap_or_else(|_| "[]".to_string());
         let internal_ts = rfc2822_to_epoch(&date);
-        let id = format!("{}:{}", account.id, message_id.trim_matches(|c: char| c == '<' || c == '>'));
 
+        if let Some(real_uid) = msg.uid {
+            entries.push(WindowEntry { uid: real_uid, id: id.clone(), is_read, starred });
+        }
         emails.push(Email {
             id,
             account_id: account.id,
@@ -429,7 +580,7 @@ fn parse_imap_messages(
             has_attachments,
             date,
             is_read,
-            starred: false,
+            starred,
             mailbox: mailbox_label.to_string(),
             labels: mailbox_label.to_string(),
             internal_ts,
@@ -439,7 +590,40 @@ fn parse_imap_messages(
         });
     }
     emails.sort_by(|a, b| b.internal_ts.cmp(&a.internal_ts));
-    emails
+    (emails, entries)
+}
+
+/// Lightweight pass over the newest `RECONCILE_WINDOW` messages: UID, flags
+/// and Message-ID only. This is what lets read/star changes made on another
+/// device, and messages deleted or moved elsewhere, show up in Verdant.
+fn fetch_reconcile_window(
+    session: &mut TlsSession,
+    account: &Account,
+    mailbox_label: &str,
+    total: u32,
+) -> Result<ReconcileWindow, String> {
+    let start = if total > RECONCILE_WINDOW { total - RECONCILE_WINDOW + 1 } else { 1 };
+    let fetched = session
+        .fetch(&format!("{}:{}", start, total), "(UID FLAGS ENVELOPE)")
+        .map_err(|e| format!("IMAP FETCH (flags) error: {}", e))?;
+    let mut entries = Vec::new();
+    for msg in fetched.iter() {
+        let Some(uid) = msg.uid else { continue };
+        let message_id = msg
+            .envelope()
+            .and_then(|env| env.message_id)
+            .map(|raw| String::from_utf8_lossy(raw).trim().to_string())
+            .filter(|mid| !mid.is_empty());
+        entries.push(WindowEntry {
+            uid,
+            id: imap_email_id(account.id, message_id.as_deref(), mailbox_label, &uid.to_string()),
+            is_read: has_flag(msg, &imap::types::Flag::Seen),
+            starred: has_flag(msg, &imap::types::Flag::Flagged),
+        });
+    }
+    // The window only proves absence from its lowest UID upwards.
+    let min_uid = entries.iter().map(|e| e.uid).min().unwrap_or(0);
+    Ok(ReconcileWindow { min_uid, entries })
 }
 
 pub fn sync_imap_mailbox_incremental(
@@ -450,84 +634,119 @@ pub fn sync_imap_mailbox_incremental(
 ) -> Result<SyncResult, String> {
     let creds = ImapCredentials::from_account(account)?;
     let mut session = retry_connect(&creds)?;
+    let folders = list_folders(&mut session)?;
+    let result = sync_mailbox_in_session(
+        &mut session, &folders, account, mailbox_label, stored_uidvalidity, stored_highest_uid,
+    );
+    let _ = session.logout();
+    result
+}
 
-    let folders: Vec<String> = session
-        .list(None, Some("*"))
-        .map_err(|e| format!("IMAP LIST error: {}", e))?
-        .iter().map(|n| n.name().to_string()).collect();
+/// Syncs several mailboxes over a single login. Providers like GMX, web.de
+/// and Outlook throttle or temporarily block accounts that log in too often;
+/// one session per mailbox per cycle was a steady source of failed syncs.
+pub fn sync_imap_mailboxes(
+    account: &Account,
+    mailboxes: &[(String, Option<u32>, Option<u32>)],
+) -> Result<Vec<(String, Result<SyncResult, String>)>, String> {
+    let creds = ImapCredentials::from_account(account)?;
+    let mut session = retry_connect(&creds)?;
+    let folders = list_folders(&mut session)?;
+    let results = mailboxes
+        .iter()
+        .map(|(label, uidvalidity, highest_uid)| {
+            let result = sync_mailbox_in_session(&mut session, &folders, account, label, *uidvalidity, *highest_uid);
+            (label.clone(), result)
+        })
+        .collect();
+    let _ = session.logout();
+    Ok(results)
+}
 
-    let folder = match imap_folder_for_mailbox(mailbox_label, &folders) {
+fn sync_mailbox_in_session(
+    session: &mut TlsSession,
+    folders: &[Folder],
+    account: &Account,
+    mailbox_label: &str,
+    stored_uidvalidity: Option<u32>,
+    stored_highest_uid: Option<u32>,
+) -> Result<SyncResult, String> {
+    let empty = |uidvalidity| SyncResult {
+        emails: vec![],
+        highest_uid: 0,
+        uidvalidity,
+        uids_reset: false,
+        window: None,
+    };
+
+    let folder = match imap_folder_for_mailbox(mailbox_label, folders) {
         Some(f) => f,
-        None => { let _ = session.logout(); return Ok(SyncResult { emails: vec![], highest_uid: 0, uidvalidity: 0 }); }
+        None => return Ok(empty(0)),
     };
 
     let mailbox_info = session.select(&folder)
         .map_err(|e| format!("IMAP SELECT error: {}", e))?;
 
     let uidvalidity = mailbox_info.uid_validity.unwrap_or(0);
-    let total = mailbox_info.exists as u32;
+    let total = mailbox_info.exists;
+
+    let state_valid = stored_uidvalidity == Some(uidvalidity) && stored_highest_uid.is_some();
+    if let Some(s_validity) = stored_uidvalidity.filter(|v| *v != uidvalidity) {
+        log::info!(
+            "IMAP UIDVALIDITY changed for account {} mailbox {} (stored: {}, current: {}) - resyncing recent messages",
+            account.id, mailbox_label, s_validity, uidvalidity
+        );
+    }
 
     if total == 0 {
-        let _ = session.logout();
-        return Ok(SyncResult { emails: vec![], highest_uid: 0, uidvalidity });
+        // Empty on the server: everything we still show locally is stale.
+        return Ok(SyncResult {
+            emails: vec![],
+            highest_uid: stored_highest_uid.filter(|_| state_valid).unwrap_or(0),
+            uidvalidity,
+            uids_reset: !state_valid,
+            window: Some(ReconcileWindow { min_uid: 0, entries: vec![] }),
+        });
     }
 
-    let uidnext = mailbox_info.uid_next.unwrap_or(total + 1);
-
-    // Handle UIDVALIDITY change - need to fetch all messages
-    if let Some(s_validity) = stored_uidvalidity {
-        if uidvalidity != s_validity {
-            // UIDVALIDITY changed - fetch all messages since old UIDs are invalid
-            log::info!("IMAP UIDVALIDITY changed for account {} mailbox {} (stored: {}, current: {}) - fetching all messages",
-                       account.id, mailbox_label, stored_uidvalidity.unwrap_or(0), uidnext);
-            if total == 0 {
-                let _ = session.logout();
-                return Ok(SyncResult { emails: vec![], highest_uid: 0, uidvalidity });
-            }
-            let fetched = session.fetch(&format!("{}:*", 1), "(BODY.PEEK[] FLAGS UID)")
-                .map_err(|e| format!("IMAP FETCH error: {}", e))?;
-            let max_uid = fetched.iter().filter_map(|m| m.uid).max().unwrap_or(uidnext.saturating_sub(1));
-            let mut emails = parse_imap_messages(&fetched, account, mailbox_label);
-            let _ = session.logout();
-            return Ok(SyncResult { emails, highest_uid: max_uid, uidvalidity });
+    if state_valid {
+        let s_uid = stored_highest_uid.unwrap_or(0);
+        let uidnext = mailbox_info.uid_next.unwrap_or(0);
+        let mut emails = Vec::new();
+        let mut highest_uid = s_uid;
+        // UIDNEXT can be missing; in that case just ask. A `N:*` range where
+        // N is past the last UID still returns the last message, so results
+        // are filtered to genuinely new UIDs.
+        if uidnext == 0 || uidnext > s_uid + 1 {
+            let fetched = session
+                .uid_fetch(&format!("{}:*", s_uid + 1), "(BODY.PEEK[] FLAGS UID)")
+                .map_err(|e| format!("IMAP UID FETCH error: {}", e))?;
+            highest_uid = fetched.iter().filter_map(|m| m.uid).fold(s_uid, u32::max);
+            let (parsed, entries) = parse_imap_messages(&fetched, account, mailbox_label);
+            let new_ids: std::collections::HashSet<String> = entries
+                .into_iter()
+                .filter(|e| e.uid > s_uid)
+                .map(|e| e.id)
+                .collect();
+            emails = parsed.into_iter().filter(|e| new_ids.contains(&e.id)).collect();
         }
+        let window = fetch_reconcile_window(session, account, mailbox_label, total)?;
+        return Ok(SyncResult { emails, highest_uid, uidvalidity, uids_reset: false, window: Some(window) });
     }
 
-    // Handle incremental sync when UIDVALIDITY is unchanged
-    if let (Some(s_validity), Some(s_uid)) = (stored_uidvalidity, stored_highest_uid) {
-        if uidvalidity == s_validity {
-            // UIDVALIDITY matches - we can use incremental sync
-            if uidnext > s_uid + 1 {
-                // Fetch new messages since s_uid
-                let fetch_str = format!("{}:*", s_uid + 1);
-                let fetched = session.uid_fetch(&fetch_str, "(BODY.PEEK[] FLAGS UID)")
-                    .map_err(|e| format!("IMAP UID FETCH error: {}", e))?;
-                let max_uid = fetched.iter().filter_map(|m| m.uid).max().unwrap_or(s_uid);
-                let mut emails = parse_imap_messages(&fetched, account, mailbox_label);
-                let _ = session.logout();
-                return Ok(SyncResult { emails, highest_uid: max_uid, uidvalidity });
-            } else {
-                // No new messages - return stored state
-                let _ = session.logout();
-                return Ok(SyncResult {
-                    emails: vec![],
-                    highest_uid: s_uid,
-                    uidvalidity
-                });
-            }
-        }
-    }
-
-    // No stored state or UIDVALIDITY mismatch handled above - fetch recent messages
-    log::info!("No IMAP sync state for account {} mailbox {} - fetching recent messages",
+    // No usable state (first sync or UIDVALIDITY changed): download only the
+    // most recent messages. Older ones are loaded on demand by paging;
+    // pulling every body of a large mailbox here used to time out.
+    log::info!("No usable IMAP sync state for account {} mailbox {} - fetching recent messages",
                account.id, mailbox_label);
-    let start = if total > 50 { total - 50 + 1 } else { 1 };
-    let fetched = session.fetch(&format!("{}:*", start), "(BODY.PEEK[] FLAGS UID)")
+    let start = if total > INITIAL_WINDOW { total - INITIAL_WINDOW + 1 } else { 1 };
+    let fetched = session.fetch(&format!("{}:{}", start, total), "(BODY.PEEK[] FLAGS UID)")
         .map_err(|e| format!("IMAP FETCH error: {}", e))?;
-    let max_uid = fetched.iter().filter_map(|m| m.uid).max().unwrap_or(uidnext.saturating_sub(1));
-    let mut emails = parse_imap_messages(&fetched, account, mailbox_label);
-    let _ = session.logout();
-    Ok(SyncResult { emails, highest_uid: max_uid, uidvalidity })
+    let highest_uid = fetched.iter().filter_map(|m| m.uid).max()
+        .unwrap_or(mailbox_info.uid_next.unwrap_or(1).saturating_sub(1));
+    let (emails, _) = parse_imap_messages(&fetched, account, mailbox_label);
+    let window = fetch_reconcile_window(session, account, mailbox_label, total)?;
+    Ok(SyncResult { emails, highest_uid, uidvalidity, uids_reset: true, window: Some(window) })
 }
 
 pub fn test_imap_connection(
@@ -557,27 +776,30 @@ pub fn append_to_sent(
     body_html: Option<&str>,
 ) -> Result<(), String> {
     let creds = ImapCredentials::from_account(account)?;
-    let mut session = connect(&creds)?;
-
-    let folders: Vec<String> = session
-        .list(None, Some("*"))
-        .map_err(|e| format!("IMAP LIST error: {}", e))?
-        .iter().map(|n| n.name().to_string()).collect();
+    let mut session = retry_connect(&creds)?;
+    let folders = list_folders(&mut session)?;
 
     let sent_folder = imap_folder_for_mailbox("SENT", &folders)
         .ok_or_else(|| "Could not find Sent folder".to_string())?;
 
     
     let date = chrono::Utc::now().format("%a, %d %b %Y %H:%M:%S +0000").to_string();
+    // Without From the saved copy showed up as "Unknown Sender" in Sent, and
+    // raw UTF-8 in Subject is invalid in a header, so encode it (RFC 2047).
+    let from = match account.display_name.as_deref().filter(|n| !n.trim().is_empty()) {
+        Some(name) => format!("{} <{}>", encode_header_word(name), account.email),
+        None => account.email.clone(),
+    };
+    let subject = encode_header_word(subject);
     let body = if let Some(html) = body_html {
         format!(
-            "To: {}\r\nCc: {}\r\nSubject: {}\r\nDate: {}\r\nMIME-Version: 1.0\r\nContent-Type: multipart/alternative; boundary=\"verdant-alt\"\r\n\r\n--verdant-alt\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n{}\r\n--verdant-alt\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n{}\r\n--verdant-alt--\r\n",
-            to, cc, subject, date, body_plain, html
+            "From: {}\r\nTo: {}\r\nCc: {}\r\nSubject: {}\r\nDate: {}\r\nMIME-Version: 1.0\r\nContent-Type: multipart/alternative; boundary=\"verdant-alt\"\r\n\r\n--verdant-alt\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n{}\r\n--verdant-alt\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n{}\r\n--verdant-alt--\r\n",
+            from, to, cc, subject, date, body_plain, html
         )
     } else {
         format!(
-            "To: {}\r\nCc: {}\r\nSubject: {}\r\nDate: {}\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n{}\r\n",
-            to, cc, subject, date, body_plain
+            "From: {}\r\nTo: {}\r\nCc: {}\r\nSubject: {}\r\nDate: {}\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n{}\r\n",
+            from, to, cc, subject, date, body_plain
         )
     };
 
@@ -590,24 +812,27 @@ pub fn append_to_sent(
     Ok(())
 }
 
+fn encode_header_word(value: &str) -> String {
+    if value.is_ascii() {
+        return value.to_string();
+    }
+    use base64::Engine as _;
+    format!("=?UTF-8?B?{}?=", base64::engine::general_purpose::STANDARD.encode(value.as_bytes()))
+}
+
 pub fn imap_search_emails(
     account: &Account,
     query: &str,
     max_results: u32,
 ) -> Result<Vec<Email>, String> {
     let creds = ImapCredentials::from_account(account)?;
-    let mut session = connect(&creds)?;
+    let mut session = retry_connect(&creds)?;
 
     session.select("INBOX")
         .map_err(|e| format!("IMAP SELECT error: {}", e))?;
 
-    let q = query.trim().replace('"', "");
-    let search_criteria = format!(
-        "OR OR SUBJECT \"{}\" FROM \"{}\" BODY \"{}\"",
-        q, q, q
-    );
-
-    let uids = session.search(&search_criteria)
+    let q = quote_imap_string(query.trim());
+    let uids = session.uid_search(format!("OR OR SUBJECT {q} FROM {q} BODY {q}"))
         .map_err(|e| format!("IMAP SEARCH error: {}", e))?;
 
     if uids.is_empty() {
@@ -620,76 +845,60 @@ pub fn imap_search_emails(
     uid_list.truncate(max_results as usize);
 
     let uid_set = uid_list.iter().map(|u| u.to_string()).collect::<Vec<_>>().join(",");
-    let messages = session.fetch(&uid_set, "(BODY.PEEK[] FLAGS UID)")
+    let messages = session.uid_fetch(&uid_set, "(BODY.PEEK[] FLAGS UID)")
         .map_err(|e| format!("IMAP FETCH error: {}", e))?;
 
-    let mut emails = Vec::new();
-    for msg in messages.iter() {
-        let uid = msg.uid.map(|u| u.to_string())
-            .unwrap_or_else(|| msg.message.to_string());
-
-        let body_bytes = msg.body().unwrap_or(b"");
-        if body_bytes.len() < 50 { continue; }
-
-        let parsed = match parse_mail(body_bytes) {
-    Ok(p) => p,
-    Err(e) => {
-        log::warn!("Failed to parse IMAP message (uid={}): {}", uid, e);
-        continue;
-    }
-};
-        let headers = parsed.get_headers();
-        let subject = headers.get_first_value("Subject").unwrap_or_else(|| "(No Subject)".to_string());
-        let sender = headers.get_first_value("From").unwrap_or_else(|| "Unknown Sender".to_string());
-        let to_recipients = headers.get_first_value("To").unwrap_or_default();
-        let cc_recipients = headers.get_first_value("Cc").unwrap_or_default();
-        let bcc_recipients = headers.get_first_value("Bcc").unwrap_or_default();
-        let date = headers.get_first_value("Date").unwrap_or_default();
-        let list_unsubscribe = headers.get_first_value("List-Unsubscribe").unwrap_or_default();
-        let message_id = headers.get_first_value("Message-ID")
-            .unwrap_or_else(|| format!("imap-{}-search-{}", account.id, uid));
-        let thread_id = headers.get_first_value("In-Reply-To")
-            .unwrap_or_else(|| message_id.clone());
-
-        let is_read = msg.flags().iter().any(|f| matches!(f, imap::types::Flag::Seen));
-        let body_html = parse_body(&parsed);
-        let snippet: String = parsed.get_body().unwrap_or_default()
-            .chars().take(180).collect::<String>().replace('\n', " ");
-        let attachments = collect_imap_attachments(&parsed, &uid);
-        let has_attachments = !attachments.is_empty();
-        let attachments_json = serde_json::to_string(&attachments).unwrap_or_else(|_| "[]".to_string());
-        let internal_ts = rfc2822_to_epoch(&date);
-        let id = format!("{}:{}", account.id, message_id.trim_matches(|c: char| c == '<' || c == '>'));
-
-        emails.push(Email {
-            id,
-            account_id: account.id,
-            draft_id: None,
-            thread_id: thread_id.trim_matches(|c: char| c == '<' || c == '>').to_string(),
-            subject: strip_noise(&subject),
-            sender: strip_noise(&sender),
-            to_recipients: strip_noise(&to_recipients),
-            cc_recipients: strip_noise(&cc_recipients),
-            bcc_recipients: strip_noise(&bcc_recipients),
-            snippet: strip_noise(&snippet),
-            body_html: if body_html.is_empty() { format!("<pre>{}</pre>", html_escape(&snippet)) } else { body_html },
-            attachments_json,
-            has_attachments,
-            date,
-            is_read,
-            starred: false,
-            mailbox: "INBOX".to_string(),
-            labels: "INBOX".to_string(),
-            internal_ts,
-            notified: false,
-            list_unsubscribe,
-            unsubscribed: false,
-        });
-    }
-
+    // Same parser as sync, so search hits get the same ids and thread ids as
+    // the stored copies instead of creating near-duplicates.
+    let (emails, _) = parse_imap_messages(&messages, account, "INBOX");
     let _ = session.logout();
-    emails.sort_by(|a, b| b.internal_ts.cmp(&a.internal_ts));
     Ok(emails)
+}
+
+fn quote_imap_string(value: &str) -> String {
+    format!("\"{}\"", value.replace('\\', "\\\\").replace('"', "\\\""))
+}
+
+/// Finds the UIDs of a message in the currently selected folder. Messages
+/// that had no Message-ID header are stored as `imap-{account}-{MAILBOX}-{uid}`
+/// and can only be addressed by that UID, in that mailbox.
+fn resolve_uids(session: &mut TlsSession, message_id_header: &str, mailbox: &str) -> Result<Vec<u32>, String> {
+    let parts: Vec<&str> = message_id_header.splitn(4, '-').collect();
+    if parts.len() == 4 && parts[0] == "imap" {
+        if parts[2].eq_ignore_ascii_case(mailbox) {
+            if let Ok(uid) = parts[3].parse::<u32>() {
+                return Ok(vec![uid]);
+            }
+        }
+        return Ok(vec![]);
+    }
+    let found = session
+        .uid_search(format!("HEADER Message-ID {}", quote_imap_string(message_id_header)))
+        .map_err(|e| format!("IMAP SEARCH error: {}", e))?;
+    let mut uids: Vec<u32> = found.into_iter().collect();
+    uids.sort_unstable();
+    Ok(uids)
+}
+
+/// Error prefix for operations on a message the server no longer has.
+pub const MESSAGE_NOT_FOUND: &str = "Message not found on server";
+
+fn uid_set(uids: &[u32]) -> String {
+    uids.iter().map(|u| u.to_string()).collect::<Vec<_>>().join(",")
+}
+
+fn has_capability(session: &mut TlsSession, name: &str) -> bool {
+    session.capabilities().map(|caps| caps.has_str(name)).unwrap_or(false)
+}
+
+/// Removes exactly these UIDs. A bare EXPUNGE would also permanently delete
+/// every other message another client had marked `\Deleted` in the folder.
+fn expunge_uids(session: &mut TlsSession, uids: &str) -> Result<(), String> {
+    if has_capability(session, "UIDPLUS") {
+        session.uid_expunge(uids).map(|_| ()).map_err(|e| format!("IMAP EXPUNGE error: {}", e))
+    } else {
+        session.expunge().map(|_| ()).map_err(|e| format!("IMAP EXPUNGE error: {}", e))
+    }
 }
 
 pub fn imap_set_flag(
@@ -700,33 +909,25 @@ pub fn imap_set_flag(
     mailbox: &str,
 ) -> Result<(), String> {
     let creds = ImapCredentials::from_account(account)?;
-    let mut session = connect(&creds)?;
-
-    let folders: Vec<String> = session.list(None, Some("*"))
-        .map_err(|e| format!("IMAP LIST error: {}", e))?
-        .iter().map(|n| n.name().to_string()).collect();
+    let mut session = retry_connect(&creds)?;
+    let folders = list_folders(&mut session)?;
 
     let folder = imap_folder_for_mailbox(mailbox, &folders)
         .unwrap_or_else(|| "INBOX".to_string());
     session.select(&folder)
         .map_err(|e| format!("IMAP SELECT error: {}", e))?;
 
-    let search_result = session.search(format!("HEADER Message-ID \"{}\"", message_id_header))
-        .unwrap_or_default();
-
-    if !search_result.is_empty() {
-        let seq = search_result.iter().next().unwrap();
-        let seq_set = seq.to_string();
-        if add {
-            session.store(&seq_set, format!("+FLAGS ({})", flag))
-                .map_err(|e| format!("IMAP STORE error: {}", e))?;
-            if flag == "\\Deleted" {
-                let _ = session.expunge();
-            }
-        } else {
-            session.store(&seq_set, format!("-FLAGS ({})", flag))
-                .map_err(|e| format!("IMAP STORE error: {}", e))?;
-        }
+    let uids = resolve_uids(&mut session, message_id_header, mailbox)?;
+    if uids.is_empty() {
+        let _ = session.logout();
+        return Err(format!("{}: {} in {}", MESSAGE_NOT_FOUND, message_id_header, folder));
+    }
+    let set = uid_set(&uids);
+    let op = if add { "+FLAGS.SILENT" } else { "-FLAGS.SILENT" };
+    session.uid_store(&set, format!("{} ({})", op, flag))
+        .map_err(|e| format!("IMAP STORE error: {}", e))?;
+    if add && flag == "\\Deleted" {
+        expunge_uids(&mut session, &set)?;
     }
 
     let _ = session.logout();
@@ -740,11 +941,8 @@ pub fn imap_move_to_folder(
     target_mailbox: &str,
 ) -> Result<(), String> {
     let creds = ImapCredentials::from_account(account)?;
-    let mut session = connect(&creds)?;
-
-    let folders: Vec<String> = session.list(None, Some("*"))
-        .map_err(|e| format!("IMAP LIST error: {}", e))?
-        .iter().map(|n| n.name().to_string()).collect();
+    let mut session = retry_connect(&creds)?;
+    let folders = list_folders(&mut session)?;
 
     let src_folder = imap_folder_for_mailbox(source_mailbox, &folders)
         .unwrap_or_else(|| "INBOX".to_string());
@@ -754,22 +952,44 @@ pub fn imap_move_to_folder(
     session.select(&src_folder)
         .map_err(|e| format!("IMAP SELECT error: {}", e))?;
 
-    let search_result = session.search(format!("HEADER Message-ID \"{}\"", message_id_header))
-        .unwrap_or_default();
-
-    if !search_result.is_empty() {
-        let seq = search_result.iter().next().unwrap();
-        let seq_set = seq.to_string();
-        session.copy(&seq_set, &dst_folder)
+    let uids = resolve_uids(&mut session, message_id_header, source_mailbox)?;
+    if uids.is_empty() {
+        let _ = session.logout();
+        return Err(format!("{}: {} in {}", MESSAGE_NOT_FOUND, message_id_header, src_folder));
+    }
+    let set = uid_set(&uids);
+    if has_capability(&mut session, "MOVE") {
+        session.uid_mv(&set, &dst_folder)
+            .map_err(|e| format!("IMAP MOVE error: {}", e))?;
+    } else {
+        session.uid_copy(&set, &dst_folder)
             .map_err(|e| format!("IMAP COPY error: {}", e))?;
-        session.store(&seq_set, "+FLAGS (\\Deleted)")
+        session.uid_store(&set, "+FLAGS.SILENT (\\Deleted)")
             .map_err(|e| format!("IMAP STORE error: {}", e))?;
-        session.expunge()
-            .map_err(|e| format!("IMAP EXPUNGE error: {}", e))?;
+        expunge_uids(&mut session, &set)?;
     }
 
     let _ = session.logout();
     Ok(())
+}
+
+/// Fetches the raw RFC 822 source of a stored message.
+pub fn fetch_raw_message(account: &Account, message_id_header: &str, mailbox: &str) -> Result<Vec<u8>, String> {
+    let creds = ImapCredentials::from_account(account)?;
+    let mut session = retry_connect(&creds)?;
+    let folders = list_folders(&mut session)?;
+    let folder = imap_folder_for_mailbox(mailbox, &folders).unwrap_or_else(|| "INBOX".to_string());
+    session.select(&folder).map_err(|e| format!("IMAP SELECT error: {}", e))?;
+    let uids = resolve_uids(&mut session, message_id_header, mailbox)?;
+    let Some(uid) = uids.first() else {
+        let _ = session.logout();
+        return Err(format!("{}: {} in {}", MESSAGE_NOT_FOUND, message_id_header, folder));
+    };
+    let fetched = session.uid_fetch(uid.to_string(), "(BODY.PEEK[])")
+        .map_err(|e| format!("IMAP FETCH error: {}", e))?;
+    let body = fetched.iter().find_map(|m| m.body().map(<[u8]>::to_vec));
+    let _ = session.logout();
+    body.ok_or_else(|| "No body found".to_string())
 }
 
 pub struct FetchedAttachment {
@@ -791,14 +1011,15 @@ pub fn fetch_attachment(
         .map_err(|e| format!("Invalid part index in attachment ID: {}", e))?;
 
     let creds = ImapCredentials::from_account(account)?;
-    let mut session = connect(&creds)?;
+    let mut session = retry_connect(&creds)?;
+    let folders = list_folders(&mut session)?;
 
-    let folders: Vec<String> = session
-        .list(None, Some("*"))
-        .map_err(|e| format!("IMAP LIST error: {}", e))?
-        .iter().map(|n| n.name().to_string()).collect();
-
-    let target_mailboxes = ["INBOX", "SENT", "DRAFTS", "ARCHIVE", "TRASH"];
+    // UIDs are only unique per folder. Newer ids record the folder the
+    // message was synced from; older ids fall back to probing common ones.
+    let target_mailboxes: Vec<&str> = match parts.get(3) {
+        Some(label) => vec![*label],
+        None => vec!["INBOX", "SENT", "DRAFT", "ARCHIVE", "TRASH"],
+    };
     let mut found_body = None;
 
     for mb in target_mailboxes {
@@ -880,11 +1101,7 @@ pub fn sync_imap_mailbox_page(
 ) -> Result<Vec<Email>, String> {
     let creds = ImapCredentials::from_account(account)?;
     let mut session = retry_connect(&creds)?;
-
-    let folders: Vec<String> = session
-        .list(None, Some("*"))
-        .map_err(|e| format!("IMAP LIST error: {}", e))?
-        .iter().map(|n| n.name().to_string()).collect();
+    let folders = list_folders(&mut session)?;
 
     let folder = match imap_folder_for_mailbox(mailbox_label, &folders) {
         Some(f) => f,
@@ -894,7 +1111,7 @@ pub fn sync_imap_mailbox_page(
     let mailbox_info = session.select(&folder)
         .map_err(|e| format!("IMAP SELECT error: {}", e))?;
 
-    let total = mailbox_info.exists as u32;
+    let total = mailbox_info.exists;
     if total == 0 || offset >= total {
         let _ = session.logout();
         return Ok(vec![]);
@@ -908,93 +1125,58 @@ pub fn sync_imap_mailbox_page(
         .fetch(&format!("{}:{}", start, end), "(BODY.PEEK[] FLAGS UID)")
         .map_err(|e| format!("IMAP FETCH error: {}", e))?;
 
-    let emails = parse_imap_messages(&messages, account, mailbox_label);
+    let (emails, _) = parse_imap_messages(&messages, account, mailbox_label);
     let _ = session.logout();
     Ok(emails)
-}
-
-pub fn fetch_list_unsubscribe_header(account: &Account, uid_str: &str) -> Result<String, String> {
-    let creds = ImapCredentials::from_account(account)?;
-    let mut session = connect(&creds)?;
-
-    let uid: u32 = uid_str.parse().map_err(|_| format!("Invalid UID: {}", uid_str))?;
-
-    let messages = session.fetch(
-        format!("{}:{}", uid, uid).as_str(),
-        "(BODY.PEEK[HEADER.FIELDS (List-Unsubscribe)])",
-    ).map_err(|e| format!("IMAP fetch error: {}", e))?;
-
-    for msg in messages.iter() {
-        if let Some(body) = msg.body() {
-            let parsed = mailparse::parse_mail(body).map_err(|e| format!("Parse error: {}", e))?;
-            if let Some(val) = parsed.get_headers().get_first_value("List-Unsubscribe") {
-                let _ = session.logout();
-                return Ok(val);
-            }
-        }
-    }
-
-    let _ = session.logout();
-    Err("No List-Unsubscribe header found".to_string())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_uidvalidity_change_detection() {
-        // This test verifies that when UIDVALIDITY changes, we fetch all messages
-        // rather than attempting incremental sync which would miss new emails
-
-        // Mock account
-        let account = Account {
-            id: 1,
-            email: "test@example.com".to_string(),
-            provider: "imap".to_string(),
-            display_name: Some("Test User".to_string()),
-            is_active: true,
-            access_token: None,
-            refresh_token: None,
-            expires_at_epoch: None,
-            imap_host: Some("test.imap.com".to_string()),
-            imap_port: Some(993),
-            smtp_host: None,
-            smtp_port: None,
-            username: Some("test@example.com".to_string()),
-            encrypted_password: Some("encrypted".to_string()),
-        };
-
-        // The actual test would require mocking the IMAP connection
-        // For now, we just verify the logic compiles and the structure is correct
-        assert_eq!(account.provider, "imap");
-        assert_eq!(account.id, 1);
+    fn folder(name: &str, special: Option<&'static str>) -> Folder {
+        Folder { name: name.to_string(), special, selectable: true }
     }
 
     #[test]
-    fn test_incremental_sync_no_new_messages() {
-        // Test when there are no new messages (uidnext <= stored_highest_uid + 1)
-        // Should return empty message list empty message list
-        assert!(true);
+    fn decodes_modified_utf7_folder_names() {
+        assert_eq!(decode_imap_utf7("Entw&APw-rfe"), "Entwürfe");
+        assert_eq!(decode_imap_utf7("Gel&APY-schte Elemente"), "Gelöschte Elemente");
+        assert_eq!(decode_imap_utf7("&AMk-l&AOk-ments envoy&AOk-s"), "Éléments envoyés");
+        assert_eq!(decode_imap_utf7("Tom &- Jerry"), "Tom & Jerry");
+        assert_eq!(decode_imap_utf7("INBOX"), "INBOX");
     }
 
     #[test]
-    fn test_uidvalidity_change_triggers_full_sync() {
-        // Test demonstrates the bug fix: when UIDVALIDITY changes,
-        // we should fetch all messages rather than trying to use stale UIDs
+    fn special_use_flags_win_over_localised_names() {
+        let folders = vec![
+            folder("INBOX", None),
+            folder("&AMk-l&AOk-ments envoy&AOk-s", Some("SENT")),
+            folder("Corbeille", Some("TRASH")),
+        ];
+        assert_eq!(imap_folder_for_mailbox("SENT", &folders).as_deref(), Some("&AMk-l&AOk-ments envoy&AOk-s"));
+        assert_eq!(imap_folder_for_mailbox("TRASH", &folders).as_deref(), Some("Corbeille"));
+        assert_eq!(imap_folder_for_mailbox("inbox", &folders).as_deref(), Some("INBOX"));
+    }
 
-        // This test would fail with the original code because:
-        // 1. Original code checked: if uidvalidity == s_validity && uidnext > s_uid + 1
-        // 2. When UIDVALIDITY changes, uidvalidity != s_validity, so it goes to else branch
-        // 3. But in the else branch, it would do a regular fetch from start=total-50+1
-        // 4. However, if the UIDVALIDITY change happened recently and total is small,
-        //    it might still miss messages if the fetch range doesn't cover all messages
-        //
-        // Fixed code now:
-        // 1. When UIDVALIDITY changes, we explicitly fetch ALL messages (start=1 if total>0)
-        // 2. We also log this event for debugging
-        // 3. This ensures we don't miss any messages when UIDVALIDITY changes
+    #[test]
+    fn falls_back_to_known_names_and_skips_unselectable() {
+        let mut parent = folder("[Gmail]", None);
+        parent.selectable = false;
+        let folders = vec![parent, folder("[Gmail]/All Mail", None), folder("Entw&APw-rfe", None)];
+        assert_eq!(imap_folder_for_mailbox("ARCHIVE", &folders).as_deref(), Some("[Gmail]/All Mail"));
+        assert_eq!(imap_folder_for_mailbox("DRAFT", &folders).as_deref(), Some("Entw&APw-rfe"));
+        assert_eq!(imap_folder_for_mailbox("SENT", &folders), None);
+    }
 
-        assert!(true); // Placeholder - actual validation requires integration test
+    #[test]
+    fn email_ids_are_stable() {
+        assert_eq!(imap_email_id(3, Some("<abc@host>"), "INBOX", "7"), "3:abc@host");
+        assert_eq!(imap_email_id(3, None, "SENT", "7"), "3:imap-3-SENT-7");
+    }
+
+    #[test]
+    fn search_strings_are_quoted() {
+        assert_eq!(quote_imap_string(r#"say "hi" \ bye"#), r#""say \"hi\" \\ bye""#);
     }
 }

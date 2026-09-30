@@ -584,20 +584,7 @@ pub async fn sync_imap_mailbox_internal_for(state: &DbState, account: &Account, 
 
     match result {
         Ok(sync_result) => {
-            crate::background_sync::upsert_emails(state, account_id, sync_result.emails, &mb_for_fallback).await;
-            let now = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|d| d.as_secs() as i64)
-                .unwrap_or(0);
-            let sync_state = crate::db::MailboxSyncState {
-                account_id,
-                mailbox_name: mb_for_fallback.clone(),
-                highest_uid: sync_result.highest_uid,
-                uidvalidity: sync_result.uidvalidity,
-                last_synced_at: now,
-            };
-            let conn = state.conn.lock().await;
-            let _ = crate::db::set_mailbox_sync_state(&conn, &sync_state);
+            crate::background_sync::apply_sync_result(state, account_id, sync_result, &mb_for_fallback).await;
             Ok(())
         }
         Err(e) => {
@@ -613,6 +600,16 @@ pub async fn sync_imap_mailbox_internal_for(state: &DbState, account: &Account, 
             }
             Ok(())
         }
+    }
+}
+
+/// Flag/move operations update the local copy regardless, so a failure on
+/// the server used to go unnoticed until the next sync silently undid it.
+fn log_imap_outcome(outcome: Result<Result<(), String>, tokio::task::JoinError>) {
+    match outcome {
+        Ok(Ok(())) => {}
+        Ok(Err(e)) => log::warn!("IMAP server update failed: {}", e),
+        Err(e) => log::error!("IMAP server update task failed: {}", e),
     }
 }
 
@@ -856,9 +853,10 @@ pub async fn set_email_read_status(
                     rusqlite::params![email_id, account_id], |r| r.get::<_, String>(0)).unwrap_or_else(|_| "INBOX".to_string())
             };
             let acc_clone = acc.clone();
-            let _ = tokio::task::spawn_blocking(move || {
+            let outcome = tokio::task::spawn_blocking(move || {
                 crate::imap_sync::imap_set_flag(&acc_clone, &msg_id, "\\Seen", is_read, &mailbox)
             }).await;
+            log_imap_outcome(outcome);
         }
     }
 
@@ -906,9 +904,10 @@ pub async fn toggle_starred(state: State<'_, Arc<DbState>>, email_id: String) ->
             let msg_id = email_id.splitn(2, ':').nth(1).unwrap_or(&email_id).to_string();
             let acc_clone = acc.clone();
             let mb = mailbox.clone();
-            let _ = tokio::task::spawn_blocking(move || {
+            let outcome = tokio::task::spawn_blocking(move || {
                 crate::imap_sync::imap_set_flag(&acc_clone, &msg_id, "\\Flagged", will_be_starred, &mb)
             }).await;
+            log_imap_outcome(outcome);
         }
     }
 
@@ -958,9 +957,10 @@ pub async fn archive_email(state: State<'_, Arc<DbState>>, email_id: String) -> 
                         rusqlite::params![email_id, account_id], |r| r.get::<_, String>(0)).unwrap_or_else(|_| "INBOX".to_string())
                 };
                 let acc_clone = acc.clone();
-                let _ = tokio::task::spawn_blocking(move || {
+                let outcome = tokio::task::spawn_blocking(move || {
                     crate::imap_sync::imap_move_to_folder(&acc_clone, &msg_id, &mailbox, "ARCHIVE")
                 }).await;
+                log_imap_outcome(outcome);
             }
         }
     }
@@ -1025,9 +1025,10 @@ pub async fn trash_email(state: State<'_, Arc<DbState>>, email_id: String) -> Re
                     rusqlite::params![email_id, account_id], |r| r.get::<_, String>(0)).unwrap_or_else(|_| "INBOX".to_string())
             };
             let acc_clone = acc.clone();
-            let _ = tokio::task::spawn_blocking(move || {
+            let outcome = tokio::task::spawn_blocking(move || {
                 crate::imap_sync::imap_move_to_folder(&acc_clone, &msg_id, &mailbox, "TRASH")
             }).await;
+            log_imap_outcome(outcome);
         }
     }
 
@@ -1263,6 +1264,8 @@ pub async fn permanent_delete_email(state: State<'_, Arc<DbState>>, email_id: St
                 crate::imap_sync::imap_set_flag(&acc_clone, &msg_id, "\\Deleted", true, "TRASH")
             }).await
             .map_err(|e| format!("IMAP task error: {}", e))?
+            // Already gone on the server: still apply the change locally.
+            .or_else(|e| if e.starts_with(crate::imap_sync::MESSAGE_NOT_FOUND) { Ok(()) } else { Err(e) })
             .map_err(|e| format!("IMAP delete error: {}", e))?;
         }
     }
@@ -1311,6 +1314,8 @@ pub async fn restore_from_trash(state: State<'_, Arc<DbState>>, email_id: String
                 crate::imap_sync::imap_move_to_folder(&acc_clone, &msg_id, "TRASH", "INBOX")
             }).await
             .map_err(|e| format!("IMAP task error: {}", e))?
+            // Already gone on the server: still apply the change locally.
+            .or_else(|e| if e.starts_with(crate::imap_sync::MESSAGE_NOT_FOUND) { Ok(()) } else { Err(e) })
             .map_err(|e| format!("IMAP restore error: {}", e))?;
         }
     }
@@ -1362,6 +1367,8 @@ pub async fn move_to_inbox(state: State<'_, Arc<DbState>>, email_id: String) -> 
                 crate::imap_sync::imap_move_to_folder(&acc_clone, &msg_id, "ARCHIVE", "INBOX")
             }).await
             .map_err(|e| format!("IMAP task error: {}", e))?
+            // Already gone on the server: still apply the change locally.
+            .or_else(|e| if e.starts_with(crate::imap_sync::MESSAGE_NOT_FOUND) { Ok(()) } else { Err(e) })
             .map_err(|e| format!("IMAP move error: {}", e))?;
         }
     }
