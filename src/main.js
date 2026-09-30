@@ -22,6 +22,7 @@ import { syncMailboxInBackground, startPeriodicSync, mailboxNextPageToken, known
 import "./ui/styles/dynamic.css";
 import "./ui/styles/shell.css";
 import "./ui/styles/onboarding.css";
+import "./ui/styles/smartinbox.css";
 import "./ui/styles/accounts.css";
 import "./ui/styles/updates.css";
 import "./ui/styles/whatsnew.css";
