@@ -1,4 +1,6 @@
 import { t } from "../lib/i18n.js";
+import { escapeHtml } from "../lib/format.js";
+import { categoryLabel } from "../lib/smartInbox.js";
 
 let popup = null;
 
@@ -27,12 +29,13 @@ export function showCategoryPopup(categories, x, y, onSelect) {
     const menu = document.createElement("div");
     menu.className = "category-popup";
     menu.setAttribute("role", "menu");
-    menu.innerHTML = `<div class="category-popup-title">${t("smart.choose_category")}</div>`;
+    menu.innerHTML = `<div class="category-popup-title">${escapeHtml(t("smart.choose_category"))}</div>`;
     categories.forEach(category => {
         const button = document.createElement("button");
         button.className = "category-popup-item";
         button.setAttribute("role", "menuitem");
-        button.innerHTML = `<span class="category-popup-dot" style="--category-color:${category.color || "#6c7065"}"></span>${category.name}`;
+        // Names derive from sender domains and user input: never raw HTML.
+        button.innerHTML = `<span class="category-popup-dot" style="--category-color:${escapeHtml(category.color || "#6c7065")}"></span>${escapeHtml(categoryLabel(category))}`;
         button.addEventListener("click", event => {
             event.stopPropagation();
             closeCategoryPopup();

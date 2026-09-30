@@ -1,5 +1,6 @@
-import { getMailboxCounts, getInboxCategories, categorizeInbox, abortCategorizeInbox, getCategorizeProgress, renameInboxCategory } from "../api.js";
-import { refreshSmartInboxEnabled, setSmartInboxEnabled } from "../lib/smartInbox.js";
+import { getMailboxCounts, getInboxCategories, renameInboxCategory } from "../api.js";
+import { refreshSmartInboxEnabled, categoryLabel } from "../lib/smartInbox.js";
+import { openSmartInboxSetup } from "./smartInboxSetup.js";
 import { mailboxTitle, escapeHtml } from "../lib/format.js";
 import { t } from "../lib/i18n.js";
 import { icon } from "./icons.js";
@@ -138,7 +139,14 @@ export function refreshAppHeaderSubtitle(currentMailbox, isComposeOpen, isSettin
 export function setListTitle(mailbox, count) {
     const title = document.querySelector(".list-title");
     const countEl = document.querySelector(".list-count");
-    if (title) title.textContent = mailboxTitle(mailbox);
+    if (title) {
+        // Category views are titled after the group, not "Inbox".
+        const slug = mailbox.startsWith("CATEGORY:") ? mailbox.slice("CATEGORY:".length) : null;
+        const categoryName = slug
+            ? document.querySelector(`.smart-category[data-category="${CSS.escape(slug)}"] .smart-category-name`)?.textContent
+            : null;
+        title.textContent = categoryName || mailboxTitle(mailbox);
+    }
     if (countEl) countEl.textContent = t("list.count", { n: count });
 }
 
@@ -222,7 +230,7 @@ export async function bindSmartInbox(onMailboxSelect) {
         list.innerHTML = categories.map(c => `
           <div class="nav-item smart-category${c.slug === activeSlug ? " active" : ""}" data-category="${escapeHtml(c.slug)}">
             <span class="smart-category-dot" style="--category-color: ${escapeHtml(c.color || "#6c7065")}"></span>
-            <span class="nav-text smart-category-name">${escapeHtml(c.name)}</span>
+            <span class="nav-text smart-category-name">${escapeHtml(categoryLabel(c))}</span>
             <button class="smart-rename" data-rename="${escapeHtml(c.slug)}" title="${escapeHtml(t("smart.rename"))}" aria-label="${escapeHtml(t("smart.rename"))}">${icon("pencil")}</button>
             ${c.unread_count ? `<span class="nav-badge subtle">${c.unread_count}</span>` : ""}
           </div>`).join("");
@@ -238,7 +246,7 @@ export async function bindSmartInbox(onMailboxSelect) {
             if (!category || item.classList.contains("editing")) return;
             item.classList.add("editing");
             const name = item.querySelector(".smart-category-name");
-            name.innerHTML = `<input class="smart-rename-input" value="${escapeHtml(category.name)}" maxlength="40" aria-label="${escapeHtml(t("smart.rename"))}">`;
+            name.innerHTML = `<input class="smart-rename-input" value="${escapeHtml(categoryLabel(category))}" maxlength="40" aria-label="${escapeHtml(t("smart.rename"))}">`;
             btn.innerHTML = icon("check");
             btn.title = t("smart.confirm_rename");
             const input = item.querySelector("input");
@@ -246,7 +254,7 @@ export async function bindSmartInbox(onMailboxSelect) {
             input.select();
             const save = async () => {
                 const next = input.value.trim();
-                if (!next || next === category.name) { render(); return; }
+                if (!next || next === categoryLabel(category)) { render(); return; }
                 try {
                     await renameInboxCategory(category.slug, next);
                     categories = await getInboxCategories();
@@ -283,29 +291,16 @@ export async function bindSmartInbox(onMailboxSelect) {
         event.stopPropagation();
         setExpanded(!expanded);
     });
-    organize.addEventListener("click", async () => {
-        try {
-            await setSmartInboxEnabled(true);
-            await refresh();
-            openSmartInboxSetup(refresh);
-        } catch (error) {
-            console.error("Failed to enable smart inbox", error);
-        }
-    });
+    organize.addEventListener("click", () => openSmartInboxSetup({ onChanged: refresh }));
     window.addEventListener("smart-inbox-enabled", event => {
         enabled = !!event.detail?.enabled;
         categories = enabled ? categories : [];
         render();
         refresh();
-        if (enabled && event.detail?.openOnboarding) {
-            setExpanded(true);
-            openSmartInboxSetup(refresh);
-        }
     });
-    window.addEventListener("smart-inbox-request-onboarding", () => {
-        enabled = true;
+    window.addEventListener("smart-inbox-request-onboarding", (event) => {
         setExpanded(true);
-        openSmartInboxSetup(refresh);
+        openSmartInboxSetup({ resort: !!event.detail?.resort, onChanged: refresh });
     });
     window.addEventListener("account-switched", () => { activeSlug = null; refresh(); });
     window.addEventListener("mail-counts-changed", refreshSoon);
@@ -315,102 +310,6 @@ export async function bindSmartInbox(onMailboxSelect) {
         activeSlug = null;
     }));
     await refresh();
-}
-
-function closeSmartInboxSetup() {
-    document.querySelectorAll(".smart-modal-overlay").forEach((overlay) => overlay.remove());
-}
-
-function openSmartInboxSetup(refresh) {
-    const overlay = document.createElement("div");
-    overlay.className = "smart-modal-overlay";
-    overlay.innerHTML = `
-      <section class="smart-modal" role="dialog" aria-modal="true" aria-labelledby="smart-modal-title">
-        <button class="smart-modal-close" aria-label="${escapeHtml(t("reading.close"))}">${icon("x")}</button>
-        <div class="smart-modal-step" data-step="intro">
-          <div class="smart-modal-icon">${icon("sparkles")}</div>
-          <h2 id="smart-modal-title">${escapeHtml(t("smart.title"))}</h2>
-          <p>${escapeHtml(t("smart.subtitle"))}</p>
-          <div class="smart-demo"><span>${icon("mail")}</span><i></i><span class="smart-demo-card">${escapeHtml(t("smart.demo_work"))}</span><span class="smart-demo-card">${escapeHtml(t("smart.demo_news"))}</span><span class="smart-demo-card">${escapeHtml(t("smart.demo_other"))}</span></div>
-          <p class="smart-modal-note">${icon("info-circle")} ${escapeHtml(t("smart.notice"))}</p>
-          <div class="smart-modal-actions"><button class="verdant-btn smart-start">${escapeHtml(t("smart.start"))}</button></div>
-        </div>
-        <div class="smart-modal-step" data-step="progress" hidden>
-          <div class="smart-modal-icon is-spinning">${icon("sparkles")}</div>
-          <h2>${escapeHtml(t("smart.progress_title"))}</h2>
-          <p class="smart-progress-label">${escapeHtml(t("smart.progress_body"))}</p>
-          <div class="smart-progress"><div></div></div>
-          <div class="smart-progress-percent">0%</div>
-          <div class="smart-modal-actions"><button class="smart-abort verdant-btn secondary">${escapeHtml(t("smart.abort"))}</button></div>
-        </div>
-        <div class="smart-modal-step" data-step="done" hidden>
-          <div class="smart-modal-icon smart-done">${icon("check")}</div>
-          <h2>${escapeHtml(t("smart.done"))}</h2>
-          <p class="smart-done-body"></p>
-          <div class="smart-modal-actions"><button class="verdant-btn smart-finish">${escapeHtml(t("smart.finish"))}</button></div>
-        </div>
-      </section>`;
-    document.body.appendChild(overlay);
-    requestAnimationFrame(() => overlay.classList.add("open"));
-    let aborted = false;
-    const close = () => { overlay.classList.remove("open"); setTimeout(() => overlay.remove(), 180); };
-    const setStep = step => overlay.querySelectorAll(".smart-modal-step").forEach(el => { el.hidden = el.dataset.step !== step; });
-    overlay.querySelector(".smart-modal-close").onclick = close;
-    overlay.addEventListener("click", event => { if (event.target === overlay && !overlay.querySelector('[data-step="progress"]:not([hidden])')) close(); });
-    overlay.querySelector(".smart-finish").onclick = async () => { await refresh(); close(); };
-    overlay.querySelector(".smart-start").onclick = async () => {
-        // Persist activation before analysis, including onboarding opened by
-        // another caller rather than the sidebar button.
-        await setSmartInboxEnabled(true);
-        await refresh();
-        setStep("progress");
-        overlay.querySelector(".smart-modal-close").hidden = true;
-        const bar = overlay.querySelector(".smart-progress > div");
-        const percent = overlay.querySelector(".smart-progress-percent");
-        let progressTimer = null;
-        const poll = async () => {
-            try {
-                const p = await getCategorizeProgress();
-                const done = Number(p?.processed || 0), total = Number(p?.total || 0);
-                if (total > 0) {
-                    const value = Math.min(100, Math.round(done * 100 / total));
-                    bar.style.width = `${value}%`;
-                    percent.textContent = `${done} / ${total} (${value}%)`;
-                    overlay.querySelector(".smart-progress-label").textContent = t("smart.progress", { done, total });
-                }
-            } catch {}
-        };
-        progressTimer = setInterval(poll, 180);
-        poll();
-        try {
-            const result = await categorizeInbox();
-            clearInterval(progressTimer);
-            if (aborted) return;
-            bar.style.width = "100%";
-            percent.textContent = "100%";
-            overlay.querySelector(".smart-done-body").textContent = t("smart.done_body", { n: result?.assigned || 0 });
-            setStep("done");
-        } catch (error) {
-            clearInterval(progressTimer);
-            if (aborted) return;
-            console.error("Smart inbox analysis failed", error);
-            overlay.querySelector(".smart-modal-close").hidden = false;
-            overlay.querySelector(".smart-done").innerHTML = icon("alert-circle");
-            overlay.querySelector('[data-step="done"] h2').textContent = t("smart.analysis_failed");
-            const detail = error instanceof Error ? error.message : String(error || "");
-            overlay.querySelector(".smart-done-body").textContent =
-                `${t("smart.analysis_failed_body")}${detail ? ` (${detail})` : ""}`;
-            setStep("done");
-        }
-    };
-    overlay.querySelector(".smart-abort").onclick = async () => {
-        // The backend rolls the whole analysis back, so the previous
-        // categories (if any) are still there; show them again.
-        aborted = true;
-        await abortCategorizeInbox();
-        close();
-        await refresh();
-    };
 }
 
 export function setUserProfile(profile) {

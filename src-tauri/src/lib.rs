@@ -185,6 +185,7 @@ pub fn run() {
             smart_inbox::get_inbox_categories,
             smart_inbox::get_smart_inbox_enabled,
             smart_inbox::categorize_inbox,
+            smart_inbox::preview_inbox_categories,
             smart_inbox::abort_categorize_inbox,
             smart_inbox::get_categorize_progress,
             smart_inbox::rename_inbox_category,

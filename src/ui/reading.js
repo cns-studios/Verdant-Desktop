@@ -3,7 +3,7 @@ import { escapeHtml, sanitizeUnicodeNoise, formatReadingDate, formatAttachmentSi
 import { sanitizeEmailHtml } from "../lib/sanitize.js";
 import { showToast } from "../lib/toast.js";
 import { showCategoryPopup } from "./categorypopup.js";
-import { ensureSmartInboxEnabled } from "../lib/smartInbox.js";
+import { ensureSmartInboxEnabled, categoryLabel } from "../lib/smartInbox.js";
 import { downloadAttachment } from "../api.js";
 import { openExternalUrl } from "../api.js";
 import { fetchRemoteImage } from "../api.js";
@@ -666,7 +666,7 @@ export function bindReadingActions(getSelected, setSelected, onRefresh, openComp
               const rect = document.querySelector('[data-action="more"]')?.getBoundingClientRect();
               showCategoryPopup(categories, rect?.left || 20, (rect?.bottom || 40) + 4, async category => {
                 await moveEmailsToCategory(threadId && messageIds.length ? messageIds : (email ? [email.id] : []), category.slug);
-                showToast(t("toast.moved_to_category", { category: category.name }));
+                showToast(t("toast.moved_to_category", { category: categoryLabel(category) }));
                 window.dispatchEvent(new CustomEvent("smart-inbox-changed"));
                 await onRefresh();
               });

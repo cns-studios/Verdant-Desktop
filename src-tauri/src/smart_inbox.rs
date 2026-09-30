@@ -74,7 +74,13 @@ fn sender_address(sender: &str) -> String {
 /// Extracts the domain (host) part of a sender's email address.
 fn sender_domain(sender: &str) -> Option<String> {
     let address = sender_address(sender);
-    address.split('@').nth(1).map(|d| d.trim().to_string()).filter(|d| !d.is_empty())
+    // Only real host names: the domain becomes a category name shown in the
+    // UI, and the From header is entirely under the sender's control.
+    address
+        .rsplit_once('@')
+        .map(|(_, d)| d.trim().trim_end_matches('.').to_string())
+        .filter(|d| !d.is_empty() && d.contains('.'))
+        .filter(|d| d.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '.'))
 }
 
 /// Reduces a domain such as `notifications.github.com` or `mail.amazon.co.uk`
@@ -130,13 +136,26 @@ fn classify_sender(sender: &str, list_unsubscribe: &str) -> SenderClass {
 
 const PALETTE: &[&str] = &["#5c7356", "#6d7fa8", "#b58a4a", "#9a6c9c", "#4f8f8a"];
 
+/// A category the analysis would create, with the number of inbox messages
+/// whose sender points to it. Shown to the user before anything is changed.
+#[derive(Debug, Serialize, Clone)]
+pub struct PlannedCategory {
+    /// Unprefixed slug (`org-github`, `personal`, `newsletters`, `other`).
+    pub kind: String,
+    pub name: String,
+    pub icon: String,
+    pub color: String,
+    pub message_count: i64,
+}
+
 /// Batch clustering step: looks at the whole inbox once and derives 3-5
 /// categories from the sender organisations that actually make up this
 /// inbox, rather than guessing at topics from subject-line words. This is
 /// far more reliable because "who sent it" is a clean, low-noise signal
 /// every mail client already relies on, whereas free-text topic modelling
 /// on a handful of words per subject is not.
-fn dynamic_categories(conn: &Connection, account_id: i64) -> rusqlite::Result<()> {
+fn plan_categories(conn: &Connection, account_id: i64) -> rusqlite::Result<Vec<PlannedCategory>> {
+    let mut total = 0usize;
     let mut personal_count = 0usize;
     // Per brand: (all messages, bulk messages). Bulk mail counts towards its
     // sender's brand too; otherwise a sender that mostly sends notifications
@@ -152,6 +171,7 @@ fn dynamic_categories(conn: &Connection, account_id: i64) -> rusqlite::Result<()
         })?;
         for row in rows {
             let (sender, list_unsubscribe) = row?;
+            total += 1;
             match classify_sender(&sender, &list_unsubscribe) {
                 SenderClass::Personal => personal_count += 1,
                 SenderClass::Domain { domain, bulk } => {
@@ -181,48 +201,76 @@ fn dynamic_categories(conn: &Connection, account_id: i64) -> rusqlite::Result<()
     }
     let newsletter_count = bulk_left(chosen);
 
-    conn.execute("UPDATE emails SET category_id=NULL WHERE account_id=?1", [account_id])?;
-    conn.execute("DELETE FROM inbox_categories WHERE account_id=?1", [account_id])?;
-    let mut sort_order = 0i64;
-    let mut palette_index = 0usize;
-    let mut next_color = || {
-        let color = PALETTE[palette_index % PALETTE.len()];
-        palette_index += 1;
-        color
-    };
-
-    for (brand, _) in brands.iter().take(chosen) {
+    let mut palette = PALETTE.iter().cycle();
+    let mut plan = Vec::new();
+    let mut assigned = 0usize;
+    for (brand, (count, _)) in brands.iter().take(chosen) {
         let name = brand
             .chars()
             .next()
             .map(|c| c.to_uppercase().collect::<String>())
             .unwrap_or_default()
             + &brand.chars().skip(1).collect::<String>();
-        conn.execute(
-            "INSERT INTO inbox_categories (account_id,slug,name,icon,color,sort_order,is_fixed) VALUES (?1,?2,?3,'tag',?4,?5,0)",
-            params![account_id, account_slug(account_id, &format!("org-{}", slugify(brand))), name, next_color(), sort_order],
-        )?;
-        sort_order += 1;
+        plan.push(PlannedCategory {
+            kind: format!("org-{}", slugify(brand)),
+            name,
+            icon: "tag".into(),
+            color: palette.next().unwrap().to_string(),
+            message_count: *count as i64,
+        });
+        assigned += count;
     }
     if personal_count > 0 {
-        conn.execute(
-            "INSERT INTO inbox_categories (account_id,slug,name,icon,color,sort_order,is_fixed) VALUES (?1,?2,'Personal','user',?3,?4,0)",
-            params![account_id, account_slug(account_id, "personal"), next_color(), sort_order],
-        )?;
-        sort_order += 1;
+        plan.push(PlannedCategory {
+            kind: "personal".into(),
+            name: "Personal".into(),
+            icon: "user".into(),
+            color: palette.next().unwrap().to_string(),
+            message_count: personal_count as i64,
+        });
+        assigned += personal_count;
     }
     if newsletter_count > 0 {
-        conn.execute(
-            "INSERT INTO inbox_categories (account_id,slug,name,icon,color,sort_order,is_fixed) VALUES (?1,?2,'Newsletters','news',?3,?4,0)",
-            params![account_id, account_slug(account_id, "newsletters"), next_color(), sort_order],
-        )?;
-        sort_order += 1;
+        plan.push(PlannedCategory {
+            kind: "newsletters".into(),
+            name: "Newsletters".into(),
+            icon: "news".into(),
+            color: palette.next().unwrap().to_string(),
+            message_count: newsletter_count as i64,
+        });
+        assigned += newsletter_count;
     }
-    conn.execute(
-        "INSERT INTO inbox_categories (account_id,slug,name,icon,color,sort_order,is_fixed) VALUES (?1,?2,'Other','tag','#7b8075',?3,1)",
-        params![account_id, account_slug(account_id, "other"), sort_order],
-    )?;
+    plan.push(PlannedCategory {
+        kind: "other".into(),
+        name: "Other".into(),
+        icon: "tag".into(),
+        color: "#7b8075".into(),
+        message_count: total.saturating_sub(assigned) as i64,
+    });
+    Ok(plan)
+}
+
+fn dynamic_categories(conn: &Connection, account_id: i64) -> rusqlite::Result<()> {
+    let plan = plan_categories(conn, account_id)?;
+    conn.execute("UPDATE emails SET category_id=NULL WHERE account_id=?1", [account_id])?;
+    conn.execute("DELETE FROM inbox_categories WHERE account_id=?1", [account_id])?;
+    for (sort_order, c) in plan.iter().enumerate() {
+        conn.execute(
+            "INSERT INTO inbox_categories (account_id,slug,name,icon,color,sort_order,is_fixed) VALUES (?1,?2,?3,?4,?5,?6,?7)",
+            params![
+                account_id, account_slug(account_id, &c.kind), c.name, c.icon, c.color,
+                sort_order as i64, (c.kind == "other") as i64,
+            ],
+        )?;
+    }
     Ok(())
+}
+
+#[tauri::command]
+pub async fn preview_inbox_categories(state: State<'_, Arc<DbState>>) -> Result<Vec<PlannedCategory>, String> {
+    let account_id = get_active_id(&state).await;
+    let conn = state.conn.lock().await;
+    plan_categories(&conn, account_id).map_err(|e| e.to_string())
 }
 
 /// Maps a message to one of the account's existing categories. Never creates
@@ -685,6 +733,30 @@ mod tests {
         conn.execute("UPDATE emails SET category_id=99999 WHERE id='a'", []).unwrap();
         assert_eq!(assign_unassigned(&conn, 1).unwrap(), 1);
         assert!(category_of(&conn, "a").is_some());
+    }
+
+    #[test]
+    fn preview_matches_what_is_created_and_changes_nothing() {
+        let conn = setup();
+        for i in 0..3 {
+            insert(&conn, &format!("gh{i}"), 1, &format!("gh{i}"), "GitHub <n@github.com>", "", i);
+        }
+        insert(&conn, "p", 1, "p", "Friend <f@gmail.com>", "", 5);
+        insert(&conn, "x", 1, "x", "Solo <s@solo.example>", "", 6);
+        let plan = plan_categories(&conn, 1).unwrap();
+        let kinds: Vec<_> = plan.iter().map(|c| (c.kind.as_str(), c.message_count)).collect();
+        assert_eq!(kinds, vec![("org-github", 3), ("personal", 1), ("other", 1)]);
+        let stored: i64 = conn.query_row("SELECT COUNT(*) FROM inbox_categories", [], |r| r.get(0)).unwrap();
+        assert_eq!(stored, 0);
+        categorize_all(&conn, 1).unwrap();
+        assert_eq!(category_of(&conn, "x").as_deref(), Some("account-1-other"));
+    }
+
+    #[test]
+    fn hostile_sender_domains_are_ignored() {
+        assert_eq!(sender_domain("x <a@<img src=x onerror=alert(1)>.com>"), None);
+        assert_eq!(sender_domain("A <a@Mail.Example.COM>").as_deref(), Some("mail.example.com"));
+        assert_eq!(sender_domain("plain@host"), None);
     }
 
     #[test]

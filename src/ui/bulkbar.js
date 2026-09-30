@@ -3,7 +3,7 @@ import { showToast } from "../lib/toast.js";
 import { t } from "../lib/i18n.js";
 import { refreshCounts } from "./sidebar.js";
 import { showCategoryPopup } from "./categorypopup.js";
-import { isSmartInboxEnabled, ensureSmartInboxEnabled } from "../lib/smartInbox.js";
+import { isSmartInboxEnabled, ensureSmartInboxEnabled, categoryLabel } from "../lib/smartInbox.js";
 import {
     subscribe, getMasterState, getSelectedRows, selectionCount,
     isActive, selectAllVisible, deselectAllVisible, exitMultiSelect,
@@ -116,7 +116,7 @@ async function bulkMove(event) {
             const ids = await resolveIds(row);
             if (ids.length) await moveEmailsToCategory(ids, category.slug);
         });
-        showToast(t("toast.moved_to_category", { category: category.name }));
+        showToast(t("toast.moved_to_category", { category: categoryLabel(category) }));
         window.dispatchEvent(new CustomEvent("smart-inbox-changed"));
         await refreshAfterBulk();
     });

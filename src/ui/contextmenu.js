@@ -9,7 +9,7 @@ import { t } from "../lib/i18n.js";
 import { icon } from "./icons.js";
 import { refreshCounts } from "./sidebar.js";
 import { showCategoryPopup } from "./categorypopup.js";
-import { isSmartInboxEnabled, ensureSmartInboxEnabled } from "../lib/smartInbox.js";
+import { isSmartInboxEnabled, ensureSmartInboxEnabled, categoryLabel } from "../lib/smartInbox.js";
 
 let _menu = null;
 
@@ -158,7 +158,7 @@ async function actionMoveCategory(ctx, row, x, y) {
     showCategoryPopup(categories, x, y, async c => {
             const ids = await resolveMessageIds(ctx, row);
             await moveEmailsToCategory(ids, c.slug);
-            showToast(t("toast.moved_to_category", { category: c.name }));
+            showToast(t("toast.moved_to_category", { category: categoryLabel(c) }));
             window.dispatchEvent(new CustomEvent("smart-inbox-changed"));
             // Only a category view loses the row; in the inbox the
             // conversation is still there, just filed differently.

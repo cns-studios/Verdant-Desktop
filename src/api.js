@@ -83,6 +83,7 @@ export const unsubscribeFromList = (emailId) => invoke("unsubscribe_from_list", 
 export const getInboxCategories = () => invoke("get_inbox_categories");
 export const getSmartInboxEnabled = () => invoke("get_smart_inbox_enabled");
 export const categorizeInbox = () => invoke("categorize_inbox");
+export const previewInboxCategories = () => invoke("preview_inbox_categories");
 export const abortCategorizeInbox = () => invoke("abort_categorize_inbox");
 export const getCategorizeProgress = () => invoke("get_categorize_progress");
 export const renameInboxCategory = (slug, name) => invoke("rename_inbox_category", { slug, name });
