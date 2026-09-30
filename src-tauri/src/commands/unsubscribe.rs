@@ -93,24 +93,17 @@ pub async fn unsubscribe_from_list(
             })?
     } else if provider == "imap" {
         let acc = account.clone();
-        let gid = raw_email_id.clone();
+        let message_id = raw_email_id.clone();
+        let mailbox = {
+            let conn = state.conn.lock().await;
+            conn.query_row(
+                "SELECT mailbox FROM emails WHERE id=?1 AND account_id=?2",
+                rusqlite::params![email_id, account_id],
+                |r| r.get::<_, String>(0),
+            ).unwrap_or_else(|_| "INBOX".to_string())
+        };
         tokio::task::spawn_blocking(move || {
-            let creds = crate::imap_sync::ImapCredentials::from_account(&acc)?;
-            let mut session = crate::imap_sync::connect(&creds)?;
-            let uid: u32 = gid.parse().map_err(|_| format!("Invalid UID: {}", gid))?;
-            let messages = session.fetch(
-                format!("{}:{}", uid, uid).as_str(),
-                "(BODY.PEEK[])",
-            ).map_err(|e| format!("IMAP fetch error: {}", e))?;
-            for msg in messages.iter() {
-                if let Some(body) = msg.body() {
-                    let bytes = body.to_vec();
-                    let _ = session.logout();
-                    return Ok(bytes);
-                }
-            }
-            let _ = session.logout();
-            Err("No body found".to_string())
+            crate::imap_sync::fetch_raw_message(&acc, &message_id, &mailbox)
         }).await.map_err(|e| format!("Task error: {}", e))?
         .map_err(|e| {
             log::error!("{}", e);

@@ -173,6 +173,10 @@ pub fn init_db(conn: &Connection) -> Result<()> {
     let _ = conn.execute("ALTER TABLE emails ADD COLUMN list_unsubscribe TEXT NOT NULL DEFAULT ''", []);
     let _ = conn.execute("ALTER TABLE emails ADD COLUMN unsubscribed INTEGER NOT NULL DEFAULT 0", []);
     let _ = conn.execute("ALTER TABLE emails ADD COLUMN category_id INTEGER", []);
+    // Server UID of an IMAP message and the mailbox that UID belongs to, as
+    // last seen by a sync. Used to detect messages removed on the server.
+    let _ = conn.execute("ALTER TABLE emails ADD COLUMN imap_uid INTEGER", []);
+    let _ = conn.execute("ALTER TABLE emails ADD COLUMN imap_uid_mailbox TEXT", []);
 
     conn.execute_batch("
         CREATE TABLE IF NOT EXISTS inbox_categories (

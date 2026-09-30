@@ -4,11 +4,16 @@ use tokio::sync::oneshot;
 
 use crate::db::{get_all_accounts, set_mailbox_sync_state, Account, MailboxSyncState};
 use crate::imap_sync::{ImapCredentials, connect_with_timeout, SyncResult};
+use std::time::Instant;
 use crate::state::DbState;
 
 const SYNC_INTERVAL_SECS: u64 = 45;
 const GMAIL_SYNC_INTERVAL_SECS: u64 = 120;
-const IMAP_SYNC_INTERVAL_SECS: u64 = 20;
+/// Never sync an IMAP account more often than this, even if IDLE keeps
+/// waking up (some servers push untagged updates constantly).
+const IMAP_MIN_SYNC_GAP_SECS: u64 = 15;
+/// Poll interval when the server does not support IDLE or IDLE failed.
+const IMAP_POLL_INTERVAL_SECS: u64 = 120;
 const IMAP_MAILBOXES: &[&str] = &["INBOX", "SENT", "DRAFT", "TRASH"];
 const GMAIL_STAGGER_CYCLE: u32 = 4;
 const IDLE_TIMEOUT_SECS: u64 = 60 * 5;
@@ -136,37 +141,11 @@ async fn run_imap_sync_loop(
     mut shutdown: oneshot::Receiver<()>,
 ) {
     let account_id = account.id;
-    if !sync_imap_account(&app, &state, &account).await {
-        return;
-    }
-    let retry_delay = Duration::from_secs(300);
+    sync_imap_account(&app, &state, &account).await;
 
     loop {
-        match state.get_fresh_account(account_id).await {
-            Ok(Some(acc)) => {
-                // Proceed to sync cycle
-                tokio::select! {
-                    _ = tokio::time::sleep(retry_delay) => {
-                        match state.get_fresh_account(account_id).await {
-                            Ok(Some(acc2)) => {
-                                if !sync_imap_account(&app, &state, &acc2).await {
-                                    break;
-                                }
-                            }
-                            Ok(None) => {
-                                log::info!("Account {} not found in DB during cycle, stopping sync", account_id);
-                                break;
-                            }
-                            Err(e) => {
-                                log::error!("Failed to refresh account {} during cycle: {}", account_id, e);
-                                tokio::time::sleep(Duration::from_secs(1)).await;
-                                continue;
-                            }
-                        }
-                    }
-                    _ = &mut shutdown => break,
-                }
-            }
+        let acc = match state.get_fresh_account(account_id).await {
+            Ok(Some(acc)) => acc,
             Ok(None) => {
                 log::info!("Account {} not found in DB, stopping sync", account_id);
                 break;
@@ -176,10 +155,27 @@ async fn run_imap_sync_loop(
                 tokio::time::sleep(Duration::from_secs(1)).await;
                 continue;
             }
+        };
+        // Wait for the server to push a change (IDLE) instead of a blind
+        // five-minute sleep, which made new mail feel randomly delayed.
+        tokio::select! {
+            _ = wait_for_imap_change(&acc) => {
+                sync_imap_account(&app, &state, &acc).await;
+            }
+            _ = &mut shutdown => break,
         }
     }
 }
 
+async fn wait_for_imap_change(account: &Account) {
+    let started = Instant::now();
+    let idle_ok = try_imap_idle(account, Duration::from_secs(IDLE_TIMEOUT_SECS)).await;
+    let min_wait = Duration::from_secs(if idle_ok { IMAP_MIN_SYNC_GAP_SECS } else { IMAP_POLL_INTERVAL_SECS });
+    let elapsed = started.elapsed();
+    if elapsed < min_wait {
+        tokio::time::sleep(min_wait - elapsed).await;
+    }
+}
 
 async fn try_imap_idle(account: &Account, timeout: Duration) -> bool {
     let creds = match ImapCredentials::from_account(account) {
@@ -187,14 +183,9 @@ async fn try_imap_idle(account: &Account, timeout: Duration) -> bool {
         Err(_) => return false,
     };
 
-    let result = tokio::task::spawn_blocking(move || -> Result<bool, String> {
+    let result = tokio::task::spawn_blocking(move || -> Result<(), String> {
         let mut session = connect_with_timeout(&creds, 8)?;
-
-        let folders: Vec<String> = session
-            .list(None, Some("*"))
-            .map_err(|e| format!("{}", e))?
-            .iter().map(|n| n.name().to_string()).collect();
-
+        let folders = crate::imap_sync::list_folders(&mut session)?;
         let inbox = crate::imap_sync::imap_folder_for_mailbox("INBOX", &folders)
             .unwrap_or_else(|| "INBOX".to_string());
 
@@ -204,14 +195,18 @@ async fn try_imap_idle(account: &Account, timeout: Duration) -> bool {
         let handle = session.idle()
             .map_err(|e| format!("IDLE not supported: {}", e))?;
 
-        let result = handle.wait_with_timeout(timeout);
-        let got = result.is_ok();
-        Ok(got)
+        handle.wait_with_timeout(timeout)
+            .map(|_| ())
+            .map_err(|e| format!("IDLE wait failed: {}", e))
     }).await;
 
     match result {
-        Ok(Ok(notification)) => notification,
-        _ => false,
+        Ok(Ok(())) => true,
+        Ok(Err(e)) => {
+            log::debug!("IMAP IDLE unavailable for account {}: {}", account.id, e);
+            false
+        }
+        Err(_) => false,
     }
 }
 
@@ -262,61 +257,55 @@ async fn emit_notifications_and_event_gmail(app: tauri::AppHandle, state: &DbSta
     }
 }
 
-async fn sync_imap_account(app: &tauri::AppHandle, state: &DbState, account: &Account) -> bool {
-    use crate::imap_sync::sync_imap_mailbox_incremental;
-
+async fn sync_imap_account(app: &tauri::AppHandle, state: &DbState, account: &Account) {
     let account_id = account.id;
-    let app_clone = app.clone();
     let mut had_new_emails = false;
 
-    for mailbox in IMAP_MAILBOXES {
-        let acc = account.clone();
-        let mb = mailbox.to_string();
-        let mb_for_fallback = mb.clone();
+    let stored: Vec<(String, Option<u32>, Option<u32>)> = {
+        let conn = state.conn.lock().await;
+        IMAP_MAILBOXES
+            .iter()
+            .map(|mb| {
+                let s = crate::db::get_mailbox_sync_state(&conn, account_id, mb).ok().flatten();
+                (mb.to_string(), s.as_ref().map(|s| s.uidvalidity), s.as_ref().map(|s| s.highest_uid))
+            })
+            .collect()
+    };
 
-        let stored_state = {
-            let conn = state.conn.lock().await;
-            crate::db::get_mailbox_sync_state(&conn, account_id, &mb)
-                .ok()
-                .flatten()
-        };
+    let acc = account.clone();
+    let result = tokio::task::spawn_blocking(move || {
+        crate::imap_sync::sync_imap_mailboxes(&acc, &stored)
+    }).await;
 
-        let (stored_uidvalidity, stored_highest_uid) = stored_state
-            .map(|s| (Some(s.uidvalidity), Some(s.highest_uid)))
-            .unwrap_or((None, None));
-
-        let result = tokio::task::spawn_blocking(move || {
-            sync_imap_mailbox_incremental(&acc, &mb, stored_uidvalidity, stored_highest_uid)
-        }).await;
-
-        match result {
-            Ok(Ok(sync_result)) => {
-                if !sync_result.emails.is_empty() {
-                    had_new_emails = true;
+    match result {
+        Ok(Ok(per_mailbox)) => {
+            for (mailbox, outcome) in per_mailbox {
+                match outcome {
+                    Ok(sync_result) => {
+                        had_new_emails |= !sync_result.emails.is_empty();
+                        apply_sync_result(state, account_id, sync_result, &mailbox).await;
+                    }
+                    Err(e) => {
+                        log::error!("IMAP sync error account={} mailbox={}: {}", account_id, mailbox, e);
+                        fallback_sync(state, account, &mailbox).await;
+                    }
                 }
-                upsert_sync_result(state, account_id, sync_result, &mb_for_fallback).await;
             }
-            Ok(Err(e)) => {
-                if e.contains("connect failed") || e.contains("connect error") {
-                    log::warn!("IMAP server unavailable account={} mailbox={}: {}", account_id, mailbox, e);
-                    // Skip fallback for connection errors to avoid hammering server
-                    // Continue to other mailboxes in case issue resolves
-                    continue;
-                }
-                log::error!("IMAP sync error account={} mailbox={}: {}", account_id, mailbox, e);
-                fallback_sync(app, state, account, mailbox).await;
-            }
-            Err(e) => {
-                log::error!("IMAP sync task panicked account={} mailbox={}: {}", account_id, mailbox, e);
-            }
+        }
+        Ok(Err(e)) => {
+            // Connection-level failure: the next cycle retries; per-mailbox
+            // fallbacks would only hammer an unreachable server.
+            log::warn!("IMAP server unavailable account={}: {}", account_id, e);
+        }
+        Err(e) => {
+            log::error!("IMAP sync task panicked account={}: {}", account_id, e);
         }
     }
 
-    emit_notifications_and_event(app_clone, state, account, had_new_emails).await;
-    true
+    emit_notifications_and_event(app.clone(), state, account, had_new_emails).await;
 }
 
-async fn fallback_sync(_app: &tauri::AppHandle, state: &DbState, account: &Account, mailbox: &str) {
+async fn fallback_sync(state: &DbState, account: &Account, mailbox: &str) {
     use crate::imap_sync::sync_imap_mailbox;
     let acc = account.clone();
     let mb = mailbox.to_string();
@@ -331,10 +320,18 @@ async fn fallback_sync(_app: &tauri::AppHandle, state: &DbState, account: &Accou
     }
 }
 
-async fn upsert_sync_result(state: &DbState, account_id: i64, result: SyncResult, mailbox: &str) {
-    upsert_emails(state, account_id, result.emails, mailbox).await;
+/// Stores a sync result: new messages, server-side flag changes, removals
+/// inside the reconcile window, and the new UID high-water mark.
+pub async fn apply_sync_result(state: &DbState, account_id: i64, result: SyncResult, mailbox: &str) {
+    let SyncResult { emails, highest_uid, uidvalidity, uids_reset, window } = result;
+    upsert_emails(state, account_id, emails, mailbox).await;
 
-    if result.highest_uid > 0 || result.uidvalidity > 0 {
+    let conn = state.conn.lock().await;
+    if let Err(e) = apply_reconcile_window(&conn, account_id, mailbox, uids_reset, window.as_ref()) {
+        log::error!("IMAP reconcile failed account={} mailbox={}: {}", account_id, mailbox, e);
+    }
+
+    if highest_uid > 0 || uidvalidity > 0 {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_secs() as i64)
@@ -343,14 +340,72 @@ async fn upsert_sync_result(state: &DbState, account_id: i64, result: SyncResult
         let sync_state = MailboxSyncState {
             account_id,
             mailbox_name: mailbox.to_string(),
-            highest_uid: result.highest_uid,
-            uidvalidity: result.uidvalidity,
+            highest_uid,
+            uidvalidity,
             last_synced_at: now,
         };
-
-        let conn = state.conn.lock().await;
         let _ = set_mailbox_sync_state(&conn, &sync_state);
     }
+
+    // Messages restored from 'OTHER' by the window need a category too.
+    if mailbox == "INBOX" {
+        if let Err(e) = crate::smart_inbox::assign_unassigned(&conn, account_id) {
+            log::error!("Smart Inbox assignment after IMAP reconcile failed: {}", e);
+        }
+    }
+}
+
+fn apply_reconcile_window(
+    conn: &rusqlite::Connection,
+    account_id: i64,
+    mailbox: &str,
+    uids_reset: bool,
+    window: Option<&crate::imap_sync::ReconcileWindow>,
+) -> rusqlite::Result<()> {
+    let tx = conn.unchecked_transaction()?;
+    if uids_reset {
+        tx.execute(
+            "UPDATE emails SET imap_uid=NULL, imap_uid_mailbox=NULL WHERE account_id=?1 AND imap_uid_mailbox=?2",
+            rusqlite::params![account_id, mailbox],
+        )?;
+    }
+    if let Some(window) = window {
+        {
+            // 'OTHER' is where earlier versions parked messages they wrongly
+            // believed were gone; anything the server still lists comes back.
+            let mut update = tx.prepare(
+                "UPDATE emails SET is_read=?1, starred=?2, imap_uid=?3, imap_uid_mailbox=?4, mailbox=?4
+                 WHERE id=?5 AND account_id=?6 AND (mailbox=?4 OR mailbox='OTHER')",
+            )?;
+            for entry in &window.entries {
+                update.execute(rusqlite::params![
+                    entry.is_read as i32, entry.starred as i32, entry.uid, mailbox, entry.id, account_id
+                ])?;
+            }
+        }
+
+        let present: std::collections::HashSet<u32> = window.entries.iter().map(|e| e.uid).collect();
+        let stale: Vec<String> = {
+            let mut stmt = tx.prepare(
+                "SELECT id, imap_uid FROM emails
+                 WHERE account_id=?1 AND mailbox=?2 AND imap_uid_mailbox=?2 AND imap_uid >= ?3",
+            )?;
+            let rows = stmt.query_map(rusqlite::params![account_id, mailbox, window.min_uid], |r| {
+                Ok((r.get::<_, String>(0)?, r.get::<_, u32>(1)?))
+            })?;
+            rows.filter_map(Result::ok)
+                .filter(|(_, uid)| !present.contains(uid))
+                .map(|(id, _)| id)
+                .collect()
+        };
+        for id in stale {
+            tx.execute(
+                "UPDATE emails SET mailbox='OTHER', imap_uid=NULL, imap_uid_mailbox=NULL WHERE id=?1 AND account_id=?2",
+                rusqlite::params![id, account_id],
+            )?;
+        }
+    }
+    tx.commit()
 }
 
 async fn emit_notifications_and_event(app: tauri::AppHandle, state: &DbState, account: &Account, had_new: bool) {
@@ -405,13 +460,15 @@ async fn emit_notifications_and_event(app: tauri::AppHandle, state: &DbState, ac
     let _ = app.emit("emails-synced", ());
 }
 
+/// Inserts or refreshes downloaded messages. It deliberately does not infer
+/// deletions: an earlier version hid every stored message dated after the
+/// oldest message of an *incremental* batch, so one new mail with an old
+/// Date header made most of the inbox vanish. Removals are now derived from
+/// server UIDs in `apply_sync_result`.
 pub async fn upsert_emails(state: &DbState, account_id: i64, emails: Vec<crate::db::Email>, mailbox: &str) {
-    let mut synced_ids = Vec::new();
     let conn = state.conn.lock().await;
 
     for email in &emails {
-        synced_ids.push(email.id.clone());
-
         if let Err(e) = conn.execute(
             "INSERT INTO emails (id, account_id, draft_id, thread_id, subject, sender, to_recipients, cc_recipients,
                                  snippet, body_html, attachments_json, has_attachments, date, is_read, starred,
@@ -444,38 +501,6 @@ pub async fn upsert_emails(state: &DbState, account_id: i64, emails: Vec<crate::
             ],
         ) {
             log::error!("IMAP upsert email {} failed: {}", email.id, e);
-        }
-    }
-
-    if !synced_ids.is_empty() {
-        let mut oldest_ts = i64::MAX;
-        for email in &emails {
-            if email.internal_ts < oldest_ts { oldest_ts = email.internal_ts; }
-        }
-
-        let mut placeholders = String::new();
-        for i in 0..synced_ids.len() {
-            if i > 0 { placeholders.push_str(","); }
-            placeholders.push_str("?");
-        }
-
-        let sql = format!(
-            "UPDATE emails SET mailbox='OTHER' 
-             WHERE account_id=?1 AND mailbox=?2 AND internal_ts >= ?3 AND id NOT IN ({})",
-            placeholders
-        );
-
-        let mut params: Vec<rusqlite::types::Value> = vec![
-            rusqlite::types::Value::Integer(account_id),
-            rusqlite::types::Value::Text(mailbox.to_string()),
-            rusqlite::types::Value::Integer(oldest_ts),
-        ];
-        for id in synced_ids {
-            params.push(rusqlite::types::Value::Text(id));
-        }
-
-        if let Err(e) = conn.execute(&sql, rusqlite::params_from_iter(params)) {
-            log::error!("IMAP upsert OTHER marking failed: {}", e);
         }
     }
 
