@@ -51,7 +51,7 @@ import { openWhatsNewModal } from "./ui/whatsnew.js";
 import { bindEmailListContextMenu } from "./ui/contextmenu.js";
 import { bindMultiSelect, checkboxHtml, exitMultiSelect as clearMultiSelection, refresh as refreshMultiSelect } from "./ui/multiselect.js";
 import { bindBulkBar } from "./ui/bulkbar.js";
-import { appPrefs } from "./ui/settings.js";
+import { appPrefs, appConfigPatch } from "./ui/settings.js";
 import { checkForUpdates, downloadLatestUpdate, switchAccount, listAccounts } from "./api.js";
 import { getInboxThreads, getCategoryThreads } from "./api.js";
 import {
@@ -948,7 +948,7 @@ function bindHotkeys() {
             event.preventDefault();
             if (!canRunHotkey("settings")) return;
             const profile = await getUserProfile();
-            await openSettingsModal(profile, currentMailbox, showOnboardingAndReset, onSync);
+            await openSettingsModal(profile, currentMailbox, handleActiveAccountRemoved, onSync);
             return;
         }
 
@@ -1026,6 +1026,18 @@ function showOnboardingAndReset() {
     document.getElementById("root").innerHTML = "";
     initLang();
     showOnboarding(initializeConnectedUI);
+}
+
+/** After the active account was removed: onboarding only if none are left. */
+async function handleActiveAccountRemoved() {
+    let remaining = [];
+    try { remaining = await listAccounts(); } catch (err) { console.error("Failed to list accounts", err); }
+    const next = remaining.find(a => a.is_active) || remaining[0];
+    if (!next) {
+        showOnboardingAndReset();
+        return;
+    }
+    await switchActiveAccount(next.id);
 }
 
 
@@ -1119,7 +1131,7 @@ async function initializeConnectedUI() {
     window.addEventListener("verdant-open-settings", async () => {
         try {
             const p = await getUserProfile();
-            await openSettingsModal(p, currentMailbox, showOnboardingAndReset, onSync);
+            await openSettingsModal(p, currentMailbox, handleActiveAccountRemoved, onSync);
         } catch {}
     });
 
@@ -1145,7 +1157,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         hydratePrefsFromBackend(),
         ensureContactsLoaded().catch(() => {}),
     ]);
-    invoke("update_app_config", { config: { run_in_background: appPrefs.runInBackground, update_channel: updatePrefs.channel } })
+    invoke("update_app_config", { config: { ...appConfigPatch(appPrefs), update_channel: updatePrefs.channel } })
         .catch(err => console.error("Initial app config sync failed", err));
 
     try {

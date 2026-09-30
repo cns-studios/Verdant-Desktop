@@ -10,6 +10,8 @@ pub struct AppConfig {
     pub run_in_background: bool,
     pub update_channel: String,
     pub sidebar_collapsed: bool,
+    pub show_notifications: bool,
+    pub notify_important_only: bool,
 }
 
 impl Default for AppConfig {
@@ -18,6 +20,8 @@ impl Default for AppConfig {
             run_in_background: true,
             update_channel: "stable".to_string(),
             sidebar_collapsed: false,
+            show_notifications: true,
+            notify_important_only: false,
         }
     }
 }
@@ -27,6 +31,8 @@ pub struct AppConfigPatch {
     pub run_in_background: Option<bool>,
     pub update_channel: Option<String>,
     pub sidebar_collapsed: Option<bool>,
+    pub show_notifications: Option<bool>,
+    pub notify_important_only: Option<bool>,
 }
 
 fn normalize_update_channel(raw: &str) -> String {
@@ -84,6 +90,12 @@ pub async fn update_app_config(
     }
     if let Some(sidebar_collapsed) = config.sidebar_collapsed {
         s.sidebar_collapsed = sidebar_collapsed;
+    }
+    if let Some(show) = config.show_notifications {
+        s.show_notifications = show;
+    }
+    if let Some(important_only) = config.notify_important_only {
+        s.notify_important_only = important_only;
     }
 
     persist_app_config(&app, &s)?;

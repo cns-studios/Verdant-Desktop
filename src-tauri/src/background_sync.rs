@@ -129,9 +129,7 @@ async fn sync_gmail_account(app: &tauri::AppHandle, state: &DbState, account: &A
         }
     }
 
-    emit_notifications_and_event_gmail(app.clone(), state, account).await;
-    use tauri::Emitter;
-    let _ = app.emit("emails-synced", ());
+    notify_new_mail(app, state, account).await;
 }
 
 async fn run_imap_sync_loop(
@@ -210,53 +208,6 @@ async fn try_imap_idle(account: &Account, timeout: Duration) -> bool {
     }
 }
 
-async fn emit_notifications_and_event_gmail(app: tauri::AppHandle, state: &DbState, account: &Account) {
-    let account_id = account.id;
-
-    let unread_emails = {
-        let conn = state.conn.lock().await;
-        let mut stmt = conn.prepare(
-            "SELECT id, subject, sender FROM emails WHERE account_id=?1 AND mailbox='INBOX' AND is_read=0 AND notified=0 AND internal_ts > (strftime('%s','now') - 3600) LIMIT 50"
-        ).unwrap();
-        let rows = stmt.query_map([account_id], |r| {
-            Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?))
-        }).unwrap();
-        rows.filter_map(Result::ok).collect::<Vec<_>>()
-    };
-
-    if !unread_emails.is_empty() {
-        use tauri_plugin_notification::NotificationExt;
-        let count = unread_emails.len();
-        let acc_name = account.display_name.as_deref().unwrap_or(&account.email);
-
-        let title = if count == 1 {
-            format!("New Email - {}", acc_name)
-        } else {
-            format!("{} New Emails - {}", count, acc_name)
-        };
-
-        let body = if count == 1 {
-            let (_, subj, send) = &unread_emails[0];
-            format!("From: {}\n{}", send, subj)
-        } else {
-            format!("You have {} new messages in your inbox.", count)
-        };
-
-        let _ = app.notification().builder()
-            .title(title)
-            .body(body)
-            .show();
-
-        let conn = state.conn.lock().await;
-        for (id, _, _) in unread_emails {
-            let _ = conn.execute(
-                "UPDATE emails SET notified=1 WHERE id=?1 AND account_id=?2",
-                rusqlite::params![id, account_id],
-            );
-        }
-    }
-}
-
 async fn sync_imap_account(app: &tauri::AppHandle, state: &DbState, account: &Account) {
     let account_id = account.id;
     let mut had_new_emails = false;
@@ -302,7 +253,10 @@ async fn sync_imap_account(app: &tauri::AppHandle, state: &DbState, account: &Ac
         }
     }
 
-    emit_notifications_and_event(app.clone(), state, account, had_new_emails).await;
+    if had_new_emails {
+        log::debug!("IMAP sync downloaded new mail for account {}", account_id);
+    }
+    notify_new_mail(app, state, account).await;
 }
 
 async fn fallback_sync(state: &DbState, account: &Account, mailbox: &str) {
@@ -408,56 +362,104 @@ fn apply_reconcile_window(
     tx.commit()
 }
 
-async fn emit_notifications_and_event(app: tauri::AppHandle, state: &DbState, account: &Account, had_new: bool) {
+/// Shows one desktop notification for mail that genuinely just arrived.
+///
+/// Everything already in the mailbox when an account is first synced is
+/// history, not news: it is marked as notified without a notification. That
+/// baseline, plus normalising Gmail's millisecond timestamps (IMAP stores
+/// seconds), is what stops "50 new emails" from firing repeatedly after
+/// onboarding. Older mail loaded later by paging never counts as new either.
+async fn notify_new_mail(app: &tauri::AppHandle, state: &DbState, account: &Account) {
+    use tauri::Manager;
     let account_id = account.id;
+    let (show, important_only) = match app.try_state::<crate::commands::app_config::AppConfigState>() {
+        Some(config) => {
+            let config = config.0.lock().await;
+            (config.show_notifications, config.notify_important_only)
+        }
+        None => (true, false),
+    };
 
-    if had_new {
-        let unread_emails = {
-            let conn = state.conn.lock().await;
-            let mut stmt = conn.prepare(
-                "SELECT id, subject, sender FROM emails WHERE account_id=?1 AND mailbox='INBOX' AND is_read=0 AND notified=0 AND internal_ts > (strftime('%s','now') - 3600) LIMIT 50"
-            ).unwrap();
-            let rows = stmt.query_map([account_id], |r| {
-                Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?))
-            }).unwrap();
-            rows.filter_map(Result::ok).collect::<Vec<_>>()
-        };
-
-        if !unread_emails.is_empty() {
-        use tauri_plugin_notification::NotificationExt;
-        let count = unread_emails.len();
-        let acc_name = account.display_name.as_deref().unwrap_or(&account.email);
-
-        let title = if count == 1 {
-            format!("New Email - {}", acc_name)
-        } else {
-            format!("{} New Emails - {}", count, acc_name)
-        };
-
-        let body = if count == 1 {
-            let (_, subj, send) = &unread_emails[0];
-            format!("From: {}\n{}", send, subj)
-        } else {
-            format!("You have {} new messages in your inbox.", count)
-        };
-
-        let _ = app.notification().builder()
-            .title(title)
-            .body(body)
-            .show();
-
-            let conn = state.conn.lock().await;
-            for (id, _, _) in unread_emails {
-                let _ = conn.execute(
-                    "UPDATE emails SET notified=1 WHERE id=?1 AND account_id=?2",
-                    rusqlite::params![id, account_id],
-                );
+    let fresh: Vec<(String, String)> = {
+        let conn = state.conn.lock().await;
+        match collect_new_mail(&conn, account_id, important_only) {
+            Ok(rows) => rows,
+            Err(e) => {
+                log::error!("Collecting new mail for notifications failed account={}: {}", account_id, e);
+                Vec::new()
             }
         }
+    };
+
+    if show && !fresh.is_empty() {
+        use tauri_plugin_notification::NotificationExt;
+        let acc_name = account.display_name.as_deref().unwrap_or(&account.email);
+        let (title, body) = if fresh.len() == 1 {
+            let (subject, sender) = &fresh[0];
+            (format!("New Email - {}", acc_name), format!("From: {}\n{}", sender, subject))
+        } else {
+            (
+                format!("{} New Emails - {}", fresh.len(), acc_name),
+                format!("You have {} new messages in your inbox.", fresh.len()),
+            )
+        };
+        let _ = app.notification().builder().title(title).body(body).show();
     }
 
     use tauri::Emitter;
     let _ = app.emit("emails-synced", ());
+}
+
+/// Returns (subject, sender) of mail to announce and marks every candidate as
+/// handled, so nothing is ever announced twice.
+fn collect_new_mail(conn: &rusqlite::Connection, account_id: i64, important_only: bool) -> rusqlite::Result<Vec<(String, String)>> {
+    const TS_SECONDS: &str = "(CASE WHEN internal_ts > 100000000000 THEN internal_ts / 1000 ELSE internal_ts END)";
+    let tx = conn.unchecked_transaction()?;
+
+    let ready: i64 = tx
+        .query_row("SELECT COALESCE(notify_ready, 0) FROM accounts WHERE id=?1", [account_id], |r| r.get(0))
+        .unwrap_or(1);
+    if ready == 0 {
+        // Only a completed sync defines the baseline; after a failed first
+        // attempt (e.g. offline) the initial download is still to come.
+        let synced: i64 = tx.query_row(
+            "SELECT (SELECT COUNT(*) FROM mailbox_sync_state WHERE account_id=?1)
+                  + (SELECT COUNT(*) FROM gmail_sync_state WHERE account_id=?1)",
+            [account_id],
+            |r| r.get(0),
+        )?;
+        if synced == 0 {
+            return Ok(Vec::new());
+        }
+        tx.execute("UPDATE emails SET notified=1 WHERE account_id=?1 AND notified=0", [account_id])?;
+        tx.execute("UPDATE accounts SET notify_ready=1 WHERE id=?1", [account_id])?;
+        tx.commit()?;
+        return Ok(Vec::new());
+    }
+
+    // Anything that is not recent unread inbox mail is settled for good.
+    tx.execute(
+        &format!(
+            "UPDATE emails SET notified=1 WHERE account_id=?1 AND notified=0
+             AND (mailbox<>'INBOX' OR is_read=1 OR {TS_SECONDS} < strftime('%s','now') - 3600)"
+        ),
+        [account_id],
+    )?;
+
+    let bulk = "(list_unsubscribe<>'' OR labels LIKE '%CATEGORY_PROMOTIONS%' OR labels LIKE '%CATEGORY_SOCIAL%'
+                 OR labels LIKE '%CATEGORY_UPDATES%' OR labels LIKE '%CATEGORY_FORUMS%')";
+    let filter = if important_only { format!("AND NOT {bulk}") } else { String::new() };
+    let fresh = {
+        let mut stmt = tx.prepare(&format!(
+            "SELECT subject, sender FROM emails WHERE account_id=?1 AND notified=0 {filter}
+             ORDER BY internal_ts DESC"
+        ))?;
+        let rows = stmt.query_map([account_id], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?;
+        rows.collect::<rusqlite::Result<Vec<_>>>()?
+    };
+    tx.execute("UPDATE emails SET notified=1 WHERE account_id=?1 AND notified=0", [account_id])?;
+    tx.commit()?;
+    Ok(fresh)
 }
 
 /// Inserts or refreshes downloaded messages. It deliberately does not infer
@@ -508,5 +510,61 @@ pub async fn upsert_emails(state: &DbState, account_id: i64, emails: Vec<crate::
         if let Err(e) = crate::smart_inbox::assign_unassigned(&conn, account_id) {
             log::error!("Smart Inbox assignment after IMAP sync failed: {}", e);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rusqlite::{params, Connection};
+
+    fn setup() -> Connection {
+        let conn = Connection::open_in_memory().unwrap();
+        crate::db::init_db(&conn).unwrap();
+        conn.execute("INSERT INTO accounts (id, email) VALUES (1, 'a@example.com')", []).unwrap();
+        conn
+    }
+
+    fn insert(conn: &Connection, id: &str, ts: i64, unsub: &str) {
+        conn.execute(
+            "INSERT INTO emails (id, account_id, thread_id, subject, sender, mailbox, body_html, date, is_read, internal_ts, list_unsubscribe)
+             VALUES (?1, 1, ?1, 'Subject', 'x@y.z', 'INBOX', '', '', 0, ?2, ?3)",
+            params![id, ts, unsub],
+        ).unwrap();
+    }
+
+    fn now() -> i64 {
+        std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs() as i64
+    }
+
+    #[test]
+    fn initial_download_is_never_announced() {
+        let conn = setup();
+        // Gmail stores milliseconds; this used to pass the "last hour" check forever.
+        for i in 0..120 {
+            insert(&conn, &format!("m{i}"), (now() - 86_400 * i) * 1000, "");
+        }
+        // Nothing synced successfully yet: no baseline, nothing announced.
+        assert!(collect_new_mail(&conn, 1, false).unwrap().is_empty());
+        conn.execute("INSERT INTO gmail_sync_state (account_id, history_id) VALUES (1, 'h')", []).unwrap();
+        assert!(collect_new_mail(&conn, 1, false).unwrap().is_empty());
+        assert!(collect_new_mail(&conn, 1, false).unwrap().is_empty());
+
+        insert(&conn, "fresh", now() * 1000, "");
+        insert(&conn, "old-page", (now() - 86_400 * 30) * 1000, "");
+        let fresh = collect_new_mail(&conn, 1, false).unwrap();
+        assert_eq!(fresh.len(), 1);
+        assert!(collect_new_mail(&conn, 1, false).unwrap().is_empty());
+    }
+
+    #[test]
+    fn important_only_skips_bulk_mail() {
+        let conn = setup();
+        conn.execute("INSERT INTO mailbox_sync_state (account_id, mailbox_name) VALUES (1, 'INBOX')", []).unwrap();
+        assert!(collect_new_mail(&conn, 1, true).unwrap().is_empty());
+        insert(&conn, "person", now(), "");
+        insert(&conn, "promo", now(), "<https://unsubscribe>");
+        assert_eq!(collect_new_mail(&conn, 1, true).unwrap().len(), 1);
+        assert!(collect_new_mail(&conn, 1, false).unwrap().is_empty());
     }
 }

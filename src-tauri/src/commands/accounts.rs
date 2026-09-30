@@ -42,6 +42,7 @@ pub async fn remove_account(
     account_id: i64,
 ) -> Result<(), String> {
     stop_account_sync(&state, account_id).await;
+    state.tokens.lock().await.remove(&account_id);
 
     let active_id = get_active_id(&state).await;
 

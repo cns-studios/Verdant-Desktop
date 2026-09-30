@@ -1,4 +1,4 @@
-import { logout, clearLocalData, getMailboxCounts, authStatus, listAccounts, removeAccount, getInboxCategories, renameInboxCategory, categorizeInbox } from "../api.js";
+import { clearLocalData, getMailboxCounts, authStatus, listAccounts, removeAccount, getInboxCategories, renameInboxCategory, categorizeInbox } from "../api.js";
 import { refreshSmartInboxEnabled, setSmartInboxEnabled } from "../lib/smartInbox.js";
 import { checkForUpdates, downloadLatestUpdate } from "../api.js";
 import { escapeHtml } from "../lib/format.js";
@@ -74,12 +74,21 @@ export function applyTextSize(value) {
   document.body?.setAttribute("data-text-size", textSize);
 }
 
+/** The part of the preferences the background process acts on. */
+export function appConfigPatch(prefs) {
+  return {
+    run_in_background: prefs.runInBackground,
+    show_notifications: prefs.showNotifications !== false,
+    notify_important_only: prefs.notificationImportance === "important",
+  };
+}
+
 export function saveAppPrefs(next) {
   appPrefs = { ...defaultAppPrefs, ...next };
   localStorage.setItem(APP_PREFS_KEY, JSON.stringify(appPrefs));
   
   import("@tauri-apps/api/core").then(({ invoke }) => {
-    invoke("update_app_config", { config: { run_in_background: appPrefs.runInBackground } })
+    invoke("update_app_config", { config: appConfigPatch(appPrefs) })
       .catch(err => console.error("Failed to sync app config to Rust", err));
   });
 }
@@ -776,19 +785,22 @@ export async function openSettingsModal(profile, currentMailbox, onLogout, onSyn
     btn.addEventListener("click", async () => {
       const accountId = parseInt(btn.dataset.accountId, 10);
       const email = btn.dataset.accountEmail;
+      // Removing an account also deletes its locally stored mail.
+      if (!confirm(t("accounts.confirm_remove", { email }))) return;
+      try {
+        await removeAccount(accountId);
+      } catch (err) {
+        showToast(String(err), "error");
+        return;
+      }
+      showToast(t("accounts.removed"));
+      closeOverlay();
       if (accountId === auth.active_account_id) {
-        await logout();
-        closeOverlay();
+        // Onboarding only once the last account is gone; otherwise switch
+        // to one of the remaining accounts.
         onLogout();
       } else {
-        try {
-          await removeAccount(accountId);
-          showToast(`${email} removed`);
-          closeOverlay();
-          openSettingsModal(profile, currentMailbox, onLogout, onSync);
-        } catch (err) {
-          showToast(String(err), "error");
-        }
+        openSettingsModal(profile, currentMailbox, onLogout, onSync);
       }
     });
   });

@@ -175,6 +175,9 @@ pub fn init_db(conn: &Connection) -> Result<()> {
     let _ = conn.execute("ALTER TABLE emails ADD COLUMN category_id INTEGER", []);
     // Server UID of an IMAP message and the mailbox that UID belongs to, as
     // last seen by a sync. Used to detect messages removed on the server.
+    // 0 until the account's first sync has been taken as the baseline for
+    // "new mail" notifications (see background_sync::notify_new_mail).
+    let _ = conn.execute("ALTER TABLE accounts ADD COLUMN notify_ready INTEGER NOT NULL DEFAULT 0", []);
     let _ = conn.execute("ALTER TABLE emails ADD COLUMN imap_uid INTEGER", []);
     let _ = conn.execute("ALTER TABLE emails ADD COLUMN imap_uid_mailbox TEXT", []);
 
@@ -371,9 +374,12 @@ pub fn update_gmail_token(conn: &Connection, account_id: i64, token: &StoredToke
 }
 
 pub fn delete_account(conn: &Connection, account_id: i64) -> Result<()> {
-    conn.execute("DELETE FROM emails WHERE account_id = ?1", params![account_id])?;
-    conn.execute("DELETE FROM accounts WHERE id = ?1", params![account_id])?;
-    Ok(())
+    let tx = conn.unchecked_transaction()?;
+    for table in ["emails", "mailbox_sync_state", "gmail_sync_state", "inbox_categories", "inbox_smart_state"] {
+        tx.execute(&format!("DELETE FROM {table} WHERE account_id = ?1"), params![account_id])?;
+    }
+    tx.execute("DELETE FROM accounts WHERE id = ?1", params![account_id])?;
+    tx.commit()
 }
 
 pub fn update_account_email(conn: &Connection, account_id: i64, email: &str) -> Result<()> {
