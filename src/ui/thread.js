@@ -1,4 +1,4 @@
-import { getInboxThreads, getThreadMessages, markThreadRead, archiveEmail, trashEmail, toggleStarred, setEmailReadStatus, openExternalUrl } from "../api.js";
+import { getInboxThreads, getThreadMessages, markThreadRead, markEmailsRead, archiveEmail, trashEmail, toggleStarred, setEmailReadStatus, openExternalUrl } from "../api.js";
 import { escapeHtml, sanitizeUnicodeNoise, formatListDate, formatReadingDate } from "../lib/format.js";
 import { sanitizeEmailHtml } from "../lib/sanitize.js";
 import { showToast } from "../lib/toast.js";
@@ -143,14 +143,20 @@ async function selectThread(thread, row) {
     selectedThreadMessages = messages;
     renderThreadPane(thread, messages);
 
-    if (!thread.is_read) {
+    // Opening a conversation reads all of it. Marking only the message that
+    // happens to be expanded left the others unread, so the row turned unread
+    // again on the next list refresh.
+    const unread = messages.filter(m => !m.is_read);
+    if (unread.length || !thread.is_read) {
+      unread.forEach(m => { m.is_read = true; });
       thread.is_read = true;
-      const expanded = messages[messages.length - 1];
-      if (expanded && !expanded.is_read) {
-        expanded.is_read = true;
-        setEmailReadStatus(expanded.id, true).catch(() => {});
-      }
-      refreshCounts().catch(() => {});
+      thread.unread_count = 0;
+      markEmailsRead(unread.map(m => m.id))
+        .catch(err => console.error("Failed to mark conversation as read", err))
+        .finally(() => {
+          markThreadRowRead(thread.thread_id);
+          refreshCounts().catch(() => {});
+        });
     }
   } catch (err) {
     if (readingBody) {
@@ -159,6 +165,14 @@ async function selectThread(thread, row) {
   }
 }
 
+
+function markThreadRowRead(threadId) {
+  document.querySelectorAll(".email-item[data-thread-id]").forEach(row => {
+    if (row.dataset.threadId !== threadId) return;
+    row.classList.remove("unread");
+    row.querySelector(".unread-dot")?.remove();
+  });
+}
 
 function renderThreadPane(thread, messages) {
   const subjectEl = document.querySelector(".reading-subject");
