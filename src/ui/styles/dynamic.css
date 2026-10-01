@@ -319,7 +319,8 @@ body.reading-pane-hidden .email-list-pane { flex:1 1 auto !important; width:auto
   font-variant-numeric: tabular-nums;
 }
 .thread-bubble-attach-icon {
-  font-size: 12px;
+  display: inline-flex;
+  color: var(--text-muted);
   flex-shrink: 0;
 }
 .thread-bubble-meta-expanded {

@@ -1,5 +1,6 @@
 const translations = {
   en: {
+    "thread.has_attachment": "Has attachments",
     "smart.cat.personal": "People",
     "smart.cat.newsletters": "Newsletters",
     "smart.cat.other": "Everything else",
@@ -363,6 +364,7 @@ const translations = {
   },
 
   de: {
+    "thread.has_attachment": "Mit Anhängen",
     "smart.cat.personal": "Menschen",
     "smart.cat.newsletters": "Newsletter",
     "smart.cat.other": "Alles andere",

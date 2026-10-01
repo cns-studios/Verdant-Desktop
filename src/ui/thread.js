@@ -174,6 +174,9 @@ function markThreadRowRead(threadId) {
   });
 }
 
+// Longer conversations open with only the newest message expanded.
+const COLLAPSE_ABOVE = 2;
+
 function renderThreadPane(thread, messages) {
   const subjectEl = document.querySelector(".reading-subject");
   if (subjectEl) subjectEl.textContent = sanitizeUnicodeNoise(thread.subject || t("app.no_subject"));
@@ -186,7 +189,9 @@ function renderThreadPane(thread, messages) {
   const readingBody = document.querySelector(".reading-body");
   if (!readingBody) return;
 
-  expandedMessageIds = new Set(messages.map((message) => message.id));
+  expandedMessageIds = new Set(
+    (messages.length > COLLAPSE_ABOVE ? messages.slice(-1) : messages).map((message) => message.id)
+  );
 
   readingBody.innerHTML = "";
 
@@ -207,15 +212,28 @@ function renderThreadPane(thread, messages) {
   for (const message of messages) {
     stack.appendChild(buildMessageBubble(message, messages));
   }
+
+  // With many collapsed messages above it, the open one can start below the
+  // fold; bring it into view.
+  const open = stack.querySelector(".thread-bubble.expanded");
+  if (open && messages.length > COLLAPSE_ABOVE
+      && open.getBoundingClientRect().top > readingBody.getBoundingClientRect().bottom - 120) {
+    open.scrollIntoView({ block: "start" });
+  }
 }
 
 
 function buildMessageBubble(message, allMessages) {
-  const isExpanded = expandedMessageIds.has(message.id);
-
   const bubble = document.createElement("div");
-  bubble.className = `thread-bubble${isExpanded ? " expanded" : " collapsed"}`;
   bubble.dataset.messageId = message.id;
+  fillBubble(bubble, message, allMessages);
+  return bubble;
+}
+
+/** Renders a bubble in its current state; also used when it is toggled. */
+function fillBubble(bubble, message, allMessages) {
+  const isExpanded = expandedMessageIds.has(message.id);
+  bubble.className = `thread-bubble${isExpanded ? " expanded" : " collapsed"}`;
 
   const senderName = sanitizeUnicodeNoise(message.sender || t("app.unknown_sender"))
     .replace(/<[^>]+>/g, "")
@@ -224,76 +242,9 @@ function buildMessageBubble(message, allMessages) {
 
   if (isExpanded) {
     bubble.innerHTML = buildExpandedBubble(message, senderName);
-
-    const host = bubble.querySelector("[data-email-shadow-host]");
-    if (host) {
-      const rawHtml = message.body_html || `<pre>${escapeHtml(message.snippet || "")}</pre>`;
-      const sanitized = sanitizeEmailHtml(sanitizeUnicodeNoise(rawHtml));
-      const shadow = host.attachShadow({ mode: "closed" });
-      shadow.innerHTML = `
-        <style>
-          :host {
-            display: block;
-            overflow-x: auto;
-            -webkit-user-select: text;
-            user-select: text;
-          }
-          .email-center {
-            max-width: 640px;
-            margin: 0 auto;
-          }
-          p { margin-bottom: 12px; }
-          p:last-child { margin-bottom: 0; }
-          pre {
-            white-space: pre-wrap;
-            word-break: break-word;
-            background: var(--surface, #f0f0ec);
-            border: 1px solid var(--border, #d6d9d2);
-            border-radius: 8px;
-            padding: 10px 12px;
-            font-size: 12px;
-          }
-          img { max-width: 100%; height: auto; }
-          a { color: var(--green, #4a5e45); }
-          table { max-width: 100%; overflow-x: auto; display: block; }
-          * { box-sizing: border-box; }
-        </style>
-        <div class="email-center">${sanitized}</div>
-      `;
-
-      shadow.querySelectorAll("a[href]").forEach((a) => {
-        const originalHref = a.getAttribute("href") || "";
-        a.setAttribute("data-verdant-href", originalHref);
-        a.setAttribute("href", "#");
-        a.setAttribute("target", "_self");
-        a.setAttribute("rel", "noopener noreferrer");
-      });
-
-      const handleLinkIntent = (e) => {
-        const target = e.target instanceof Element ? e.target : e.target?.parentElement;
-        const a = target?.closest?.("a[href]");
-        if (!a) return;
-
-        const href = a.getAttribute("data-verdant-href") || a.getAttribute("href");
-        e.preventDefault();
-        e.stopPropagation();
-
-        if (!(href && (href.startsWith("http://") || href.startsWith("https://")))) {
-          return;
-        }
-
-        openExternalUrl(href).catch((error) => {
-          console.error("External link open failed", error);
-        });
-      };
-
-      shadow.addEventListener("click", handleLinkIntent, true);
-      shadow.addEventListener("auxclick", handleLinkIntent, true);
-      shadow.addEventListener("keydown", (e) => {
-        if (e.key !== "Enter") return;
-        handleLinkIntent(e);
-      }, true);
-    }
+    mountMessageBody(bubble, message);
+    bindBubbleButtons(bubble, message, allMessages);
+    bindRecipientsToggle(bubble, message);
   } else {
     bubble.innerHTML = buildCollapsedBubble(message, senderName);
   }
@@ -304,11 +255,84 @@ function buildMessageBubble(message, allMessages) {
   const header = bubble.querySelector(".thread-bubble-header");
   if (header) {
     header.addEventListener("click", () => toggleBubble(bubble, message, allMessages));
+    header.addEventListener("keydown", (e) => {
+      if (e.target !== header || (e.key !== "Enter" && e.key !== " ")) return;
+      e.preventDefault();
+      toggleBubble(bubble, message, allMessages);
+    });
   }
+}
 
-  bindBubbleButtons(bubble, message, allMessages);
-  bindRecipientsToggle(bubble, message);
-  return bubble;
+function mountMessageBody(bubble, message) {
+  const host = bubble.querySelector("[data-email-shadow-host]");
+  if (host) {
+    const rawHtml = message.body_html || `<pre>${escapeHtml(message.snippet || "")}</pre>`;
+    const sanitized = sanitizeEmailHtml(sanitizeUnicodeNoise(rawHtml));
+    const shadow = host.attachShadow({ mode: "closed" });
+    shadow.innerHTML = `
+      <style>
+        :host {
+          display: block;
+          overflow-x: auto;
+          -webkit-user-select: text;
+          user-select: text;
+        }
+        .email-center {
+          max-width: 640px;
+          margin: 0 auto;
+        }
+        p { margin-bottom: 12px; }
+        p:last-child { margin-bottom: 0; }
+        pre {
+          white-space: pre-wrap;
+          word-break: break-word;
+          background: var(--surface, #f0f0ec);
+          border: 1px solid var(--border, #d6d9d2);
+          border-radius: 8px;
+          padding: 10px 12px;
+          font-size: 12px;
+        }
+        img { max-width: 100%; height: auto; }
+        a { color: var(--green, #4a5e45); }
+        table { max-width: 100%; overflow-x: auto; display: block; }
+        * { box-sizing: border-box; }
+      </style>
+      <div class="email-center">${sanitized}</div>
+    `;
+
+    shadow.querySelectorAll("a[href]").forEach((a) => {
+      const originalHref = a.getAttribute("href") || "";
+      a.setAttribute("data-verdant-href", originalHref);
+      a.setAttribute("href", "#");
+      a.setAttribute("target", "_self");
+      a.setAttribute("rel", "noopener noreferrer");
+    });
+
+    const handleLinkIntent = (e) => {
+      const target = e.target instanceof Element ? e.target : e.target?.parentElement;
+      const a = target?.closest?.("a[href]");
+      if (!a) return;
+
+      const href = a.getAttribute("data-verdant-href") || a.getAttribute("href");
+      e.preventDefault();
+      e.stopPropagation();
+
+      if (!(href && (href.startsWith("http://") || href.startsWith("https://")))) {
+        return;
+      }
+
+      openExternalUrl(href).catch((error) => {
+        console.error("External link open failed", error);
+      });
+    };
+
+    shadow.addEventListener("click", handleLinkIntent, true);
+    shadow.addEventListener("auxclick", handleLinkIntent, true);
+    shadow.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter") return;
+      handleLinkIntent(e);
+    }, true);
+  }
 }
 
 function buildCollapsedBubble(message, senderName) {
@@ -329,7 +353,7 @@ function buildCollapsedBubble(message, senderName) {
         <span class="thread-bubble-preview">${escapeHtml(preview)}</span>
       </div>
       <span class="thread-bubble-date">${escapeHtml(formatListDate(message.date))}</span>
-      ${message.has_attachments ? '<span class="thread-bubble-attach-icon">📎</span>' : ""}
+      ${message.has_attachments ? `<span class="thread-bubble-attach-icon" title="${escapeHtml(t("thread.has_attachment"))}">${icon("paperclip", 14)}</span>` : ""}
     </div>
   `;
 }
@@ -399,45 +423,13 @@ function bindRecipientsToggle(bubble, message) {
 }
 
 function toggleBubble(bubble, message, allMessages) {
-  const isExpanded = expandedMessageIds.has(message.id);
-
-  if (isExpanded) {
+  if (expandedMessageIds.has(message.id)) {
     if (expandedMessageIds.size <= 1) return;
     expandedMessageIds.delete(message.id);
-    bubble.classList.remove("expanded");
-    bubble.classList.add("collapsed");
-
-    const senderName = sanitizeUnicodeNoise(message.sender || t("app.unknown_sender"))
-      .replace(/<[^>]+>/g, "").replace(/['"]/g, "").trim();
-    bubble.innerHTML = buildCollapsedBubble(message, senderName);
-
-    const avatar = bubble.querySelector(".thread-bubble-avatar");
-    if (avatar) applySenderAvatar(avatar, message.sender || "", "INBOX");
-    bubble.querySelector(".thread-bubble-header")
-      ?.addEventListener("click", () => toggleBubble(bubble, message, allMessages));
   } else {
     expandedMessageIds.add(message.id);
-    bubble.classList.remove("collapsed");
-    bubble.classList.add("expanded");
-
-    const senderName = sanitizeUnicodeNoise(message.sender || t("app.unknown_sender"))
-      .replace(/<[^>]+>/g, "").replace(/['"]/g, "").trim();
-    bubble.innerHTML = buildExpandedBubble(message, senderName);
-
-    const avatar = bubble.querySelector(".thread-bubble-avatar");
-    if (avatar) applySenderAvatar(avatar, message.sender || "", "INBOX");
-    bubble.querySelector(".thread-bubble-header")
-      ?.addEventListener("click", () => toggleBubble(bubble, message, allMessages));
-
-    bindBubbleButtons(bubble, message, allMessages);
-
-    bindRecipientsToggle(bubble, message);
-
-    if (!message.is_read) {
-      message.is_read = true;
-      setEmailReadStatus(message.id, true).catch(() => {});
-    }
   }
+  fillBubble(bubble, message, allMessages);
 }
 
 
