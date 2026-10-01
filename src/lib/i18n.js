@@ -748,6 +748,10 @@ export function setLang(lang) {
   if (!SUPPORTED.includes(lang)) return;
   currentLang = lang;
   try { localStorage.setItem(LANG_KEY, lang); } catch {}
+  // The background process writes the desktop notifications.
+  import("@tauri-apps/api/core")
+    .then(({ invoke }) => invoke("update_app_config", { config: { language: lang } }))
+    .catch(() => {});
 }
 
 export function getLang() {
