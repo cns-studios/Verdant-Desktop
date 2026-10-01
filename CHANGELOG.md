@@ -2,7 +2,10 @@
 
 ## [2.2.23]
 - You can now sort your mailbox locally and dynamically using Machine Learning
-- Fix an issue where elevated CLI Updating defaulted the update channel to "Stable" 
+- Fix an issue where elevated CLI Updating defaulted the update channel to "Stable"
+- You can now copy a verification code inside a mail directly
+- Improved the onboarding menu
+- Better translations
 
 ## [2.2.22]
 - You are now able to change the font size in Verdant
