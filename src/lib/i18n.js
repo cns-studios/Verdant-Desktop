@@ -1,5 +1,9 @@
 const translations = {
   en: {
+    "code.label": "Verification code",
+    "code.copy": "Copy code",
+    "code.copied": "Copied",
+    "code.copy_failed": "Couldn't copy the code. Select it and copy it yourself.",
     "thread.has_attachment": "Has attachments",
     "smart.cat.personal": "People",
     "smart.cat.newsletters": "Newsletters",
@@ -364,6 +368,10 @@ const translations = {
   },
 
   de: {
+    "code.label": "Bestätigungscode",
+    "code.copy": "Code kopieren",
+    "code.copied": "Kopiert",
+    "code.copy_failed": "Der Code konnte nicht kopiert werden. Markiere ihn und kopiere ihn selbst.",
     "thread.has_attachment": "Mit Anhängen",
     "smart.cat.personal": "Menschen",
     "smart.cat.newsletters": "Newsletter",

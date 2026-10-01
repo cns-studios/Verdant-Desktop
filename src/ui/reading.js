@@ -7,6 +7,8 @@ import { ensureSmartInboxEnabled, categoryLabel } from "../lib/smartInbox.js";
 import { downloadAttachment } from "../api.js";
 import { openExternalUrl } from "../api.js";
 import { fetchRemoteImage } from "../api.js";
+import { findVerificationCode } from "../lib/verificationCode.js";
+import { buildCodeCard } from "./codeCard.js";
 import { icon } from "./icons.js";
 import { t } from "../lib/i18n.js";
 
@@ -429,6 +431,9 @@ export function renderReadingPane(email, mailbox) {
       renderEmailContentSafely(body, htmlContent);
     }
   }
+
+  const code = findVerificationCode({ subject: email.subject, snippet: email.snippet, body: email.body_html });
+  if (code && body) body.before(buildCodeCard(code));
 
   renderReadingAttachments(email);
 

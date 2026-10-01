@@ -9,6 +9,8 @@ import { openComposeForReply, openComposeForForward } from "./compose.js";
 import { refreshCounts } from "./sidebar.js";
 import { icon } from "./icons.js";
 import { checkboxHtml, refresh as refreshMultiSelect } from "./multiselect.js";
+import { findVerificationCode, mentionsCode } from "../lib/verificationCode.js";
+import { buildCodeCard, buildCodeChip } from "./codeCard.js";
 
 
 let currentThreads = [];
@@ -18,6 +20,43 @@ let expandedMessageIds = new Set();
 let onRefreshCallback = null;
 let onCountsRefreshCallback = null;
 let renderGeneration = 0;
+
+// Codes found per conversation, so re-rendering the list never re-reads mail.
+// Keyed by thread and newest message; `null` means "looked, none".
+const threadCodes = new Map();
+const MAX_CODE_LOOKUPS = 30;
+
+const threadCodeKey = (thread) => `${thread.thread_id}:${thread.latest_ts || ""}`;
+
+function showThreadCode(row, code, animate) {
+  if (!code || row.querySelector(".vc-chip")) return;
+  row.querySelector(".email-item-inner")?.appendChild(buildCodeChip(code, animate));
+}
+
+/**
+ * The list only has a short preview. When that mentions a code without
+ * showing it, read the newest message of those few conversations.
+ */
+async function lookUpThreadCodes(pending, generation) {
+  for (const { thread, row } of pending.slice(0, MAX_CODE_LOOKUPS)) {
+    if (generation !== renderGeneration) return;
+    const key = threadCodeKey(thread);
+    if (!threadCodes.has(key)) {
+      try {
+        const messages = await getThreadMessages(thread.thread_id);
+        const latest = messages[messages.length - 1];
+        threadCodes.set(key, latest ? messageCode(latest) : null);
+      } catch {
+        continue;
+      }
+    }
+    if (row.isConnected) showThreadCode(row, threadCodes.get(key), true);
+  }
+}
+
+function messageCode(message) {
+  return findVerificationCode({ subject: message.subject, snippet: message.snippet, body: message.body_html });
+}
 
 function yieldToBrowser() {
   return new Promise(resolve => requestAnimationFrame(() => resolve()));
@@ -80,6 +119,7 @@ export async function renderThreadList(threads, activeFilter, searchQuery, anima
   const countEl = document.querySelector(".list-count");
   if (countEl) countEl.textContent = t("list.count", { n: visible.length });
 
+  const codeLookups = [];
   for (let i = 0; i < visible.length; i++) {
     if (generation !== renderGeneration || !list.isConnected) return;
     const thread = visible[i];
@@ -113,6 +153,14 @@ export async function renderThreadList(threads, activeFilter, searchQuery, anima
 
     const firstSender = (thread.participants || "").split(",")[0] || "";
     applySenderAvatar(row.querySelector(".sender-avatar"), firstSender, "INBOX");
+    const codeKey = threadCodeKey(thread);
+    if (!threadCodes.has(codeKey)) {
+      const code = findVerificationCode(thread);
+      if (code) threadCodes.set(codeKey, code);
+      else if (mentionsCode(thread)) codeLookups.push({ thread, row });
+      else threadCodes.set(codeKey, null);
+    }
+    showThreadCode(row, threadCodes.get(codeKey), animate);
     row.addEventListener("click", () => selectThread(thread, row));
     list.appendChild(row);
     if ((i + 1) % 24 === 0) await yieldToBrowser();
@@ -120,6 +168,7 @@ export async function renderThreadList(threads, activeFilter, searchQuery, anima
 
   if (generation !== renderGeneration) return;
   refreshMultiSelect(list);
+  if (codeLookups.length) lookUpThreadCodes(codeLookups, generation);
 }
 
 
@@ -243,6 +292,8 @@ function fillBubble(bubble, message, allMessages) {
   if (isExpanded) {
     bubble.innerHTML = buildExpandedBubble(message, senderName);
     mountMessageBody(bubble, message);
+    const code = messageCode(message);
+    if (code) bubble.querySelector(".thread-bubble-body")?.prepend(buildCodeCard(code));
     bindBubbleButtons(bubble, message, allMessages);
     bindRecipientsToggle(bubble, message);
   } else {

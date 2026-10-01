@@ -23,6 +23,7 @@ import "./ui/styles/dynamic.css";
 import "./ui/styles/shell.css";
 import "./ui/styles/onboarding.css";
 import "./ui/styles/smartinbox.css";
+import "./ui/styles/codecard.css";
 import "./ui/styles/accounts.css";
 import "./ui/styles/updates.css";
 import "./ui/styles/whatsnew.css";
@@ -52,6 +53,8 @@ import { openWhatsNewModal } from "./ui/whatsnew.js";
 import { bindEmailListContextMenu } from "./ui/contextmenu.js";
 import { bindMultiSelect, checkboxHtml, exitMultiSelect as clearMultiSelection, refresh as refreshMultiSelect } from "./ui/multiselect.js";
 import { bindBulkBar } from "./ui/bulkbar.js";
+import { findVerificationCode } from "./lib/verificationCode.js";
+import { buildCodeChip } from "./ui/codeCard.js";
 import { appPrefs, appConfigPatch } from "./ui/settings.js";
 import { checkForUpdates, downloadLatestUpdate, switchAccount, listAccounts } from "./api.js";
 import { getInboxThreads, getCategoryThreads } from "./api.js";
@@ -369,6 +372,12 @@ async function renderEmailList(animate = false) {
             </div>
         `;
         applySenderAvatar(row.querySelector(".sender-avatar"), email.sender || "", email.mailbox || "");
+        if (email.verificationCode === undefined) {
+            email.verificationCode = findVerificationCode({ subject: email.subject, snippet: email.snippet, body: email.body_html });
+        }
+        if (email.verificationCode) {
+            row.querySelector(".email-item-inner").appendChild(buildCodeChip(email.verificationCode, animate));
+        }
         row.addEventListener("click", () => selectEmail(email, row));
 
         if (selectedId && email.id === selectedId) {
