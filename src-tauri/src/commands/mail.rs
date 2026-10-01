@@ -826,45 +826,74 @@ pub async fn set_email_read_status(
     is_read: bool,
 ) -> Result<(), String> {
     let account_id = get_active_id(&state).await;
-
-    let account = {
-        let conn = state.conn.lock().await;
-        crate::db::get_account_by_id(&conn, account_id).ok().flatten()
-    };
-
-    if let Some(ref acc) = account {
-        if acc.provider == "gmail" {
-            let gmail_id = email_id.splitn(2, ':').nth(1).unwrap_or(&email_id).to_string();
-            if let Ok(token_info) = ensure_token(&state).await {
-                let client = reqwest::Client::new();
-                let url = format!("https://gmail.googleapis.com/gmail/v1/users/me/messages/{}/modify", gmail_id);
-                let body = if is_read {
-                    json!({"removeLabelIds": ["UNREAD"]})
-                } else {
-                    json!({"addLabelIds": ["UNREAD"]})
-                };
-                let _ = client.post(url).bearer_auth(&token_info.access_token).json(&body).send().await;
-            }
-        } else if acc.provider == "imap" {
-            let msg_id = email_id.splitn(2, ':').nth(1).unwrap_or(&email_id).to_string();
-            let mailbox = {
-                let conn = state.conn.lock().await;
-                conn.query_row("SELECT mailbox FROM emails WHERE id=?1 AND account_id=?2",
-                    rusqlite::params![email_id, account_id], |r| r.get::<_, String>(0)).unwrap_or_else(|_| "INBOX".to_string())
-            };
-            let acc_clone = acc.clone();
-            let outcome = tokio::task::spawn_blocking(move || {
-                crate::imap_sync::imap_set_flag(&acc_clone, &msg_id, "\\Seen", is_read, &mailbox)
-            }).await;
-            log_imap_outcome(outcome);
-        }
-    }
+    push_read_status(&state, account_id, &email_id, is_read).await;
 
     let conn = state.conn.lock().await;
     conn.execute(
         "UPDATE emails SET is_read=?1 WHERE id=?2 AND account_id=?3",
         rusqlite::params![is_read as i32, email_id, account_id],
     ).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Tells the mail server that a message was read or unread. Failures are
+/// logged, not returned: the local state is what the UI shows.
+async fn push_read_status(state: &State<'_, Arc<DbState>>, account_id: i64, email_id: &str, is_read: bool) {
+    let account = {
+        let conn = state.conn.lock().await;
+        crate::db::get_account_by_id(&conn, account_id).ok().flatten()
+    };
+    let Some(acc) = account else { return };
+
+    if acc.provider == "gmail" {
+        let gmail_id = email_id.splitn(2, ':').nth(1).unwrap_or(email_id).to_string();
+        if let Ok(token_info) = ensure_token(state).await {
+            let client = reqwest::Client::new();
+            let url = format!("https://gmail.googleapis.com/gmail/v1/users/me/messages/{}/modify", gmail_id);
+            let body = if is_read {
+                json!({"removeLabelIds": ["UNREAD"]})
+            } else {
+                json!({"addLabelIds": ["UNREAD"]})
+            };
+            let _ = client.post(url).bearer_auth(&token_info.access_token).json(&body).send().await;
+        }
+    } else if acc.provider == "imap" {
+        let msg_id = email_id.splitn(2, ':').nth(1).unwrap_or(email_id).to_string();
+        let mailbox = {
+            let conn = state.conn.lock().await;
+            conn.query_row("SELECT mailbox FROM emails WHERE id=?1 AND account_id=?2",
+                rusqlite::params![email_id, account_id], |r| r.get::<_, String>(0)).unwrap_or_else(|_| "INBOX".to_string())
+        };
+        let outcome = tokio::task::spawn_blocking(move || {
+            crate::imap_sync::imap_set_flag(&acc, &msg_id, "\\Seen", is_read, &mailbox)
+        }).await;
+        log_imap_outcome(outcome);
+    }
+}
+
+/// Marks several messages read at once, e.g. everything in an opened
+/// conversation. The local state changes first, so a list refresh that lands
+/// while the server is still being told already shows them as read.
+#[tauri::command]
+pub async fn mark_emails_read(state: State<'_, Arc<DbState>>, email_ids: Vec<String>) -> Result<(), String> {
+    let account_id = get_active_id(&state).await;
+    let unread: Vec<String> = {
+        let conn = state.conn.lock().await;
+        let mut unread = Vec::new();
+        for id in &email_ids {
+            let changed = conn.execute(
+                "UPDATE emails SET is_read=1 WHERE id=?1 AND account_id=?2 AND is_read=0",
+                rusqlite::params![id, account_id],
+            ).map_err(|e| e.to_string())?;
+            if changed > 0 {
+                unread.push(id.clone());
+            }
+        }
+        unread
+    };
+    for id in &unread {
+        push_read_status(&state, account_id, id, true).await;
+    }
     Ok(())
 }
 

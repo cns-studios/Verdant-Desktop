@@ -182,6 +182,7 @@ pub fn run() {
             commands::mail::get_inbox_threads,
             commands::mail::get_thread_messages,
             commands::mail::mark_thread_read,
+            commands::mail::mark_emails_read,
             smart_inbox::get_inbox_categories,
             smart_inbox::get_smart_inbox_enabled,
             smart_inbox::categorize_inbox,
