@@ -372,12 +372,12 @@ fn apply_reconcile_window(
 async fn notify_new_mail(app: &tauri::AppHandle, state: &DbState, account: &Account) {
     use tauri::Manager;
     let account_id = account.id;
-    let (show, important_only) = match app.try_state::<crate::commands::app_config::AppConfigState>() {
+    let (show, important_only, language) = match app.try_state::<crate::commands::app_config::AppConfigState>() {
         Some(config) => {
             let config = config.0.lock().await;
-            (config.show_notifications, config.notify_important_only)
+            (config.show_notifications, config.notify_important_only, config.language.clone())
         }
-        None => (true, false),
+        None => (true, false, "en".to_string()),
     };
 
     let fresh: Vec<(String, String)> = {
@@ -394,20 +394,36 @@ async fn notify_new_mail(app: &tauri::AppHandle, state: &DbState, account: &Acco
     if show && !fresh.is_empty() {
         use tauri_plugin_notification::NotificationExt;
         let acc_name = account.display_name.as_deref().unwrap_or(&account.email);
-        let (title, body) = if fresh.len() == 1 {
-            let (subject, sender) = &fresh[0];
-            (format!("New Email - {}", acc_name), format!("From: {}\n{}", sender, subject))
-        } else {
-            (
-                format!("{} New Emails - {}", fresh.len(), acc_name),
-                format!("You have {} new messages in your inbox.", fresh.len()),
-            )
-        };
+        let (title, body) = notification_text(&language, acc_name, &fresh);
         let _ = app.notification().builder().title(title).body(body).show();
     }
 
     use tauri::Emitter;
     let _ = app.emit("emails-synced", ());
+}
+
+/// Title and body of the new-mail notification in the app's language.
+/// `fresh` holds (subject, sender) and must not be empty.
+fn notification_text(language: &str, account: &str, fresh: &[(String, String)]) -> (String, String) {
+    let german = language == "de";
+    if let [(subject, sender)] = fresh {
+        let subject = match (subject.trim().is_empty(), german) {
+            (false, _) => subject.as_str(),
+            (true, true) => "(Kein Betreff)",
+            (true, false) => "(No subject)",
+        };
+        return if german {
+            (format!("Neue E-Mail – {account}"), format!("Von: {sender}\n{subject}"))
+        } else {
+            (format!("New email – {account}"), format!("From: {sender}\n{subject}"))
+        };
+    }
+    let n = fresh.len();
+    if german {
+        (format!("{n} neue E-Mails – {account}"), format!("Du hast {n} neue Nachrichten im Posteingang."))
+    } else {
+        (format!("{n} new emails – {account}"), format!("You have {n} new messages in your inbox."))
+    }
 }
 
 /// Returns (subject, sender) of mail to announce and marks every candidate as
@@ -523,6 +539,16 @@ mod tests {
         crate::db::init_db(&conn).unwrap();
         conn.execute("INSERT INTO accounts (id, email) VALUES (1, 'a@example.com')", []).unwrap();
         conn
+    }
+
+    #[test]
+    fn notification_text_follows_the_app_language() {
+        let one = vec![("".to_string(), "Mia".to_string())];
+        let two = vec![("a".to_string(), "x".to_string()), ("b".to_string(), "y".to_string())];
+        assert_eq!(notification_text("de", "Work", &one), ("Neue E-Mail – Work".to_string(), "Von: Mia\n(Kein Betreff)".to_string()));
+        assert_eq!(notification_text("en", "Work", &one).1, "From: Mia\n(No subject)");
+        assert_eq!(notification_text("de", "Work", &two).0, "2 neue E-Mails – Work");
+        assert_eq!(notification_text("fr", "Work", &two).0, "2 new emails – Work");
     }
 
     fn insert(conn: &Connection, id: &str, ts: i64, unsub: &str) {

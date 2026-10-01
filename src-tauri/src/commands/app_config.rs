@@ -12,6 +12,9 @@ pub struct AppConfig {
     pub sidebar_collapsed: bool,
     pub show_notifications: bool,
     pub notify_important_only: bool,
+    /// Interface language, so text shown outside the window (desktop
+    /// notifications) matches the app.
+    pub language: String,
 }
 
 impl Default for AppConfig {
@@ -22,6 +25,7 @@ impl Default for AppConfig {
             sidebar_collapsed: false,
             show_notifications: true,
             notify_important_only: false,
+            language: "en".to_string(),
         }
     }
 }
@@ -33,6 +37,14 @@ pub struct AppConfigPatch {
     pub sidebar_collapsed: Option<bool>,
     pub show_notifications: Option<bool>,
     pub notify_important_only: Option<bool>,
+    pub language: Option<String>,
+}
+
+fn normalize_language(raw: &str) -> String {
+    match raw.trim().to_ascii_lowercase().as_str() {
+        "de" => "de".to_string(),
+        _ => "en".to_string(),
+    }
 }
 
 fn normalize_update_channel(raw: &str) -> String {
@@ -70,6 +82,7 @@ pub fn load_app_config(app: &tauri::AppHandle) -> AppConfig {
 
     let mut config = loaded.unwrap_or_default();
     config.update_channel = normalize_update_channel(&config.update_channel);
+    config.language = normalize_language(&config.language);
     config
 }
 
@@ -96,6 +109,9 @@ pub async fn update_app_config(
     }
     if let Some(important_only) = config.notify_important_only {
         s.notify_important_only = important_only;
+    }
+    if let Some(language) = config.language {
+        s.language = normalize_language(&language);
     }
 
     persist_app_config(&app, &s)?;

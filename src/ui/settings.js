@@ -80,6 +80,7 @@ export function appConfigPatch(prefs) {
     run_in_background: prefs.runInBackground,
     show_notifications: prefs.showNotifications !== false,
     notify_important_only: prefs.notificationImportance === "important",
+    language: getLang(),
   };
 }
 
