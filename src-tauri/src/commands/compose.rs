@@ -2,7 +2,7 @@ use std::sync::Arc;
 use serde_json::{json, Value};
 use tauri::State;
 
-use crate::commands::mail::sync_mailbox_internal_for;
+use crate::sync::sync_mailbox_internal_for;
 use crate::db::get_account_by_id;
 use crate::mime::{build_raw_mime_message, EmailAttachment};
 use crate::smtp_send::{send_imap_email, SmtpAttachment};
@@ -100,7 +100,7 @@ pub async fn send_email(
         tokio::task::spawn_blocking(move || {
             send_imap_email(&account_clone, &to_c, &cc_c, &subject_c, &body_c,
                 html_c.as_deref(), attachments_c, in_reply_to_c, references_c)?;
-            crate::imap_sync::append_to_sent(&account_clone, &to_c, &cc_c, &subject_c, &body_c, html_c.as_deref())
+            crate::imap_client::append_to_sent(&account_clone, &to_c, &cc_c, &subject_c, &body_c, html_c.as_deref())
         }).await.map_err(|e| e.to_string())??;
 
         let state_arc = (*state).clone();
@@ -153,7 +153,7 @@ pub async fn save_draft(
         let draft_id = draft_id.clone()
             .filter(|d| !d.trim().is_empty())
             .unwrap_or_else(|| format!("local-draft-{}", chrono::Utc::now().timestamp_millis()));
-        
+
         let composite_id = format!("{}:draft:{}", account_id, draft_id);
         let now = chrono::Utc::now();
         let date_str = now.format("%a, %d %b %Y %H:%M:%S +0000").to_string();

@@ -1,7 +1,3 @@
-// Maps an email address to how Verdant connects to it, so people only ever
-// have to type their address and password. Server names only surface in the
-// optional "server settings" section for addresses we cannot recognise.
-
 const GOOGLE = { kind: "google", name: "Google" };
 
 const PRESETS = [
@@ -12,7 +8,6 @@ const PRESETS = [
     },
     { domains: ["proton.me", "protonmail.com", "protonmail.ch", "pm.me"], kind: "unsupported", name: "Proton Mail", reason: "proton" },
     {
-        // Tuta offers no IMAP or API for other apps; it cannot work at all.
         domains: ["tuta.com", "tuta.io", "tutanota.com", "tutanota.de", "tutamail.com", "keemail.me"],
         kind: "unsupported", name: "Tuta", reason: "tuta",
     },
@@ -52,7 +47,6 @@ const PRESETS = [
         imapHost: "imap.aol.com", smtpHost: "smtp.aol.com", smtpPort: 465,
     },
     {
-        // iCloud signs in with the part before the @, not the full address.
         domains: ["icloud.com", "me.com", "mac.com"],
         kind: "password", name: "iCloud", hint: "app_password_icloud", usernameIsLocalPart: true,
         imapHost: "imap.mail.me.com", smtpHost: "smtp.mail.me.com", smtpPort: 587,
@@ -78,14 +72,6 @@ export function domainOf(email) {
     return String(email || "").trim().toLowerCase().split("@")[1] || "";
 }
 
-/**
- * Returns how to connect `email`:
- * - `{ kind: "google" }` for Gmail
- * - `{ kind: "unsupported", reason }` for services Verdant cannot sign in to yet
- * - `{ kind: "password", imapHost, ... }` for known providers
- * - `{ kind: "password", unknown: true, candidates }` otherwise; the
- *   candidates are tried in order until one answers.
- */
 export function detectProvider(email) {
     const domain = domainOf(email);
     const preset = PRESETS.find(p => p.domains.includes(domain));
@@ -112,10 +98,6 @@ export function usernameFor(provider, email) {
     return provider?.usernameIsLocalPart ? clean.split("@")[0] : clean;
 }
 
-/**
- * Turns a backend connection error into something a person can act on.
- * Returns one of: "auth", "network", "security", "duplicate", "unknown".
- */
 export function classifyConnectError(error) {
     const text = String(error || "");
     if (/UNIQUE constraint failed: accounts\.email/i.test(text)) return "duplicate";

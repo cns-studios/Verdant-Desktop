@@ -4,7 +4,7 @@ use crate::mime::fold_base64_for_mime;
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use lettre::{
     transport::smtp::authentication::Credentials,
-    Address, Message, SmtpTransport, Transport,
+    Address, SmtpTransport, Transport,
 };
 
 pub struct SmtpCredentials {
@@ -104,8 +104,7 @@ pub fn send_imap_email(
             format!("{}\r\n", body_plain)
         }
     } else {
-        use base64::{engine::general_purpose::STANDARD, Engine as _};
-        headers.push_str(&format!(
+                headers.push_str(&format!(
             "Content-Type: multipart/mixed; boundary=\"{}\"\r\n\r\n",
             boundary_mix
         ));

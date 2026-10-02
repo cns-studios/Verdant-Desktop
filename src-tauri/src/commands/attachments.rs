@@ -44,7 +44,7 @@ pub async fn download_attachment(
         let attachment_id_clean = attachment_id.trim().to_string();
         let account_clone = account.clone();
         let result = tokio::task::spawn_blocking(move || {
-            crate::imap_sync::fetch_attachment(&account_clone, &attachment_id_clean)
+            crate::imap_client::fetch_attachment(&account_clone, &attachment_id_clean)
         }).await.map_err(|e| e.to_string())??;
 
         let fname = if result.filename.is_empty() {

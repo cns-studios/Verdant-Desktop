@@ -18,39 +18,45 @@ tauri-build = { version = "2.5.6", features = [] }
 [dependencies]
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
-log = "0.4"
+log = { version = "0.4", features = ["std"] }
 tauri = { version = "2.10.3", features = ["tray-icon"] }
-tauri-plugin-log = "2"
-tokio = { version = "1", features = ["full"] }
-reqwest = { version = "0.12", features = ["json"] }
+tauri-plugin-store = "2"
+tauri-plugin-process = "2"
+tauri-plugin-notification = "2.2"
+tauri-plugin-dialog = "2"
+tauri-plugin-single-instance = "2.2.0-beta.1"
+tokio = { version = "1", features = ["rt", "sync", "time", "macros"] }
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
+reqwest = { version = "0.12", default-features = false, features = ["native-tls", "json"] }
 rusqlite = { version = "0.31", features = ["bundled"] }
-oauth2 = "4"
-tiny_http = "0.12"
 url = "2.5"
 open = "5.1"
 base64 = "0.22.1"
 dotenvy = "0.15"
-pulldown-cmark = "0.12"
+pulldown-cmark = { version = "0.12", default-features = false, features = ["html"] }
 semver = "1"
-tauri-plugin-store = "2"
-tauri-plugin-process = "2"
-tauri-plugin-notification = "2.2"
-tauri-plugin-shell = "2"
-tauri-plugin-dialog = "2"
-
 imap = "2.4"
 native-tls = "0.2"
 mailparse = "0.15"
 lettre = { version = "0.11", default-features = false, features = ["smtp-transport", "native-tls", "builder"] }
-keyring = { version = "2", features = ["linux-secret-service-rt-async-io-crypto-rust"] }
 aes-gcm = "0.10"
-rand = "0.8"
+sha2 = "0.10"
 hex = "0.4"
-chrono = { version = "0.4", features = ["serde"] }
-futures = "0.3"
+chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
 libc = "0.2.183"
-dirs = "5"
-tauri-plugin-single-instance = "2.2.0-beta.1"
+dirs = "6"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+keyring-core = "1"
+zbus-secret-service-keyring-store = { version = "1", features = ["rt-async-io-crypto-rust"] }
+
+[target.'cfg(not(target_os = "linux"))'.dependencies]
+keyring = { version = "2", default-features = false, features = ["platform-macos", "platform-windows"] }
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.10"
+
+[profile.release]
+codegen-units = 1
+lto = true
+strip = true
