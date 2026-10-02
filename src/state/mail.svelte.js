@@ -297,6 +297,10 @@ class MailStore {
     this.selectedThreadId = null;
     this.conversation = { messages: [], loading: false, error: "" };
     this.selectedEmail = email;
+    if (!email.body_html) {
+      const full = await api.getEmail(email.id).catch((error) => console.error("Failed to load email", error));
+      if (full) email.body_html = full.body_html;
+    }
     if (email.is_read) return;
     email.is_read = true;
     await api.setEmailReadStatus(email.id, true).catch((error) => console.error("Failed to mark as read", error));

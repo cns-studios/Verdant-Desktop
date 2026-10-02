@@ -6,6 +6,10 @@ pub const EMAIL_COLUMNS: &str = "id,account_id,draft_id,thread_id,subject,sender
     snippet,body_html,attachments_json,has_attachments,date,is_read,starred,mailbox,labels,internal_ts,notified,\
     list_unsubscribe,unsubscribed,bcc_recipients";
 
+pub const EMAIL_LIST_COLUMNS: &str = "id,account_id,draft_id,thread_id,subject,sender,to_recipients,cc_recipients,\
+    snippet,'' AS body_html,attachments_json,has_attachments,date,is_read,starred,mailbox,labels,internal_ts,notified,\
+    list_unsubscribe,unsubscribed,bcc_recipients";
+
 pub fn clear_account_emails(conn: &Connection, account_id: i64) -> Result<()> {
     conn.execute("DELETE FROM emails WHERE account_id = ?1", params![account_id])?;
     Ok(())

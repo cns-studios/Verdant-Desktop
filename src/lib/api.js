@@ -16,6 +16,7 @@ export const syncMailbox = (mailbox) => invoke("sync_mailbox", { mailbox });
 export const syncMailboxPage = (mailbox, pageToken) => invoke("sync_mailbox_page", { mailbox, pageToken });
 export const syncImapMailboxPage = (mailbox, offset) => invoke("sync_imap_mailbox_page", { mailbox, offset });
 export const getEmails = (mailbox) => invoke("get_emails", { mailbox });
+export const getEmail = (emailId) => invoke("get_email", { emailId });
 export const deepSearchEmails = (query) => invoke("deep_search_emails", { query });
 export const getMailboxCounts = () => invoke("get_mailbox_counts");
 export const clearLocalData = () => invoke("clear_local_data");

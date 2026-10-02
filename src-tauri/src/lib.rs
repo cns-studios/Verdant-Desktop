@@ -54,6 +54,9 @@ pub fn run() {
             let db_path = data_dir.join("emails.db");
 
             let conn = Connection::open(&db_path).expect("Failed to open DB");
+            let _ = conn.execute_batch(
+                "PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA temp_store=MEMORY; PRAGMA cache_size=-16000;",
+            );
             init_db(&conn).expect("Failed to init DB");
 
             let initial_active_id = db::get_active_account(&conn)
@@ -158,6 +161,7 @@ pub fn run() {
             commands::mail::sync_mailbox,
             commands::mail::sync_mailbox_page,
             commands::mail::get_emails,
+            commands::mail::get_email,
             commands::mail::set_email_read_status,
             commands::mail::toggle_starred,
             commands::mail::archive_email,

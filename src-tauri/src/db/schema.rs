@@ -174,6 +174,10 @@ pub fn init_db(conn: &Connection) -> Result<()> {
             ON emails(thread_id, mailbox, account_id, internal_ts);
         CREATE INDEX IF NOT EXISTS idx_emails_thread_id
             ON emails(thread_id, account_id);
+        CREATE INDEX IF NOT EXISTS idx_emails_mailbox_read
+            ON emails(account_id, mailbox, is_read);
+        CREATE INDEX IF NOT EXISTS idx_emails_starred
+            ON emails(account_id, internal_ts) WHERE starred=1;
     ")?;
 
     Ok(())

@@ -55,3 +55,8 @@ keyring = { version = "2", default-features = false, features = ["platform-macos
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.10"
+
+[profile.release]
+codegen-units = 1
+lto = true
+strip = true
