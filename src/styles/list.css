@@ -125,6 +125,7 @@
 .chip:hover { background:var(--surface2); }
 .chip.active { background:var(--green-pale); border-color:var(--green-muted); color:var(--green); font-weight:500; }
 .email-list { flex:1; overflow-y:auto; scrollbar-width:thin; scrollbar-color:var(--border) transparent; }
+.email-list:focus { outline:none; }
 .email-item { padding:13px 18px; border-bottom:1px solid var(--surface); cursor:pointer; transition:background 0.1s; position:relative; }
 .email-item:hover { background:var(--surface); }
 .email-item.active { background:var(--green-pale); border-left:2px solid var(--green); }
