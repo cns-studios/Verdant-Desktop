@@ -9,10 +9,7 @@ use crate::state::DbState;
 
 const SYNC_INTERVAL_SECS: u64 = 45;
 const GMAIL_SYNC_INTERVAL_SECS: u64 = 120;
-/// Never sync an IMAP account more often than this, even if IDLE keeps
-/// waking up (some servers push untagged updates constantly).
 const IMAP_MIN_SYNC_GAP_SECS: u64 = 15;
-/// Poll interval when the server does not support IDLE or IDLE failed.
 const IMAP_POLL_INTERVAL_SECS: u64 = 120;
 const IMAP_MAILBOXES: &[&str] = &["INBOX", "SENT", "DRAFT", "TRASH"];
 const GMAIL_STAGGER_CYCLE: u32 = 4;
@@ -116,8 +113,6 @@ async fn sync_gmail_account(app: &tauri::AppHandle, state: &DbState, account: &A
             continue;
         }
         if *mailbox == "INBOX" {
-            // History is incremental, but a stale/truncated cursor can miss
-            // an incoming message. Reconcile the newest Gmail page too.
             if let Err(e) = crate::commands::mail::sync_mailbox_page_internal_for(
                 state,
                 account.id,
@@ -154,8 +149,6 @@ async fn run_imap_sync_loop(
                 continue;
             }
         };
-        // Wait for the server to push a change (IDLE) instead of a blind
-        // five-minute sleep, which made new mail feel randomly delayed.
         tokio::select! {
             _ = wait_for_imap_change(&acc) => {
                 sync_imap_account(&app, &state, &acc).await;
@@ -244,8 +237,6 @@ async fn sync_imap_account(app: &tauri::AppHandle, state: &DbState, account: &Ac
             }
         }
         Ok(Err(e)) => {
-            // Connection-level failure: the next cycle retries; per-mailbox
-            // fallbacks would only hammer an unreachable server.
             log::warn!("IMAP server unavailable account={}: {}", account_id, e);
         }
         Err(e) => {
@@ -274,8 +265,6 @@ async fn fallback_sync(state: &DbState, account: &Account, mailbox: &str) {
     }
 }
 
-/// Stores a sync result: new messages, server-side flag changes, removals
-/// inside the reconcile window, and the new UID high-water mark.
 pub async fn apply_sync_result(state: &DbState, account_id: i64, result: SyncResult, mailbox: &str) {
     let SyncResult { emails, highest_uid, uidvalidity, uids_reset, window } = result;
     upsert_emails(state, account_id, emails, mailbox).await;
@@ -301,7 +290,6 @@ pub async fn apply_sync_result(state: &DbState, account_id: i64, result: SyncRes
         let _ = set_mailbox_sync_state(&conn, &sync_state);
     }
 
-    // Messages restored from 'OTHER' by the window need a category too.
     if mailbox == "INBOX" {
         if let Err(e) = crate::smart_inbox::assign_unassigned(&conn, account_id) {
             log::error!("Smart Inbox assignment after IMAP reconcile failed: {}", e);
@@ -325,8 +313,6 @@ fn apply_reconcile_window(
     }
     if let Some(window) = window {
         {
-            // 'OTHER' is where earlier versions parked messages they wrongly
-            // believed were gone; anything the server still lists comes back.
             let mut update = tx.prepare(
                 "UPDATE emails SET is_read=?1, starred=?2, imap_uid=?3, imap_uid_mailbox=?4, mailbox=?4
                  WHERE id=?5 AND account_id=?6 AND (mailbox=?4 OR mailbox='OTHER')",
@@ -362,13 +348,6 @@ fn apply_reconcile_window(
     tx.commit()
 }
 
-/// Shows one desktop notification for mail that genuinely just arrived.
-///
-/// Everything already in the mailbox when an account is first synced is
-/// history, not news: it is marked as notified without a notification. That
-/// baseline, plus normalising Gmail's millisecond timestamps (IMAP stores
-/// seconds), is what stops "50 new emails" from firing repeatedly after
-/// onboarding. Older mail loaded later by paging never counts as new either.
 async fn notify_new_mail(app: &tauri::AppHandle, state: &DbState, account: &Account) {
     use tauri::Manager;
     let account_id = account.id;
@@ -402,8 +381,6 @@ async fn notify_new_mail(app: &tauri::AppHandle, state: &DbState, account: &Acco
     let _ = app.emit("emails-synced", ());
 }
 
-/// Title and body of the new-mail notification in the app's language.
-/// `fresh` holds (subject, sender) and must not be empty.
 fn notification_text(language: &str, account: &str, fresh: &[(String, String)]) -> (String, String) {
     let german = language == "de";
     if let [(subject, sender)] = fresh {
@@ -426,8 +403,6 @@ fn notification_text(language: &str, account: &str, fresh: &[(String, String)]) 
     }
 }
 
-/// Returns (subject, sender) of mail to announce and marks every candidate as
-/// handled, so nothing is ever announced twice.
 fn collect_new_mail(conn: &rusqlite::Connection, account_id: i64, important_only: bool) -> rusqlite::Result<Vec<(String, String)>> {
     const TS_SECONDS: &str = "(CASE WHEN internal_ts > 100000000000 THEN internal_ts / 1000 ELSE internal_ts END)";
     let tx = conn.unchecked_transaction()?;
@@ -436,8 +411,6 @@ fn collect_new_mail(conn: &rusqlite::Connection, account_id: i64, important_only
         .query_row("SELECT COALESCE(notify_ready, 0) FROM accounts WHERE id=?1", [account_id], |r| r.get(0))
         .unwrap_or(1);
     if ready == 0 {
-        // Only a completed sync defines the baseline; after a failed first
-        // attempt (e.g. offline) the initial download is still to come.
         let synced: i64 = tx.query_row(
             "SELECT (SELECT COUNT(*) FROM mailbox_sync_state WHERE account_id=?1)
                   + (SELECT COUNT(*) FROM gmail_sync_state WHERE account_id=?1)",
@@ -453,7 +426,6 @@ fn collect_new_mail(conn: &rusqlite::Connection, account_id: i64, important_only
         return Ok(Vec::new());
     }
 
-    // Anything that is not recent unread inbox mail is settled for good.
     tx.execute(
         &format!(
             "UPDATE emails SET notified=1 WHERE account_id=?1 AND notified=0
@@ -478,11 +450,6 @@ fn collect_new_mail(conn: &rusqlite::Connection, account_id: i64, important_only
     Ok(fresh)
 }
 
-/// Inserts or refreshes downloaded messages. It deliberately does not infer
-/// deletions: an earlier version hid every stored message dated after the
-/// oldest message of an *incremental* batch, so one new mail with an old
-/// Date header made most of the inbox vanish. Removals are now derived from
-/// server UIDs in `apply_sync_result`.
 pub async fn upsert_emails(state: &DbState, account_id: i64, emails: Vec<crate::db::Email>, mailbox: &str) {
     let conn = state.conn.lock().await;
 
@@ -566,11 +533,9 @@ mod tests {
     #[test]
     fn initial_download_is_never_announced() {
         let conn = setup();
-        // Gmail stores milliseconds; this used to pass the "last hour" check forever.
         for i in 0..120 {
             insert(&conn, &format!("m{i}"), (now() - 86_400 * i) * 1000, "");
         }
-        // Nothing synced successfully yet: no baseline, nothing announced.
         assert!(collect_new_mail(&conn, 1, false).unwrap().is_empty());
         conn.execute("INSERT INTO gmail_sync_state (account_id, history_id) VALUES (1, 'h')", []).unwrap();
         assert!(collect_new_mail(&conn, 1, false).unwrap().is_empty());

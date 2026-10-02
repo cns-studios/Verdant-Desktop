@@ -173,10 +173,6 @@ pub fn init_db(conn: &Connection) -> Result<()> {
     let _ = conn.execute("ALTER TABLE emails ADD COLUMN list_unsubscribe TEXT NOT NULL DEFAULT ''", []);
     let _ = conn.execute("ALTER TABLE emails ADD COLUMN unsubscribed INTEGER NOT NULL DEFAULT 0", []);
     let _ = conn.execute("ALTER TABLE emails ADD COLUMN category_id INTEGER", []);
-    // Server UID of an IMAP message and the mailbox that UID belongs to, as
-    // last seen by a sync. Used to detect messages removed on the server.
-    // 0 until the account's first sync has been taken as the baseline for
-    // "new mail" notifications (see background_sync::notify_new_mail).
     let _ = conn.execute("ALTER TABLE accounts ADD COLUMN notify_ready INTEGER NOT NULL DEFAULT 0", []);
     let _ = conn.execute("ALTER TABLE emails ADD COLUMN imap_uid INTEGER", []);
     let _ = conn.execute("ALTER TABLE emails ADD COLUMN imap_uid_mailbox TEXT", []);
@@ -202,16 +198,12 @@ pub fn init_db(conn: &Connection) -> Result<()> {
     let _ = conn.execute("ALTER TABLE inbox_categories ADD COLUMN account_id INTEGER", []);
     let _ = conn.execute("ALTER TABLE inbox_smart_state ADD COLUMN enabled INTEGER NOT NULL DEFAULT 1", []);
 
-    // Reset initialized status for accounts without modern account-scoped categories so they can be freshly organized
     let _ = conn.execute(
         "UPDATE inbox_smart_state SET initialized = 0 WHERE account_id NOT IN (
             SELECT DISTINCT account_id FROM inbox_categories WHERE account_id IS NOT NULL AND slug LIKE 'account-%'
          )",
         [],
     );
-    // Categories are per account now. The old global placeholder set
-    // (account_id NULL) is never shown; drop it together with any message
-    // assignment that points at a category which no longer exists.
     let _ = conn.execute("DELETE FROM inbox_categories WHERE account_id IS NULL", []);
     let _ = conn.execute(
         "UPDATE emails SET category_id=NULL WHERE category_id IS NOT NULL
@@ -259,8 +251,6 @@ pub fn init_db(conn: &Connection) -> Result<()> {
 
     Ok(())
 }
-
-
 
 pub fn get_all_accounts(conn: &Connection) -> Result<Vec<Account>> {
     let mut stmt = conn.prepare(

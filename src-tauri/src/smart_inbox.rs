@@ -1,10 +1,3 @@
-//! Local smart-inbox categorisation. Categories are discovered once from
-//! the whole inbox by clustering on *sender organisation* (domain) plus
-//! newsletter detection via the `List-Unsubscribe` header - a low-noise,
-//! deterministic signal that mirrors how inboxes are naturally organised,
-//! rather than free-text topic modelling on subject-line words (which
-//! proved unreliable in practice: it surfaced sender aliases and stray
-//! stopwords as "categories"). No network dependency, no online learning.
 use crate::state::{get_active_id, DbState};
 use rusqlite::{params, Connection};
 use serde::Serialize;
@@ -50,9 +43,6 @@ fn account_slug(account_id: i64, slug: &str) -> String {
     format!("account-{}-{}", account_id, slug)
 }
 
-/// Well-known personal / webmail providers. Mail *from* these domains is
-/// almost always a person writing to the user directly, so it is grouped
-/// into a single "Personal" bucket rather than one category per provider.
 const PERSONAL_PROVIDERS: &[&str] = &[
     "gmail.com", "googlemail.com", "outlook.com", "hotmail.com", "live.com",
     "msn.com", "yahoo.com", "yahoo.co.uk", "icloud.com", "me.com", "mac.com",
@@ -60,8 +50,6 @@ const PERSONAL_PROVIDERS: &[&str] = &[
     "zoho.com", "fastmail.com", "mail.com",
 ];
 
-/// Extracts the bare email address out of a "Display Name <addr@host>" (or
-/// plain `addr@host`) sender string.
 fn sender_address(sender: &str) -> String {
     if let (Some(start), Some(end)) = (sender.find('<'), sender.rfind('>')) {
         if end > start {
@@ -71,11 +59,8 @@ fn sender_address(sender: &str) -> String {
     sender.trim().to_lowercase()
 }
 
-/// Extracts the domain (host) part of a sender's email address.
 fn sender_domain(sender: &str) -> Option<String> {
     let address = sender_address(sender);
-    // Only real host names: the domain becomes a category name shown in the
-    // UI, and the From header is entirely under the sender's control.
     address
         .rsplit_once('@')
         .map(|(_, d)| d.trim().trim_end_matches('.').to_string())
@@ -83,9 +68,6 @@ fn sender_domain(sender: &str) -> Option<String> {
         .filter(|d| d.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '.'))
 }
 
-/// Reduces a domain such as `notifications.github.com` or `mail.amazon.co.uk`
-/// down to the organisation's brand name ("github", "amazon"), which is the
-/// part that is actually meaningful to a human reading a category label.
 fn domain_brand(domain: &str) -> String {
     const KNOWN_SUFFIXES: &[&str] = &[
         "co.uk", "co.jp", "com.au", "com.br", "co.in", "com.cn", "co.nz",
@@ -98,13 +80,9 @@ fn domain_brand(domain: &str) -> String {
         }
     }
     let mut parts: Vec<&str> = host.split('.').collect();
-    // Drop the TLD label (e.g. ".com", ".net", ".org", ...).
     if parts.len() > 1 {
         parts.pop();
     }
-    // The brand is normally the *last* remaining label (github.com ->
-    // github, notifications.github.com -> github), not the first, since
-    // marketing/notification subdomains sit in front of it.
     parts.pop().unwrap_or(domain).to_string()
 }
 
@@ -118,14 +96,10 @@ fn slugify(text: &str) -> String {
 
 enum SenderClass {
     Personal,
-    /// An organisation's domain, plus whether this message carried a
-    /// `List-Unsubscribe` header (i.e. is bulk mail).
     Domain { domain: String, bulk: bool },
     Unknown,
 }
 
-/// Classifies a single message by its sender, using only information that is
-/// already stored per-message (no adaptive state, no per-sender cache).
 fn classify_sender(sender: &str, list_unsubscribe: &str) -> SenderClass {
     match sender_domain(sender) {
         Some(domain) if PERSONAL_PROVIDERS.contains(&domain.as_str()) => SenderClass::Personal,
@@ -136,11 +110,8 @@ fn classify_sender(sender: &str, list_unsubscribe: &str) -> SenderClass {
 
 const PALETTE: &[&str] = &["#5c7356", "#6d7fa8", "#b58a4a", "#9a6c9c", "#4f8f8a"];
 
-/// A category the analysis would create, with the number of inbox messages
-/// whose sender points to it. Shown to the user before anything is changed.
 #[derive(Debug, Serialize, Clone)]
 pub struct PlannedCategory {
-    /// Unprefixed slug (`org-github`, `personal`, `newsletters`, `other`).
     pub kind: String,
     pub name: String,
     pub icon: String,
@@ -148,19 +119,9 @@ pub struct PlannedCategory {
     pub message_count: i64,
 }
 
-/// Batch clustering step: looks at the whole inbox once and derives 3-5
-/// categories from the sender organisations that actually make up this
-/// inbox, rather than guessing at topics from subject-line words. This is
-/// far more reliable because "who sent it" is a clean, low-noise signal
-/// every mail client already relies on, whereas free-text topic modelling
-/// on a handful of words per subject is not.
 fn plan_categories(conn: &Connection, account_id: i64) -> rusqlite::Result<Vec<PlannedCategory>> {
     let mut total = 0usize;
     let mut personal_count = 0usize;
-    // Per brand: (all messages, bulk messages). Bulk mail counts towards its
-    // sender's brand too; otherwise a sender that mostly sends notifications
-    // (GitHub, Amazon, a bank) could never become its own category and was
-    // swallowed by "Newsletters" instead.
     let mut brand_counts = std::collections::HashMap::<String, (usize, usize)>::new();
     {
         let mut stmt = conn.prepare(
@@ -175,8 +136,6 @@ fn plan_categories(conn: &Connection, account_id: i64) -> rusqlite::Result<Vec<P
             match classify_sender(&sender, &list_unsubscribe) {
                 SenderClass::Personal => personal_count += 1,
                 SenderClass::Domain { domain, bulk } => {
-                    // Merge domains that share a brand (mail.foo.com and
-                    // notifications.foo.com both become "foo").
                     let entry = brand_counts.entry(domain_brand(&domain)).or_default();
                     entry.0 += 1;
                     if bulk {
@@ -189,11 +148,8 @@ fn plan_categories(conn: &Connection, account_id: i64) -> rusqlite::Result<Vec<P
     }
     let mut brands: Vec<(String, (usize, usize))> = brand_counts.into_iter().collect();
     brands.sort_by(|a, b| b.1 .0.cmp(&a.1 .0).then_with(|| a.0.cmp(&b.0)));
-    // A one-off sender is not worth a category of its own.
     let eligible = brands.iter().take_while(|(_, (total, _))| *total >= 2).count();
 
-    // Keep the total at 3-5: up to 3 organisations, plus Personal and
-    // Newsletters when they would not be empty, plus Other.
     let bulk_left = |chosen: usize| brands.iter().skip(chosen).map(|(_, (_, bulk))| bulk).sum::<usize>();
     let mut chosen = eligible.min(2);
     if eligible > 2 && (personal_count == 0 || bulk_left(3) == 0) {
@@ -273,11 +229,6 @@ pub async fn preview_inbox_categories(state: State<'_, Arc<DbState>>) -> Result<
     plan_categories(&conn, account_id).map_err(|e| e.to_string())
 }
 
-/// Maps a message to one of the account's existing categories. Never creates
-/// or renames categories. Order: the category the rest of its conversation is
-/// already in (so a thread never shows up in two categories, and a thread the
-/// user moved stays moved), then the sender's organisation, then Newsletters
-/// or Personal, then Other.
 struct Assigner<'a> {
     conn: &'a Connection,
     account_id: i64,
@@ -331,9 +282,7 @@ impl<'a> Assigner<'a> {
 type PendingRow = (String, String, String, String);
 
 fn pending_rows(conn: &Connection, account_id: i64, only_unassigned: bool) -> rusqlite::Result<Vec<PendingRow>> {
-    // Oldest first, so a conversation takes the category of its first message.
     let sql = if only_unassigned {
-        // Also picks up ids left dangling by a category that no longer exists.
         "SELECT id,thread_id,sender,COALESCE(list_unsubscribe,'') FROM emails
          WHERE account_id=?1 AND mailbox='INBOX' AND (category_id IS NULL
             OR category_id NOT IN (SELECT id FROM inbox_categories WHERE account_id=?1))
@@ -421,8 +370,6 @@ pub async fn get_smart_inbox_enabled(
 ) -> Result<bool, String> {
     let account_id = get_active_id(&state).await;
     let conn = state.conn.lock().await;
-    // No row yet (e.g. an account added this session) means "never turned
-    // off", which is the default.
     Ok(conn.query_row(
         "SELECT COALESCE(enabled, 1) FROM inbox_smart_state WHERE account_id=?1",
         [account_id],
@@ -442,9 +389,6 @@ pub async fn categorize_inbox(state: State<'_, Arc<DbState>>) -> Result<Categori
     result.map_err(|e| e.to_string())
 }
 
-/// Rebuilds all categories in a single transaction. Aborting (or any error)
-/// rolls back, leaving the previous categories exactly as they were instead
-/// of a half-sorted inbox.
 fn categorize_all(conn: &Connection, account_id: i64) -> rusqlite::Result<CategorizeResult> {
     let tx = conn.unchecked_transaction()?;
     dynamic_categories(&tx, account_id)?;
@@ -456,7 +400,6 @@ fn categorize_all(conn: &Connection, account_id: i64) -> rusqlite::Result<Catego
     let mut assigned = 0;
     for (id, thread_id, sender, list_unsubscribe) in rows {
         if CATEGORIZE_ABORT.load(Ordering::SeqCst) {
-            // Dropping `tx` rolls everything back.
             return Ok(CategorizeResult { processed: CATEGORIZE_DONE.load(Ordering::SeqCst), assigned: 0 });
         }
         if let Some(cid) = assigner.choose(&thread_id, &sender, &list_unsubscribe) {
@@ -517,8 +460,6 @@ pub async fn move_emails_to_category(state: State<'_, Arc<DbState>>, email_ids: 
     let account_id = get_active_id(&state).await;
     let conn = state.conn.lock().await;
     let cid = category_id(&conn, account_id, &slug).ok_or_else(|| "Unknown category".to_string())?;
-    // Move whole conversations: a thread split across two categories showed
-    // up in both, and new replies followed whichever half was older.
     for id in email_ids {
         conn.execute(
             "UPDATE emails SET category_id=?1 WHERE account_id=?3 AND mailbox='INBOX' AND thread_id IN (
@@ -535,8 +476,6 @@ pub async fn set_smart_inbox_enabled(state: State<'_, Arc<DbState>>, enabled: bo
     let account_id = get_active_id(&state).await;
     let conn = state.conn.lock().await;
     if enabled {
-        // Re-enabling an already enabled inbox must not throw away its
-        // categories; only a previously disabled one starts from scratch.
         conn.execute(
             "INSERT INTO inbox_smart_state (account_id, initialized, enabled) VALUES (?1,0,1)
              ON CONFLICT(account_id) DO UPDATE SET
@@ -545,9 +484,6 @@ pub async fn set_smart_inbox_enabled(state: State<'_, Arc<DbState>>, enabled: bo
             [account_id],
         ).map_err(|e| e.to_string())?;
     } else {
-        // Disabling is a full reset of assignments and renamed categories,
-        // but the row stays with enabled=0: deleting it let init_db recreate
-        // it as enabled on the next launch, silently turning the feature on.
         conn.execute("UPDATE emails SET category_id=NULL WHERE account_id=?1", [account_id])
             .map_err(|e| e.to_string())?;
         conn.execute("DELETE FROM inbox_categories WHERE account_id=?1", [account_id])
@@ -718,7 +654,6 @@ mod tests {
         insert(&conn, "a", 1, "thread", "GitHub <notifications@github.com>", "", 1);
         insert(&conn, "b", 1, "other", "GitHub <notifications@github.com>", "", 2);
         categorize_all(&conn, 1).unwrap();
-        // A friend replies in the GitHub thread after the initial analysis.
         insert(&conn, "c", 1, "thread", "Friend <friend@gmail.com>", "", 3);
         assign_unassigned(&conn, 1).unwrap();
         assert_eq!(category_of(&conn, "c"), category_of(&conn, "a"));

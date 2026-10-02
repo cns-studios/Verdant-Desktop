@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use serde_json::{json, Value};
 use tauri::State;
-use futures::StreamExt;
+use futures_util::StreamExt;
 
 use crate::db::{clear_account_emails, get_account_by_id, Account, Email};
 use crate::gmail::{
@@ -20,8 +20,6 @@ pub struct MailboxCounts {
     pub archive_total: i64,
     pub trash_total: i64,
 }
-
-
 
 use std::collections::{HashMap, HashSet};
 use std::time::Duration;
@@ -130,10 +128,10 @@ async fn fetch_and_store_messages(
     meta_changes: Vec<(String, LabelDelta)>,
 ) -> Result<(), String> {
     let full_len = full_refs.len();
-    let stream = futures::stream::iter(full_refs.into_iter().map(|m| {
+    let stream = futures_util::stream::iter(full_refs.into_iter().map(|m| {
         FetchJob::Full(m)
     }))
-    .chain(futures::stream::iter(meta_changes.into_iter().map(|(id, delta)| {
+    .chain(futures_util::stream::iter(meta_changes.into_iter().map(|(id, delta)| {
         FetchJob::Label { message_id: id, delta }
     })))
     .map(move |job| {
@@ -285,7 +283,6 @@ async fn fetch_and_store_messages(
         }
     }
     let _ = full_len;
-    // Assign newly synced inbox messages without blocking the sync network work.
     {
         let conn = state.conn.lock().await;
         let _ = crate::smart_inbox::assign_unassigned(&conn, account_id);
@@ -523,8 +520,6 @@ pub async fn sync_gmail_single_mailbox(state: &DbState, account_id: i64, mailbox
     }
 }
 
-
-
 pub async fn sync_mailbox_page_internal_for(
     state: &DbState,
     account_id: i64,
@@ -603,8 +598,6 @@ pub async fn sync_imap_mailbox_internal_for(state: &DbState, account: &Account, 
     }
 }
 
-/// Flag/move operations update the local copy regardless, so a failure on
-/// the server used to go unnoticed until the next sync silently undid it.
 fn log_imap_outcome(outcome: Result<Result<(), String>, tokio::task::JoinError>) {
     match outcome {
         Ok(Ok(())) => {}
@@ -628,8 +621,6 @@ pub async fn sync_mailbox_internal_for(state: &DbState, account_id: i64, mailbox
 
     sync_gmail_single_mailbox(state, account_id, mailbox).await
 }
-
-
 
 #[tauri::command]
 pub async fn sync_emails(state: State<'_, Arc<DbState>>) -> Result<(), String> {
@@ -836,8 +827,6 @@ pub async fn set_email_read_status(
     Ok(())
 }
 
-/// Tells the mail server that a message was read or unread. Failures are
-/// logged, not returned: the local state is what the UI shows.
 async fn push_read_status(state: &State<'_, Arc<DbState>>, account_id: i64, email_id: &str, is_read: bool) {
     let account = {
         let conn = state.conn.lock().await;
@@ -871,9 +860,6 @@ async fn push_read_status(state: &State<'_, Arc<DbState>>, account_id: i64, emai
     }
 }
 
-/// Marks several messages read at once, e.g. everything in an opened
-/// conversation. The local state changes first, so a list refresh that lands
-/// while the server is still being told already shows them as read.
 #[tauri::command]
 pub async fn mark_emails_read(state: State<'_, Arc<DbState>>, email_ids: Vec<String>) -> Result<(), String> {
     let account_id = get_active_id(&state).await;
@@ -953,7 +939,7 @@ pub async fn archive_email(state: State<'_, Arc<DbState>>, email_id: String) -> 
     let account_id = get_active_id(&state).await;
 
     log::info!("[DEBUG] Archiving email {} (account {})", email_id, account_id);
-    
+
     let account = {
         let conn = state.conn.lock().await;
         crate::db::get_account_by_id(&conn, account_id).ok().flatten()
@@ -995,17 +981,17 @@ pub async fn archive_email(state: State<'_, Arc<DbState>>, email_id: String) -> 
     }
 
     let conn = state.conn.lock().await;
-    
+
     if is_gmail {
          let thread_id: Option<String> = conn.query_row(
             "SELECT thread_id FROM emails WHERE id=?1 AND account_id=?2",
             rusqlite::params![email_id, account_id],
             |r| r.get(0)
         ).ok();
-        
+
         if let Some(tid) = thread_id {
             let _ = conn.execute(
-                "UPDATE emails SET mailbox='OTHER', labels=replace(replace(','||labels||',', ',INBOX,', ','), ',,', ',') 
+                "UPDATE emails SET mailbox='OTHER', labels=replace(replace(','||labels||',', ',INBOX,', ','), ',,', ',')
                  WHERE thread_id=?1 AND account_id=?2 AND mailbox='INBOX'",
                 rusqlite::params![tid, account_id],
             );
@@ -1070,10 +1056,10 @@ pub async fn trash_email(state: State<'_, Arc<DbState>>, email_id: String) -> Re
             rusqlite::params![email_id, account_id],
             |r| r.get(0)
         ).ok();
-        
+
         if let Some(tid) = thread_id {
              let _ = conn.execute(
-                "UPDATE emails SET mailbox='OTHER', labels=replace(replace(','||labels||',', ',INBOX,', ','), ',,', ',') 
+                "UPDATE emails SET mailbox='OTHER', labels=replace(replace(','||labels||',', ',INBOX,', ','), ',,', ',')
                  WHERE thread_id=?1 AND account_id=?2 AND mailbox='INBOX' AND id != ?3",
                 rusqlite::params![tid, account_id, email_id],
             );
@@ -1082,9 +1068,9 @@ pub async fn trash_email(state: State<'_, Arc<DbState>>, email_id: String) -> Re
 
     conn.execute(
         "UPDATE emails SET mailbox='TRASH', labels=(
-            CASE WHEN instr(','||labels||',', ',INBOX,') > 0 THEN 
+            CASE WHEN instr(','||labels||',', ',INBOX,') > 0 THEN
                 trim(replace(','||labels||',', ',INBOX,', ','), ',') || ',TRASH'
-            ELSE 
+            ELSE
                 CASE WHEN labels IS NULL OR labels = '' THEN 'TRASH' ELSE labels || ',TRASH' END
             END
         ) WHERE id=?1 AND account_id=?2",
@@ -1293,7 +1279,6 @@ pub async fn permanent_delete_email(state: State<'_, Arc<DbState>>, email_id: St
                 crate::imap_sync::imap_set_flag(&acc_clone, &msg_id, "\\Deleted", true, "TRASH")
             }).await
             .map_err(|e| format!("IMAP task error: {}", e))?
-            // Already gone on the server: still apply the change locally.
             .or_else(|e| if e.starts_with(crate::imap_sync::MESSAGE_NOT_FOUND) { Ok(()) } else { Err(e) })
             .map_err(|e| format!("IMAP delete error: {}", e))?;
         }
@@ -1343,7 +1328,6 @@ pub async fn restore_from_trash(state: State<'_, Arc<DbState>>, email_id: String
                 crate::imap_sync::imap_move_to_folder(&acc_clone, &msg_id, "TRASH", "INBOX")
             }).await
             .map_err(|e| format!("IMAP task error: {}", e))?
-            // Already gone on the server: still apply the change locally.
             .or_else(|e| if e.starts_with(crate::imap_sync::MESSAGE_NOT_FOUND) { Ok(()) } else { Err(e) })
             .map_err(|e| format!("IMAP restore error: {}", e))?;
         }
@@ -1352,9 +1336,9 @@ pub async fn restore_from_trash(state: State<'_, Arc<DbState>>, email_id: String
     let conn = state.conn.lock().await;
     conn.execute(
         "UPDATE emails SET mailbox='INBOX', labels=(
-            CASE WHEN instr(','||labels||',', ',TRASH,') > 0 THEN 
+            CASE WHEN instr(','||labels||',', ',TRASH,') > 0 THEN
                 trim(replace(','||labels||',', ',TRASH,', ','), ',') || ',INBOX'
-            ELSE 
+            ELSE
                 CASE WHEN labels IS NULL OR labels = '' THEN 'INBOX' ELSE labels || ',INBOX' END
             END
         ) WHERE id=?1 AND account_id=?2",
@@ -1396,7 +1380,6 @@ pub async fn move_to_inbox(state: State<'_, Arc<DbState>>, email_id: String) -> 
                 crate::imap_sync::imap_move_to_folder(&acc_clone, &msg_id, "ARCHIVE", "INBOX")
             }).await
             .map_err(|e| format!("IMAP task error: {}", e))?
-            // Already gone on the server: still apply the change locally.
             .or_else(|e| if e.starts_with(crate::imap_sync::MESSAGE_NOT_FOUND) { Ok(()) } else { Err(e) })
             .map_err(|e| format!("IMAP move error: {}", e))?;
         }
@@ -1405,9 +1388,9 @@ pub async fn move_to_inbox(state: State<'_, Arc<DbState>>, email_id: String) -> 
     let conn = state.conn.lock().await;
     conn.execute(
         "UPDATE emails SET mailbox='INBOX', labels=(
-            CASE WHEN instr(','||labels||',', ',ARCHIVE,') > 0 THEN 
+            CASE WHEN instr(','||labels||',', ',ARCHIVE,') > 0 THEN
                 trim(replace(','||labels||',', ',ARCHIVE,', ','), ',') || ',INBOX'
-            ELSE 
+            ELSE
                 CASE WHEN labels IS NULL OR labels = '' THEN 'INBOX' ELSE labels || ',INBOX' END
             END
         ) WHERE id=?1 AND account_id=?2",

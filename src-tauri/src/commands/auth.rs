@@ -19,7 +19,6 @@ pub struct UserProfile {
     pub degraded: bool,
 }
 
-
 #[tauri::command]
 pub async fn connect_gmail(app: tauri::AppHandle, state: State<'_, Arc<DbState>>) -> Result<(), String> {
     use crate::commands::accounts::add_gmail_account;
@@ -32,14 +31,13 @@ pub async fn auth_status(state: State<'_, Arc<DbState>>) -> Result<AuthStatus, S
     let active_id = get_active_id(&state).await;
 
     let connected = if active_id == 0 {
-        
+
         let conn = state.conn.lock().await;
         !get_all_accounts(&conn).unwrap_or_default().is_empty()
     } else {
         true
     };
 
-    
     if active_id == 0 && connected {
         let conn = state.conn.lock().await;
         if let Some(first) = get_all_accounts(&conn).unwrap_or_default().into_iter().next() {
@@ -68,12 +66,10 @@ pub async fn logout(state: State<'_, Arc<DbState>>) -> Result<(), String> {
         tokens.remove(&active_id);
     }
 
-    
     {
         let conn = state.conn.lock().await;
         crate::db::delete_account(&conn, active_id).map_err(|e| e.to_string())?;
 
-        
         let remaining = get_all_accounts(&conn).unwrap_or_default();
         if let Some(next) = remaining.first() {
             set_active_account(&conn, next.id).map_err(|e| e.to_string())?;

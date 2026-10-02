@@ -153,7 +153,7 @@ pub async fn save_draft(
         let draft_id = draft_id.clone()
             .filter(|d| !d.trim().is_empty())
             .unwrap_or_else(|| format!("local-draft-{}", chrono::Utc::now().timestamp_millis()));
-        
+
         let composite_id = format!("{}:draft:{}", account_id, draft_id);
         let now = chrono::Utc::now();
         let date_str = now.format("%a, %d %b %Y %H:%M:%S +0000").to_string();

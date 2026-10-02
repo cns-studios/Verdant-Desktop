@@ -12,8 +12,6 @@ pub struct AppConfig {
     pub sidebar_collapsed: bool,
     pub show_notifications: bool,
     pub notify_important_only: bool,
-    /// Interface language, so text shown outside the window (desktop
-    /// notifications) matches the app.
     pub language: String,
 }
 

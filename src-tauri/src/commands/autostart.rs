@@ -17,7 +17,6 @@ pub async fn autostart_is_enabled(app: tauri::AppHandle) -> Result<bool, String>
     is_enabled_impl(&app)
 }
 
-
 fn target_exe(app: &tauri::AppHandle) -> Result<String, String> {
     #[cfg(target_os = "linux")]
     if let Some(appimage) = app
@@ -37,7 +36,6 @@ fn target_exe(app: &tauri::AppHandle) -> Result<String, String> {
 fn app_key() -> &'static str {
     "Verdant-Desktop"
 }
-
 
 #[cfg(target_os = "linux")]
 fn enable_impl(app: &tauri::AppHandle) -> Result<(), String> {
@@ -141,8 +139,6 @@ fn run_systemctl(args: &[&str]) -> Result<String, String> {
     Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
 }
 
-
-
 #[cfg(target_os = "macos")]
 fn enable_impl(app: &tauri::AppHandle) -> Result<(), String> {
     let dir = launch_agents_dir()?;
@@ -211,7 +207,6 @@ fn launch_agents_dir() -> Result<PathBuf, String> {
     Ok(PathBuf::from(home).join("Library").join("LaunchAgents"))
 }
 
-
 #[cfg(target_os = "windows")]
 fn enable_impl(app: &tauri::AppHandle) -> Result<(), String> {
     use winreg::enums::*;
@@ -261,7 +256,6 @@ fn is_enabled_impl(_app: &tauri::AppHandle) -> Result<bool, String> {
 
     Ok(key.get_value::<String, _>(app_key()).is_ok())
 }
-
 
 #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
 fn enable_impl(_app: &tauri::AppHandle) -> Result<(), String> {

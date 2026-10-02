@@ -141,11 +141,11 @@ async fn fetch_latest_release() -> Result<Value, String> {
     let mut request = client.get(url)
         .header(reqwest::header::USER_AGENT, "verdant-desktop-updater")
         .header(reqwest::header::ACCEPT, "application/vnd.github+json");
-    
+
     if let Ok(token) = env::var("GH_TOKEN") {
         request = request.header("Authorization", format!("token {}", token));
     }
-    
+
     let response = request.send().await.map_err(|e| e.to_string())?;
     if !response.status().is_success() {
         return Err(format!("GitHub release lookup failed: {}", response.status()));
@@ -159,11 +159,11 @@ async fn fetch_latest_nightly_release() -> Result<Value, String> {
     let mut request = client.get(url)
         .header(reqwest::header::USER_AGENT, "verdant-desktop-updater")
         .header(reqwest::header::ACCEPT, "application/vnd.github+json");
-    
+
     if let Ok(token) = env::var("GH_TOKEN") {
         request = request.header("Authorization", format!("token {}", token));
     }
-    
+
     let response = request.send().await.map_err(|e| e.to_string())?;
     if !response.status().is_success() {
         return Err(format!("GitHub nightly lookup failed: {}", response.status()));
@@ -322,7 +322,7 @@ fn run_elevated_command(bin: &str, args: &[&str]) -> Result<(), String> {
         let mut cmd = std::process::Command::new(term);
         for arg in exec_args { cmd.arg(arg); }
         cmd.arg(&full_cmd);
-        
+
         if let Ok(mut child) = cmd.spawn() {
             let s = child.wait().map_err(|e| e.to_string())?;
             if s.success() { return Ok(()); }
@@ -370,7 +370,7 @@ fn extract_changelog_for_version(changelog: &str, version: &str) -> Option<Strin
 #[tauri::command]
 pub fn get_changelog(version: String) -> Result<ChangelogEntry, String> {
     let changelog_content = include_str!("../../../CHANGELOG.md");
-    
+
     let changelog_text = extract_changelog_for_version(changelog_content, &version)
         .ok_or_else(|| format!("No changelog entry found for version {}", version))?;
 

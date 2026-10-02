@@ -1,31 +1,27 @@
-use oauth2::{
-    AuthType,
-    basic::BasicClient,
-    reqwest::async_http_client,
-    AuthUrl,
-    ClientId,
-    ClientSecret,
-    CsrfToken,
-    PkceCodeChallenge,
-    PkceCodeVerifier,
-    RedirectUrl,
-    RefreshToken,
-    Scope,
-    TokenResponse,
-    TokenUrl,
-};
-use tiny_http::{Header, Response, Server};
-use url::Url;
+use aes_gcm::aead::rand_core::RngCore;
+use aes_gcm::aead::OsRng;
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use base64::Engine as _;
+use sha2::{Digest, Sha256};
 use std::collections::HashMap;
-use std::time::{SystemTime, Duration, UNIX_EPOCH};
+use std::io::{Read, Write};
+use std::net::{TcpListener, TcpStream};
+use std::time::{Duration, Instant};
+use url::Url;
 
 use crate::db::StoredToken;
+use crate::state::now_epoch;
 
 const AUTH_URL: &str = "https://accounts.google.com/o/oauth2/v2/auth";
 const TOKEN_URL: &str = "https://oauth2.googleapis.com/token";
+const SCOPE: &str = "https://mail.google.com/";
 const REDIRECT_PORT: u16 = 8765;
 const AUTH_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 const DRAIN_GRACE: Duration = Duration::from_secs(2);
+const ACCEPT_POLL: Duration = Duration::from_millis(50);
+const REQUEST_READ_TIMEOUT: Duration = Duration::from_secs(5);
+const MAX_REQUEST_BYTES: usize = 16 * 1024;
+const TIMEOUT_MESSAGE: &str = "Authentication timed out. No callback received; please try again.";
 
 fn read_non_empty(value: Option<String>) -> Option<String> {
     value.and_then(|v| {
@@ -50,49 +46,80 @@ pub fn has_google_client_id_configured() -> bool {
     configured_google_client_id().is_some()
 }
 
-fn now_epoch() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0)
+fn redirect_uri() -> String {
+    format!("http://127.0.0.1:{}/callback", REDIRECT_PORT)
 }
 
-fn google_client() -> Result<BasicClient, String> {
-    let client_id = configured_google_client_id()
-        .ok_or_else(|| "Missing GOOGLE_CLIENT_ID".to_string())?;
+fn random_token(bytes: usize) -> String {
+    let mut buf = vec![0u8; bytes];
+    OsRng.fill_bytes(&mut buf);
+    URL_SAFE_NO_PAD.encode(buf)
+}
 
-    let client_secret = configured_google_client_secret().map(ClientSecret::new);
-    let has_client_secret = client_secret.is_some();
+fn pkce_challenge(verifier: &str) -> String {
+    URL_SAFE_NO_PAD.encode(Sha256::digest(verifier.as_bytes()))
+}
 
-    let auth_url = AuthUrl::new(AUTH_URL.to_string()).map_err(|e| e.to_string())?;
-    let token_url = TokenUrl::new(TOKEN_URL.to_string()).map_err(|e| e.to_string())?;
-    let redirect = RedirectUrl::new(format!("http://127.0.0.1:{}/callback", REDIRECT_PORT))
+fn authorize_url(client_id: &str, state: &str, challenge: &str) -> Result<Url, String> {
+    let redirect = redirect_uri();
+    Url::parse_with_params(
+        AUTH_URL,
+        &[
+            ("response_type", "code"),
+            ("client_id", client_id),
+            ("redirect_uri", redirect.as_str()),
+            ("scope", SCOPE),
+            ("state", state),
+            ("code_challenge", challenge),
+            ("code_challenge_method", "S256"),
+            ("access_type", "offline"),
+            ("prompt", "consent"),
+        ],
+    )
+    .map_err(|e| e.to_string())
+}
+
+#[derive(serde::Deserialize)]
+struct TokenResponse {
+    access_token: String,
+    refresh_token: Option<String>,
+    expires_in: Option<i64>,
+}
+
+async fn request_token(mut params: Vec<(&'static str, String)>) -> Result<StoredToken, String> {
+    let client_id = configured_google_client_id().ok_or_else(|| "Missing GOOGLE_CLIENT_ID".to_string())?;
+    params.push(("client_id", client_id));
+    if let Some(secret) = configured_google_client_secret() {
+        params.push(("client_secret", secret));
+    }
+
+    let res = reqwest::Client::new()
+        .post(TOKEN_URL)
+        .form(&params)
+        .send()
+        .await
         .map_err(|e| e.to_string())?;
 
-    let client = BasicClient::new(
-        ClientId::new(client_id),
-        client_secret,
-        auth_url,
-        Some(token_url),
-    )
-    .set_redirect_uri(redirect);
+    if !res.status().is_success() {
+        let status = res.status();
+        let body = res.text().await.unwrap_or_default();
+        let detail = serde_json::from_str::<serde_json::Value>(&body)
+            .ok()
+            .and_then(|v| {
+                v.get("error_description")
+                    .or_else(|| v.get("error"))
+                    .and_then(|d| d.as_str().map(str::to_string))
+            })
+            .unwrap_or(body);
+        return Err(format!("Google token request failed ({}): {}", status.as_u16(), detail));
+    }
 
-    let client = if has_client_secret { client } else { client.set_auth_type(AuthType::RequestBody) };
-    Ok(client)
-}
-
-fn build_response(body: String, status: u16) -> Response<std::io::Cursor<Vec<u8>>> {
-    let mut response = Response::from_string(body).with_status_code(status);
-    if let Ok(header) = Header::from_bytes(&b"Content-Type"[..], &b"text/html; charset=utf-8"[..]) {
-        response = response.with_header(header);
-    }
-    if let Ok(header) = Header::from_bytes(&b"Cache-Control"[..], &b"no-store"[..]) {
-        response = response.with_header(header);
-    }
-    if let Ok(header) = Header::from_bytes(&b"Connection"[..], &b"close"[..]) {
-        response = response.with_header(header);
-    }
-    response
+    let token = res.json::<TokenResponse>().await.map_err(|e| e.to_string())?;
+    Ok(StoredToken {
+        access_token: token.access_token,
+        refresh_token: token.refresh_token,
+        expires_at_epoch: token.expires_in.map(|secs| now_epoch() + secs),
+    })
 }
 
 fn error_page(title: &str, message: &str) -> String {
@@ -106,90 +133,109 @@ fn error_page(title: &str, message: &str) -> String {
     )
 }
 
-fn respond_ok(request: tiny_http::Request, html: &str) {
-    let _ = request.respond(build_response(html.to_string(), 200));
+struct CallbackRequest {
+    stream: TcpStream,
+    target: String,
 }
 
-fn respond_no_content(request: tiny_http::Request) {
-    let mut response = Response::empty(204);
-    if let Ok(header) = Header::from_bytes(&b"Connection"[..], &b"close"[..]) {
-        response = response.with_header(header);
+impl CallbackRequest {
+    fn respond(mut self, status: &str, body: &str) {
+        let head = format!(
+            "HTTP/1.1 {status}\r\nContent-Type: text/html; charset=utf-8\r\nCache-Control: no-store\r\nConnection: close\r\nContent-Length: {}\r\n\r\n",
+            body.len()
+        );
+        let _ = self.stream.write_all(head.as_bytes());
+        let _ = self.stream.write_all(body.as_bytes());
+        let _ = self.stream.flush();
     }
-    let _ = request.respond(response);
+
+    fn respond_no_content(self) {
+        self.respond("204 No Content", "");
+    }
+
+    fn respond_error(self, title: &str, message: &str) {
+        self.respond("400 Bad Request", &error_page(title, message));
+    }
 }
 
-fn respond_error(request: tiny_http::Request, title: &str, message: &str) {
-    let _ = request.respond(build_response(error_page(title, message), 400));
+fn read_request_target(stream: &mut TcpStream) -> Option<String> {
+    stream.set_nonblocking(false).ok()?;
+    stream.set_read_timeout(Some(REQUEST_READ_TIMEOUT)).ok()?;
+    let mut data = Vec::new();
+    let mut chunk = [0u8; 1024];
+    while !data.windows(4).any(|w| w == b"\r\n\r\n") && data.len() < MAX_REQUEST_BYTES {
+        match stream.read(&mut chunk) {
+            Ok(0) | Err(_) => break,
+            Ok(n) => data.extend_from_slice(&chunk[..n]),
+        }
+    }
+    let text = String::from_utf8_lossy(&data);
+    let mut parts = text.lines().next()?.split_whitespace();
+    let _method = parts.next()?;
+    parts.next().map(str::to_string)
 }
 
-fn wait_for_auth_code(server: &Server, expected_state: String) -> Result<String, String> {
-    let deadline = SystemTime::now() + AUTH_TIMEOUT;
-    let success_page = include_str!("../assets/oauth-success.html").to_string();
+fn next_request(listener: &TcpListener, deadline: Instant) -> Option<CallbackRequest> {
+    loop {
+        match listener.accept() {
+            Ok((mut stream, _)) => {
+                if let Some(target) = read_request_target(&mut stream) {
+                    return Some(CallbackRequest { stream, target });
+                }
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                if Instant::now() >= deadline {
+                    return None;
+                }
+                std::thread::sleep(ACCEPT_POLL);
+            }
+            Err(_) => return None,
+        }
+    }
+}
+
+fn wait_for_auth_code(listener: &TcpListener, expected_state: &str) -> Result<String, String> {
+    let deadline = Instant::now() + AUTH_TIMEOUT;
+    let success_page = include_str!("../assets/oauth-success.html");
 
     loop {
-        let remaining = deadline
-            .duration_since(SystemTime::now())
-            .unwrap_or(Duration::ZERO);
+        let request = next_request(listener, deadline).ok_or_else(|| TIMEOUT_MESSAGE.to_string())?;
 
-        if remaining.is_zero() {
-            return Err("Authentication timed out. No callback received; please try again.".to_string());
-        }
-
-        let request = server
-            .recv_timeout(remaining)
-            .map_err(|e| format!("OAuth callback server error: {}", e))?
-            .ok_or_else(|| "Authentication timed out. No callback received; please try again.".to_string())?;
-
-        let url = Url::parse(&format!("http://127.0.0.1:{}{}", REDIRECT_PORT, request.url()))
+        let url = Url::parse(&format!("http://127.0.0.1:{}{}", REDIRECT_PORT, request.target))
             .map_err(|e| format!("Invalid callback URL: {}", e))?;
 
         if url.path() != "/callback" {
-            respond_no_content(request);
+            request.respond_no_content();
             continue;
         }
 
         let query: HashMap<_, _> = url.query_pairs().into_owned().collect();
 
         if let Some(error) = query.get("error") {
-            respond_error(request, "Sign-in failed", &format!("Google returned an error: {}.", error));
+            request.respond_error("Sign-in failed", &format!("Google returned an error: {}.", error));
             return Err(format!("Google sign-in failed: {}", error));
         }
 
-        let state = match query.get("state").cloned() {
-            Some(state) => state,
-            None => {
-                respond_error(request, "Sign-in failed", "The callback was missing the state parameter.");
-                return Err("OAuth state missing in callback".to_string());
-            }
+        let Some(state) = query.get("state") else {
+            request.respond_error("Sign-in failed", "The callback was missing the state parameter.");
+            return Err("OAuth state missing in callback".to_string());
         };
 
         if state != expected_state {
-            respond_error(request, "Sign-in failed", "The state parameter did not match. Please try again.");
+            request.respond_error("Sign-in failed", "The state parameter did not match. Please try again.");
             return Err("OAuth state mismatch".to_string());
         }
 
-        let code = match query.get("code").cloned() {
-            Some(code) => code,
-            None => {
-                respond_error(request, "Sign-in failed", "The callback was missing the authorization code.");
-                return Err("Authorization code missing in callback".to_string());
-            }
+        let Some(code) = query.get("code").cloned() else {
+            request.respond_error("Sign-in failed", "The callback was missing the authorization code.");
+            return Err("Authorization code missing in callback".to_string());
         };
 
-        respond_ok(request, &success_page);
+        request.respond("200 OK", success_page);
 
-        let drain_deadline = SystemTime::now() + DRAIN_GRACE;
-        loop {
-            let drain_remaining = drain_deadline
-                .duration_since(SystemTime::now())
-                .unwrap_or(Duration::ZERO);
-            if drain_remaining.is_zero() {
-                break;
-            }
-            match server.recv_timeout(drain_remaining) {
-                Ok(Some(extra)) => respond_no_content(extra),
-                _ => break,
-            }
+        let drain_deadline = Instant::now() + DRAIN_GRACE;
+        while let Some(extra) = next_request(listener, drain_deadline) {
+            extra.respond_no_content();
         }
 
         return Ok(code);
@@ -197,65 +243,102 @@ fn wait_for_auth_code(server: &Server, expected_state: String) -> Result<String,
 }
 
 pub async fn login_interactive() -> Result<StoredToken, String> {
-    let client = google_client()?;
+    let client_id = configured_google_client_id().ok_or_else(|| "Missing GOOGLE_CLIENT_ID".to_string())?;
 
-    let server = Server::http(("127.0.0.1", REDIRECT_PORT)).map_err(|e| {
+    let listener = TcpListener::bind(("127.0.0.1", REDIRECT_PORT)).map_err(|e| {
         format!(
             "Could not open the OAuth callback port {} ({}). Another instance of Verdant or another app may be using it. Please close it and try again.",
             REDIRECT_PORT, e
         )
     })?;
+    listener.set_nonblocking(true).map_err(|e| e.to_string())?;
 
-    let (pkce_challenge, pkce_verifier) = PkceCodeChallenge::new_random_sha256();
-
-    let (auth_url, csrf_token) = client
-        .authorize_url(CsrfToken::new_random)
-        .add_scope(Scope::new("https://mail.google.com/".to_string()))
-        .add_extra_param("access_type", "offline")
-        .add_extra_param("prompt", "consent")
-        .set_pkce_challenge(pkce_challenge)
-        .url();
+    let verifier = random_token(32);
+    let state = random_token(16);
+    let auth_url = authorize_url(&client_id, &state, &pkce_challenge(&verifier))?;
 
     open::that(auth_url.as_str()).map_err(|e| e.to_string())?;
 
-    let state = csrf_token.secret().to_string();
-    let code = tokio::task::spawn_blocking(move || wait_for_auth_code(&server, state))
+    let code = tokio::task::spawn_blocking(move || wait_for_auth_code(&listener, &state))
         .await
         .map_err(|e| e.to_string())??;
 
-    let token_result = client
-        .exchange_code(oauth2::AuthorizationCode::new(code))
-        .set_pkce_verifier(PkceCodeVerifier::new(pkce_verifier.secret().to_string()))
-        .request_async(async_http_client)
-        .await
-        .map_err(|e| e.to_string())?;
-
-    let expires = token_result.expires_in()
-        .map(|d| now_epoch() + d.as_secs() as i64);
-
-    Ok(StoredToken {
-        access_token: token_result.access_token().secret().to_string(),
-        refresh_token: token_result.refresh_token().map(|t| t.secret().to_string()),
-        expires_at_epoch: expires,
-    })
+    request_token(vec![
+        ("grant_type", "authorization_code".to_string()),
+        ("code", code),
+        ("redirect_uri", redirect_uri()),
+        ("code_verifier", verifier),
+    ])
+    .await
 }
 
 pub async fn refresh_access_token(refresh_token: &str) -> Result<StoredToken, String> {
-    let client = google_client()?;
-    let token_result = client
-        .exchange_refresh_token(&RefreshToken::new(refresh_token.to_string()))
-        .request_async(async_http_client)
-        .await
-        .map_err(|e| e.to_string())?;
+    let mut token = request_token(vec![
+        ("grant_type", "refresh_token".to_string()),
+        ("refresh_token", refresh_token.to_string()),
+    ])
+    .await?;
+    if token.refresh_token.is_none() {
+        token.refresh_token = Some(refresh_token.to_string());
+    }
+    Ok(token)
+}
 
-    let expires = token_result.expires_in()
-        .map(|d| now_epoch() + d.as_secs() as i64);
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    Ok(StoredToken {
-        access_token: token_result.access_token().secret().to_string(),
-        refresh_token: token_result.refresh_token()
-            .map(|t| t.secret().to_string())
-            .or(Some(refresh_token.to_string())),
-        expires_at_epoch: expires,
-    })
+    #[test]
+    fn pkce_challenge_matches_rfc7636_example() {
+        assert_eq!(
+            pkce_challenge("dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"),
+            "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"
+        );
+    }
+
+    #[test]
+    fn authorize_url_carries_pkce_and_offline_access() {
+        let url = authorize_url("client", "st", "ch").unwrap();
+        let q: HashMap<_, _> = url.query_pairs().into_owned().collect();
+        assert_eq!(q["client_id"], "client");
+        assert_eq!(q["state"], "st");
+        assert_eq!(q["code_challenge"], "ch");
+        assert_eq!(q["code_challenge_method"], "S256");
+        assert_eq!(q["access_type"], "offline");
+        assert_eq!(q["redirect_uri"], "http://127.0.0.1:8765/callback");
+    }
+
+    fn get(port: u16, target: &str) -> String {
+        let mut stream = TcpStream::connect(("127.0.0.1", port)).unwrap();
+        write!(stream, "GET {target} HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n").unwrap();
+        let mut out = String::new();
+        let _ = stream.read_to_string(&mut out);
+        out
+    }
+
+    #[test]
+    fn callback_listener_returns_the_code_for_a_matching_state() {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let client = std::thread::spawn(move || {
+            let ignored = get(port, "/favicon.ico");
+            let ok = get(port, "/callback?state=abc&code=the-code");
+            (ignored, ok)
+        });
+        assert_eq!(wait_for_auth_code(&listener, "abc").unwrap(), "the-code");
+        let (ignored, ok) = client.join().unwrap();
+        assert!(ignored.starts_with("HTTP/1.1 204"));
+        assert!(ok.starts_with("HTTP/1.1 200"));
+    }
+
+    #[test]
+    fn callback_listener_rejects_a_wrong_state() {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let client = std::thread::spawn(move || get(port, "/callback?state=evil&code=x"));
+        assert!(wait_for_auth_code(&listener, "abc").is_err());
+        assert!(client.join().unwrap().starts_with("HTTP/1.1 400"));
+    }
 }

@@ -46,10 +46,25 @@ fn write_fallback_key(key: &[u8]) -> Result<(), String> {
     result
 }
 
+#[cfg(target_os = "linux")]
+fn keyring_entry() -> Result<keyring_core::Entry, String> {
+    if keyring_core::get_default_store().is_none() {
+        let store = zbus_secret_service_keyring_store::Store::new()
+            .map_err(|e| format!("keyring store error: {}", e))?;
+        keyring_core::set_default_store(store);
+    }
+    keyring_core::Entry::new(KEYRING_SERVICE, KEYRING_USER)
+        .map_err(|e| format!("keyring entry error: {}", e))
+}
+
+#[cfg(not(target_os = "linux"))]
+fn keyring_entry() -> Result<keyring::Entry, String> {
+    keyring::Entry::new(KEYRING_SERVICE, KEYRING_USER)
+        .map_err(|e| format!("keyring entry error: {}", e))
+}
+
 fn keyring_key() -> Result<Option<Vec<u8>>, String> {
-    let entry = keyring::Entry::new(KEYRING_SERVICE, KEYRING_USER)
-        .map_err(|e| format!("keyring entry error: {}", e))?;
-    match entry.get_password() {
+    match keyring_entry()?.get_password() {
         Ok(hex_key) => hex::decode(&hex_key).map(Some).map_err(|e| e.to_string()),
         Err(e) => Err(format!("keyring get error: {}", e)),
     }
@@ -66,9 +81,6 @@ fn valid_key(key: Vec<u8>) -> Result<Vec<u8>, String> {
 fn get_or_create_key() -> Result<Vec<u8>, String> {
     let _guard = KEY_GUARD.lock().unwrap_or_else(|p| p.into_inner());
 
-    // Prefer the keyring when it is available. A fallback file may have been
-    // created during a temporary keyring outage and must not shadow the
-    // existing keyring key.
     if let Ok(Some(key)) = keyring_key() {
         if let Ok(key) = valid_key(key) {
             return Ok(key);
@@ -82,7 +94,7 @@ fn get_or_create_key() -> Result<Vec<u8>, String> {
     let mut key_bytes = vec![0u8; 32];
     OsRng.fill_bytes(&mut key_bytes);
 
-    match keyring::Entry::new(KEYRING_SERVICE, KEYRING_USER) {
+    match keyring_entry() {
         Ok(entry) if entry.set_password(&hex::encode(&key_bytes)).is_ok() => Ok(key_bytes),
         _ => {
             write_fallback_key(&key_bytes)?;

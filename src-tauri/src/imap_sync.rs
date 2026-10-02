@@ -30,14 +30,8 @@ impl ImapCredentials {
 type TlsSession = imap::Session<native_tls::TlsStream<std::net::TcpStream>>;
 
 const CONNECT_TIMEOUT_SECS: u64 = 8;
-/// Read/write timeout once logged in. FETCHing full bodies or a server-side
-/// SEARCH on a large mailbox routinely takes longer than the connect timeout,
-/// and hitting it mid-response surfaced as random "flaky" sync failures.
 const SESSION_IO_TIMEOUT_SECS: u64 = 60;
-/// How many of the newest messages per mailbox get their flags and presence
-/// re-checked on every sync (cheap: UID + FLAGS + ENVELOPE only).
 const RECONCILE_WINDOW: u32 = 200;
-/// How many recent messages to download when there is no usable sync state.
 const INITIAL_WINDOW: u32 = 50;
 
 pub fn connect_with_timeout(creds: &ImapCredentials, timeout_secs: u64) -> Result<TlsSession, String> {
@@ -52,9 +46,6 @@ pub fn connect_with_timeout(creds: &ImapCredentials, timeout_secs: u64) -> Resul
     if addrs.is_empty() {
         return Err("DNS resolution returned no addresses".to_string());
     }
-    // Try every resolved address: hosts commonly publish an AAAA record that
-    // is unreachable on the user's network, and only trying the first one
-    // made connecting fail whenever the resolver happened to list IPv6 first.
     let mut last_err = None;
     let tcp = addrs
         .iter()
@@ -69,8 +60,6 @@ pub fn connect_with_timeout(creds: &ImapCredentials, timeout_secs: u64) -> Resul
 
     let _ = tcp.set_read_timeout(Some(Duration::from_secs(timeout_secs)));
     let _ = tcp.set_write_timeout(Some(Duration::from_secs(timeout_secs)));
-    // Socket timeouts are per-socket, so a cloned handle lets us relax them
-    // after login even though the stream itself moves into the TLS wrapper.
     let socket = tcp.try_clone().ok();
 
     let tls_stream = tls.connect(&creds.imap_host, tcp)
@@ -94,8 +83,6 @@ pub fn retry_connect(creds: &ImapCredentials) -> Result<TlsSession, String> {
     for attempt in 0..2 {
         match connect_with_timeout(creds, CONNECT_TIMEOUT_SECS) {
             Ok(session) => return Ok(session),
-            // Retrying a rejected password only brings the account closer to
-            // the provider's lockout threshold.
             Err(e) if e.starts_with("IMAP login error") => return Err(e),
             Err(e) => {
                 last_err = e;
@@ -108,7 +95,6 @@ pub fn retry_connect(creds: &ImapCredentials) -> Result<TlsSession, String> {
     Err(format!("IMAP connect failed after 2 retries: {}", last_err))
 }
 
-/// A mailbox as returned by LIST, with its RFC 6154 special-use role.
 pub struct Folder {
     pub name: String,
     special: Option<&'static str>,
@@ -151,7 +137,6 @@ pub fn list_folders(session: &mut TlsSession) -> Result<Vec<Folder>, String> {
         .collect())
 }
 
-/// Decodes an RFC 3501 "modified UTF-7" mailbox name (e.g. `Entw&APw-rfe`).
 fn decode_imap_utf7(input: &str) -> String {
     use base64::Engine as _;
     let mut out = String::new();
@@ -199,8 +184,6 @@ pub fn imap_folder_for_mailbox(mailbox: &str, folders: &[Folder]) -> Option<Stri
         }
     }
 
-    // Servers that advertise special-use flags tell us exactly which folder
-    // is which, independent of the UI language the mailbox was created in.
     let roles: &[&str] = match target.as_str() {
         "SENT" => &["SENT"],
         "DRAFT" => &["DRAFT"],
@@ -324,10 +307,10 @@ fn collect_embedded_images(parsed: &mailparse::ParsedMail) -> std::collections::
 fn collect_images_recursive(parsed: &mailparse::ParsedMail, images: &mut std::collections::HashMap<String, String>) {
     for part in &parsed.subparts {
         let ct = part.ctype.mimetype.to_lowercase();
-        
+
         if let Some(content_id) = part.headers.get_first_value("Content-ID") {
             let cid = content_id.trim().trim_matches('<').trim_matches('>').to_string();
-            
+
             if ct.starts_with("image/") {
                 if let Ok(body) = part.get_body_raw() {
                     use base64::Engine as _;
@@ -336,7 +319,7 @@ fn collect_images_recursive(parsed: &mailparse::ParsedMail, images: &mut std::co
                 }
             }
         }
-        
+
         if !part.subparts.is_empty() {
             collect_images_recursive(part, images);
         }
@@ -345,12 +328,12 @@ fn collect_images_recursive(parsed: &mailparse::ParsedMail, images: &mut std::co
 
 fn replace_cid_with_data_uris(html: &str, images: &std::collections::HashMap<String, String>) -> String {
     let mut result = html.to_string();
-    
+
     for (cid, data_uri) in images.iter() {
         let cid_ref = format!("cid:{}", cid);
         result = result.replace(&cid_ref, data_uri);
     }
-    
+
     result
 }
 
@@ -437,8 +420,6 @@ fn rfc2822_to_epoch(date_str: &str) -> i64 {
     0
 }
 
-/// Downloads the newest `max_messages` of a mailbox in full. Used as the
-/// fallback when incremental sync fails; it reconciles nothing.
 pub fn sync_imap_mailbox(
     account: &Account,
     mailbox_label: &str,
@@ -477,7 +458,6 @@ fn strip_noise(input: &str) -> String {
     )).collect()
 }
 
-/// Server-side state of one message inside the reconcile window.
 pub struct WindowEntry {
     pub uid: u32,
     pub id: String,
@@ -485,9 +465,6 @@ pub struct WindowEntry {
     pub starred: bool,
 }
 
-/// Every message the server holds in a mailbox with a UID >= `min_uid`.
-/// Anything stored locally for that mailbox in the same UID range that is
-/// not listed here has been deleted or moved away on the server.
 pub struct ReconcileWindow {
     pub min_uid: u32,
     pub entries: Vec<WindowEntry>,
@@ -497,14 +474,10 @@ pub struct SyncResult {
     pub emails: Vec<Email>,
     pub highest_uid: u32,
     pub uidvalidity: u32,
-    /// True when previously stored UIDs for this mailbox are meaningless
-    /// (first sync or UIDVALIDITY changed) and must be forgotten.
     pub uids_reset: bool,
     pub window: Option<ReconcileWindow>,
 }
 
-/// Local id for an IMAP message. Must stay stable across versions: it is the
-/// primary key messages are stored under.
 fn imap_email_id(account_id: i64, message_id: Option<&str>, mailbox_label: &str, uid: &str) -> String {
     let message_id = message_id
         .map(str::to_string)
@@ -593,9 +566,6 @@ fn parse_imap_messages(
     (emails, entries)
 }
 
-/// Lightweight pass over the newest `RECONCILE_WINDOW` messages: UID, flags
-/// and Message-ID only. This is what lets read/star changes made on another
-/// device, and messages deleted or moved elsewhere, show up in Verdant.
 fn fetch_reconcile_window(
     session: &mut TlsSession,
     account: &Account,
@@ -621,7 +591,6 @@ fn fetch_reconcile_window(
             starred: has_flag(msg, &imap::types::Flag::Flagged),
         });
     }
-    // The window only proves absence from its lowest UID upwards.
     let min_uid = entries.iter().map(|e| e.uid).min().unwrap_or(0);
     Ok(ReconcileWindow { min_uid, entries })
 }
@@ -642,9 +611,6 @@ pub fn sync_imap_mailbox_incremental(
     result
 }
 
-/// Syncs several mailboxes over a single login. Providers like GMX, web.de
-/// and Outlook throttle or temporarily block accounts that log in too often;
-/// one session per mailbox per cycle was a steady source of failed syncs.
 pub fn sync_imap_mailboxes(
     account: &Account,
     mailboxes: &[(String, Option<u32>, Option<u32>)],
@@ -699,7 +665,6 @@ fn sync_mailbox_in_session(
     }
 
     if total == 0 {
-        // Empty on the server: everything we still show locally is stale.
         return Ok(SyncResult {
             emails: vec![],
             highest_uid: stored_highest_uid.filter(|_| state_valid).unwrap_or(0),
@@ -714,9 +679,6 @@ fn sync_mailbox_in_session(
         let uidnext = mailbox_info.uid_next.unwrap_or(0);
         let mut emails = Vec::new();
         let mut highest_uid = s_uid;
-        // UIDNEXT can be missing; in that case just ask. A `N:*` range where
-        // N is past the last UID still returns the last message, so results
-        // are filtered to genuinely new UIDs.
         if uidnext == 0 || uidnext > s_uid + 1 {
             let fetched = session
                 .uid_fetch(&format!("{}:*", s_uid + 1), "(BODY.PEEK[] FLAGS UID)")
@@ -734,9 +696,6 @@ fn sync_mailbox_in_session(
         return Ok(SyncResult { emails, highest_uid, uidvalidity, uids_reset: false, window: Some(window) });
     }
 
-    // No usable state (first sync or UIDVALIDITY changed): download only the
-    // most recent messages. Older ones are loaded on demand by paging;
-    // pulling every body of a large mailbox here used to time out.
     log::info!("No usable IMAP sync state for account {} mailbox {} - fetching recent messages",
                account.id, mailbox_label);
     let start = if total > INITIAL_WINDOW { total - INITIAL_WINDOW + 1 } else { 1 };
@@ -782,10 +741,7 @@ pub fn append_to_sent(
     let sent_folder = imap_folder_for_mailbox("SENT", &folders)
         .ok_or_else(|| "Could not find Sent folder".to_string())?;
 
-    
     let date = chrono::Utc::now().format("%a, %d %b %Y %H:%M:%S +0000").to_string();
-    // Without From the saved copy showed up as "Unknown Sender" in Sent, and
-    // raw UTF-8 in Subject is invalid in a header, so encode it (RFC 2047).
     let from = match account.display_name.as_deref().filter(|n| !n.trim().is_empty()) {
         Some(name) => format!("{} <{}>", encode_header_word(name), account.email),
         None => account.email.clone(),
@@ -848,8 +804,6 @@ pub fn imap_search_emails(
     let messages = session.uid_fetch(&uid_set, "(BODY.PEEK[] FLAGS UID)")
         .map_err(|e| format!("IMAP FETCH error: {}", e))?;
 
-    // Same parser as sync, so search hits get the same ids and thread ids as
-    // the stored copies instead of creating near-duplicates.
     let (emails, _) = parse_imap_messages(&messages, account, "INBOX");
     let _ = session.logout();
     Ok(emails)
@@ -859,9 +813,6 @@ fn quote_imap_string(value: &str) -> String {
     format!("\"{}\"", value.replace('\\', "\\\\").replace('"', "\\\""))
 }
 
-/// Finds the UIDs of a message in the currently selected folder. Messages
-/// that had no Message-ID header are stored as `imap-{account}-{MAILBOX}-{uid}`
-/// and can only be addressed by that UID, in that mailbox.
 fn resolve_uids(session: &mut TlsSession, message_id_header: &str, mailbox: &str) -> Result<Vec<u32>, String> {
     let parts: Vec<&str> = message_id_header.splitn(4, '-').collect();
     if parts.len() == 4 && parts[0] == "imap" {
@@ -880,7 +831,6 @@ fn resolve_uids(session: &mut TlsSession, message_id_header: &str, mailbox: &str
     Ok(uids)
 }
 
-/// Error prefix for operations on a message the server no longer has.
 pub const MESSAGE_NOT_FOUND: &str = "Message not found on server";
 
 fn uid_set(uids: &[u32]) -> String {
@@ -891,8 +841,6 @@ fn has_capability(session: &mut TlsSession, name: &str) -> bool {
     session.capabilities().map(|caps| caps.has_str(name)).unwrap_or(false)
 }
 
-/// Removes exactly these UIDs. A bare EXPUNGE would also permanently delete
-/// every other message another client had marked `\Deleted` in the folder.
 fn expunge_uids(session: &mut TlsSession, uids: &str) -> Result<(), String> {
     if has_capability(session, "UIDPLUS") {
         session.uid_expunge(uids).map(|_| ()).map_err(|e| format!("IMAP EXPUNGE error: {}", e))
@@ -973,7 +921,6 @@ pub fn imap_move_to_folder(
     Ok(())
 }
 
-/// Fetches the raw RFC 822 source of a stored message.
 pub fn fetch_raw_message(account: &Account, message_id_header: &str, mailbox: &str) -> Result<Vec<u8>, String> {
     let creds = ImapCredentials::from_account(account)?;
     let mut session = retry_connect(&creds)?;
@@ -1014,8 +961,6 @@ pub fn fetch_attachment(
     let mut session = retry_connect(&creds)?;
     let folders = list_folders(&mut session)?;
 
-    // UIDs are only unique per folder. Newer ids record the folder the
-    // message was synced from; older ids fall back to probing common ones.
     let target_mailboxes: Vec<&str> = match parts.get(3) {
         Some(label) => vec![*label],
         None => vec!["INBOX", "SENT", "DRAFT", "ARCHIVE", "TRASH"],

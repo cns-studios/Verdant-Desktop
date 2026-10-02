@@ -11,8 +11,6 @@ use crate::db::{
 use crate::imap_sync::test_imap_connection;
 use crate::state::{DbState, get_active_id};
 
-
-
 #[tauri::command]
 pub async fn list_accounts(state: State<'_, Arc<DbState>>) -> Result<Vec<AccountPublic>, String> {
     let conn = state.conn.lock().await;
@@ -51,7 +49,6 @@ pub async fn remove_account(
         delete_account(&conn, account_id).map_err(|e| e.to_string())?;
     }
 
-    
     if active_id == account_id {
         let conn = state.conn.lock().await;
         let accounts = get_all_accounts(&conn).map_err(|e| e.to_string())?;
@@ -68,9 +65,6 @@ pub async fn remove_account(
     Ok(())
 }
 
-
-
-
 #[tauri::command]
 pub async fn add_gmail_account(
     app: tauri::AppHandle,
@@ -78,7 +72,6 @@ pub async fn add_gmail_account(
 ) -> Result<AccountPublic, String> {
     let token = auth::login_interactive().await?;
 
-    
     let client = reqwest::Client::new();
     let profile = client
         .get("https://gmail.googleapis.com/gmail/v1/users/me/profile")
@@ -99,7 +92,7 @@ pub async fn add_gmail_account(
     let account_id = {
         let conn = state.conn.lock().await;
         let id = upsert_gmail_account(&conn, &email, &token).map_err(|e| e.to_string())?;
-        
+
         let current_active = *state.active_account_id.lock().await;
         if current_active == 0 {
             set_active_account(&conn, id).map_err(|e| e.to_string())?;
@@ -115,13 +108,11 @@ pub async fn add_gmail_account(
         }
     }
 
-    
     {
         let mut tokens = state.tokens.lock().await;
         tokens.insert(account_id, token);
     }
 
-    
     let account = {
         let conn = state.conn.lock().await;
         get_account_by_id(&conn, account_id)
@@ -138,7 +129,6 @@ pub async fn add_gmail_account(
     Ok(AccountPublic::from(acc))
 }
 
-
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ImapAccountPayload {
@@ -151,7 +141,6 @@ pub struct ImapAccountPayload {
     pub username: String,
     pub password: String,
 }
-
 
 #[tauri::command]
 pub async fn test_imap_credentials(payload: ImapAccountPayload) -> Result<String, String> {
@@ -166,7 +155,6 @@ pub async fn test_imap_credentials(payload: ImapAccountPayload) -> Result<String
     .await
     .map_err(|e| e.to_string())?
 }
-
 
 #[tauri::command]
 pub async fn add_imap_account(
@@ -225,13 +213,10 @@ pub async fn add_imap_account(
             .ok_or_else(|| "Account not found after insert".to_string())?
     };
 
-    
     start_account_sync(app, state.inner().clone(), account.clone()).await;
 
     Ok(AccountPublic::from(account))
 }
-
-
 
 #[derive(serde::Deserialize)]
 pub struct GmxAccountPayload {
@@ -256,11 +241,9 @@ pub async fn add_gmx_account(
         username: payload.email,
         password: payload.password,
     };
-    
+
     add_imap_account(app, state, imap_payload).await
 }
-
-
 
 #[derive(serde::Serialize)]
 pub struct ActiveAccountInfo {

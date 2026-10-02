@@ -5,6 +5,7 @@ mod crypto;
 mod db;
 mod gmail;
 mod imap_sync;
+mod logger;
 mod mime;
 mod smtp_send;
 mod state;
@@ -32,9 +33,6 @@ pub fn run() {
 
     let _ = dotenvy::from_filename("../.env").or_else(|_| dotenvy::from_filename(".env"));
 
-    let args: Vec<String> = std::env::args().collect();
-    let _is_autostart = args.iter().any(|arg| arg == "--autostart");
-
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             if let Some(window) = app.get_webview_window("main") {
@@ -45,7 +43,6 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_process::init())
-        .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_dialog::init())
         .setup(move |app| {
@@ -59,7 +56,6 @@ pub fn run() {
             let conn = Connection::open(&db_path).expect("Failed to open DB");
             init_db(&conn).expect("Failed to init DB");
 
-            
             let initial_active_id = db::get_active_account(&conn)
                 .ok()
                 .flatten()
@@ -77,26 +73,21 @@ pub fn run() {
             app.manage(state.clone());
             app.manage(AppConfigState(Mutex::new(load_app_config(&app.handle().clone()))));
 
-            app.handle().plugin(
-                tauri_plugin_log::Builder::default()
-                    .level(log::LevelFilter::Info)
-                    .build(),
-            )?;
+            logger::init(app.path().app_log_dir().ok().as_deref());
 
-            
             let state_for_sync = state.clone();
             let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 background_sync::start_all_sync_tasks(app_handle, state_for_sync).await;
             });
-            
+
             let quit_i = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
             let show_i = MenuItemBuilder::with_id("show", "Show Verdant").build(app)?;
             let menu = MenuBuilder::new(app)
                 .item(&show_i)
                 .item(&quit_i)
                 .build()?;
-            
+
             let _tray = TrayIconBuilder::new()
                 .icon(app.default_window_icon().unwrap().clone())
                 .menu(&menu)
@@ -117,7 +108,6 @@ pub fn run() {
                     }
                 })
                 .build(app)?;
-
 
             #[cfg(debug_assertions)]
             {
@@ -145,16 +135,16 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             update_app_config,
             get_app_config,
-            
+
             commands::autostart::autostart_enable,
             commands::autostart::autostart_disable,
             commands::autostart::autostart_is_enabled,
-            
+
             commands::auth::connect_gmail,
             commands::auth::auth_status,
             commands::auth::logout,
             commands::auth::get_user_profile,
-            
+
             commands::accounts::list_accounts,
             commands::accounts::switch_account,
             commands::accounts::remove_account,
@@ -163,7 +153,7 @@ pub fn run() {
             commands::accounts::add_gmx_account,
             commands::accounts::test_imap_credentials,
             commands::accounts::get_active_account_info,
-            
+
             commands::mail::sync_emails,
             commands::mail::sync_mailbox,
             commands::mail::sync_mailbox_page,
@@ -194,13 +184,13 @@ pub fn run() {
             smart_inbox::get_category_threads,
             smart_inbox::move_emails_to_category,
             smart_inbox::set_smart_inbox_enabled,
-            
+
             commands::compose::send_email,
             commands::compose::save_draft,
             commands::compose::send_existing_draft,
-            
+
             commands::attachments::download_attachment,
-            
+
             commands::updater::check_for_updates,
             commands::updater::download_latest_update,
             commands::updater::install_and_relaunch,

@@ -120,7 +120,6 @@ pub fn extract_body(payload: &Value) -> Option<String> {
                 .unwrap_or_default()
                 .to_ascii_lowercase();
 
-
             if part_mime == "text/html" && html_result.is_none() {
                 let decoded = decode_part(part);
                 html_result = decoded;
