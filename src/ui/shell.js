@@ -1,12 +1,13 @@
 import { t } from "../lib/i18n.js";
 import { icon } from "./icons.js";
+import logoUrl from "../assets/logo.png";
 
 export function renderShell() {
   const root = document.getElementById("root");
   root.innerHTML = `
     <header class="app-header" id="app-header">
       <div class="app-header-left" id="app-header-left">
-        <span class="app-logo-mark">${icon("mail")}</span>
+        <img class="app-logo-mark" src="${logoUrl}" alt="" draggable="false">
         <span class="app-title">${t("app.title")}</span>
         <span class="app-subtitle">- ${t("sidebar.inbox")}</span>
       </div>
