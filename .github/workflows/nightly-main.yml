@@ -9,7 +9,7 @@ on:
       - 'src/**'
       - 'index.html'
       - 'package.json'
-      - 'package-lock.json'
+      - 'pnpm-lock.yaml'
 
 concurrency:
   group: nightly-main-${{ github.ref }}
@@ -27,11 +27,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
-          cache: npm
+          node-version: 22
+          cache: pnpm
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -54,13 +57,13 @@ jobs:
             patchelf
 
       - name: Install Frontend Dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Build Tauri Linux Bundles
         env:
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
-        run: npm run tauri build -- --bundles deb,rpm,appimage
+        run: pnpm tauri build --bundles deb,rpm,appimage
 
       - name: Build Pacman Package
         run: |
@@ -146,11 +149,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
-          cache: npm
+          node-version: 22
+          cache: pnpm
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -163,13 +169,13 @@ jobs:
           prefix-key: windows-rust
 
       - name: Install Frontend Dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Build Tauri Windows Bundle
         env:
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
-        run: npm run tauri build -- --bundles nsis
+        run: pnpm tauri build --bundles nsis
 
       - name: Collect Windows Artifacts
         shell: bash

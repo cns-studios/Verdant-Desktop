@@ -5,72 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Verdant Mail</title>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;1,9..144,300&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<style>
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; -webkit-user-select: none; user-select: none; }
-
-  :root {
-    --bg:          #f5f3ef;
-    --surface:     #eeece7;
-    --surface2:    #e7e4dd;
-    --surface3:    #e7e4dd;
-    --border:      #b4afa2;
-    --green:       #4a5e45;
-    --green-mid:   #5c7356;
-    --green-light: #7a9470;
-    --green-muted: #c8d5c4;
-    --green-pale:  #e8efe6;
-    --text:        #1e2119;
-    --text-mid:    #4a4d45;
-    --text-muted:  #6c7065;
-    --white:       #fafaf8;
-    --accent:      #3d5239;
-    --user-row-bg:       #efede7;
-    --user-row-hover:    #dcd7cd;
-    --shadow-lg:   0 8px 32px rgba(30,33,25,0.14), 0 2px 8px rgba(30,33,25,0.06);
-    --settings-danger-color: #8a3b3b;
-    --settings-danger-color-border:#dcb9b9;
-  }
-
-  :root.dark {
-    --bg:          #1f1c18;
-    --surface:     #2a2622;
-    --surface2:    #353026;
-    --surface3:    #2a261c;
-    --border:      #4a4640;
-    --green:       #608158;
-    --green-mid:   #5c7356;
-    --green-light: #7a9470;
-    --green-muted: #2c372c;
-    --green-pale:  #2e362c;
-    --text:        #f0ebe3;
-    --text-mid:    #dad2c5;
-    --text-muted:  #b5ac9d;
-    --white:       #2a2622;
-    --accent:      #5b6d55;
-    --user-row-bg:       #4d473f;
-    --user-row-hover:    #3f3a33;
-    --shadow-lg:   0 8px 32px rgba(30,33,25,0.28), 0 2px 8px rgba(30,33,25,0.12);
-    --settings-danger-color: #f1a7a7;
-    --settings-danger-color-border:#622222;
-  }
-
-  body {
-    font-family: 'DM Sans', sans-serif;
-    background: var(--bg);
-    color: var(--text);
-    height: 100vh;
-    overflow: hidden;
-  }
-
-  body, body *, body *::before, body *::after {
-    transition: background-color 0.35s ease, color 0.35s ease, border-color 0.35s ease, box-shadow 0.35s ease;
-  }
-
-  #root {
-    width: 100%;
-    height: 100%;
-  }
-</style>
+<script>
+  try {
+    if (JSON.parse(localStorage.getItem("verdant.appPrefs") || "{}").useDarkMode === true) {
+      document.documentElement.classList.add("dark");
+    }
+  } catch {}
+</script>
 </head>
 <body>
 <div id="root"></div>

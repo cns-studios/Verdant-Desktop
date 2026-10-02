@@ -1,15 +1,15 @@
 mod auth;
-mod background_sync;
 mod commands;
 mod crypto;
 mod db;
 mod gmail;
-mod imap_sync;
+mod imap_client;
 mod logger;
 mod mime;
 mod smtp_send;
 mod state;
 mod smart_inbox;
+mod sync;
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -78,7 +78,7 @@ pub fn run() {
             let state_for_sync = state.clone();
             let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
-                background_sync::start_all_sync_tasks(app_handle, state_for_sync).await;
+                sync::start_all_sync_tasks(app_handle, state_for_sync).await;
             });
 
             let quit_i = MenuItemBuilder::with_id("quit", "Quit").build(app)?;

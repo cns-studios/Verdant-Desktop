@@ -103,7 +103,7 @@ pub async fn unsubscribe_from_list(
             ).unwrap_or_else(|_| "INBOX".to_string())
         };
         tokio::task::spawn_blocking(move || {
-            crate::imap_sync::fetch_raw_message(&acc, &message_id, &mailbox)
+            crate::imap_client::fetch_raw_message(&acc, &message_id, &mailbox)
         }).await.map_err(|e| format!("Task error: {}", e))?
         .map_err(|e| {
             log::error!("{}", e);

@@ -59,7 +59,7 @@ pub async fn auth_status(state: State<'_, Arc<DbState>>) -> Result<AuthStatus, S
 #[tauri::command]
 pub async fn logout(state: State<'_, Arc<DbState>>) -> Result<(), String> {
     let active_id = get_active_id(&state).await;
-    crate::background_sync::stop_account_sync(&state, active_id).await;
+    crate::sync::stop_account_sync(&state, active_id).await;
 
     {
         let mut tokens = state.tokens.lock().await;

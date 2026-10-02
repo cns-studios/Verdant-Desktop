@@ -2,13 +2,13 @@ use std::sync::Arc;
 use tauri::State;
 
 use crate::auth;
-use crate::background_sync::{start_account_sync, stop_account_sync};
+use crate::sync::{start_account_sync, stop_account_sync};
 use crate::crypto::encrypt_password;
 use crate::db::{
     delete_account, get_all_accounts, get_account_by_id, insert_imap_account,
     set_active_account, upsert_gmail_account, AccountPublic,
 };
-use crate::imap_sync::test_imap_connection;
+use crate::imap_client::test_imap_connection;
 use crate::state::{DbState, get_active_id};
 
 #[tauri::command]

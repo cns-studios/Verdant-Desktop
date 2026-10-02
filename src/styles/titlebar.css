@@ -1,0 +1,16 @@
+.app-header {
+  height: 42px; min-height: 42px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 10px 0 12px; gap: 12px;
+}
+.app-header-left { display:flex; align-items:center; gap:9px; min-width:0; }
+.app-logo-mark { width:20px; height:20px; display:block; flex-shrink:0; }
+.app-title { font:500 13px 'Fraunces', serif; color:var(--text); letter-spacing:-0.2px; white-space:nowrap; }
+.app-subtitle { font:400 11px 'DM Sans', sans-serif; color:var(--text-muted); white-space:nowrap; }
+.app-header-controls { display:flex; align-items:center; gap:6px; }
+.app-win-btn { width:28px; height:24px; border-radius:7px; border:1px solid var(--border); background:var(--surface2); color:var(--text-mid); display:inline-flex; align-items:center; justify-content:center; cursor:pointer; transition:all .12s ease; }
+.app-win-btn:hover { background:var(--white); color:var(--text); }
+.app-win-btn.close:hover { background:#f3dfdf; border-color:#ddb5b5; color:#8a2e2e; }
+.app-win-btn svg { width:14px; height:14px; stroke-width:2.2; }

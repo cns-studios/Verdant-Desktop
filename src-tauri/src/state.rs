@@ -1,6 +1,5 @@
 use rusqlite::Connection;
 use std::collections::HashMap;
-use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tokio::sync::Mutex;
 
@@ -18,8 +17,6 @@ pub struct DbState {
 
     pub rate_limited_until: Mutex<HashMap<i64, Instant>>,
 }
-
-pub type SharedState = Arc<DbState>;
 
 pub fn now_epoch() -> i64 {
     SystemTime::now()
@@ -131,27 +128,6 @@ pub async fn ensure_token(state: &DbState) -> Result<StoredToken, String> {
         return Err("No active account".to_string());
     }
     ensure_token_for(state, id).await
-}
-
-pub async fn persist_token_for(
-    state: &DbState,
-    account_id: i64,
-    token: StoredToken,
-) -> Result<StoredToken, String> {
-    {
-        let conn = state.conn.lock().await;
-        update_gmail_token(&conn, account_id, &token).map_err(|e| e.to_string())?;
-    }
-    {
-        let mut tokens = state.tokens.lock().await;
-        tokens.insert(account_id, token.clone());
-    }
-    Ok(token)
-}
-
-pub async fn persist_token(state: &DbState, token: StoredToken) -> Result<StoredToken, String> {
-    let id = get_active_id(state).await;
-    persist_token_for(state, id, token).await
 }
 
 impl DbState {
