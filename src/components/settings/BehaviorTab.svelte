@@ -51,6 +51,19 @@
   </div>
 </div>
 
+<div class="settings-section-label">{t("settings.behavior.discord")}</div>
+<div class="settings-card">
+  <label class="settings-switch">
+    <input
+      type="checkbox"
+      checked={prefs.app.discordRpc}
+      onchange={(event) => saveAppPrefs({ discordRpc: event.currentTarget.checked })}
+    />
+    {t("settings.behavior.discord_rpc")}
+  </label>
+  <div class="settings-help">{t("settings.behavior.discord_rpc_help")}</div>
+</div>
+
 <div class="settings-section-label">{t("settings.behavior.start_on_login")}</div>
 <div class="settings-card">
   <label class="settings-switch">

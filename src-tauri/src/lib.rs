@@ -139,6 +139,9 @@ pub fn run() {
             update_app_config,
             get_app_config,
 
+            commands::discord::discord_set_activity,
+            commands::discord::discord_clear_activity,
+
             commands::autostart::autostart_enable,
             commands::autostart::autostart_disable,
             commands::autostart::autostart_is_enabled,

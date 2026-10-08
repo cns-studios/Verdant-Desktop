@@ -10,6 +10,7 @@ const SIDEBAR_KEY = "verdant.sidebarCollapsed";
 const LIST_WIDTH_KEY = "verdant.listPaneWidth";
 
 export const TEXT_SIZES = ["small", "medium", "large"];
+export const TEXT_ZOOM = { small: 1, medium: 1.1, large: 1.2 };
 
 const DEFAULT_APP = {
   runInBackground: true,
@@ -18,6 +19,7 @@ const DEFAULT_APP = {
   notificationImportance: "all",
   textSize: "small",
   useDarkMode: false,
+  discordRpc: false,
 };
 
 const DEFAULT_UPDATE = { autoCheck: true, autoDownload: false, channel: "stable" };

@@ -54,6 +54,9 @@ export const moveEmailsToCategory = (emailIds, slug) => invoke("move_emails_to_c
 
 export const getAppConfig = () => invoke("get_app_config");
 export const updateAppConfig = (config) => invoke("update_app_config", { config });
+export const discordSetActivity = (details, state, startedAt) =>
+  invoke("discord_set_activity", { details, state, startedAt });
+export const discordClearActivity = () => invoke("discord_clear_activity");
 export const autostartEnable = () => invoke("autostart_enable");
 export const autostartDisable = () => invoke("autostart_disable");
 export const getStartupFlags = () => invoke("get_startup_flags");

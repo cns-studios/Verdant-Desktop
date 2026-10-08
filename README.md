@@ -22,6 +22,7 @@ pnpm tauri dev
 | `cargo test` (in `src-tauri/`) | Backend tests |
 
 Google sign-in needs `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` at build time, see `.env.example`.
+Discord Rich Presence needs `DISCORD_CLIENT_ID` (the public application ID, injected from the `DISCORD_CLIENT_ID` GitHub secret in CI).
 
 ## Layout
 

@@ -7,7 +7,7 @@
 <div
   class="verdant-overlay open"
   role="presentation"
-  transition:fade={{ duration: 180 }}
+  transition:fade={{ duration: 100 }}
   onclick={(event) => event.target === event.currentTarget && onclose?.()}
 >
   <div
@@ -15,7 +15,7 @@
     role="dialog"
     aria-modal="true"
     aria-label={label}
-    in:fly={{ y: 12, duration: 180 }}
+    in:fly={{ y: 6, duration: 120 }}
   >
     {@render children()}
   </div>

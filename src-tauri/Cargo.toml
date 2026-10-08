@@ -1,6 +1,6 @@
 [package]
 name = "Verdant-Desktop"
-version = "2.2.23"
+version = "2.2.24"
 description = "Verdant - a calm mail experience"
 authors = ["cns-studios"]
 license = "0BSD"
@@ -45,6 +45,7 @@ hex = "0.4"
 chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
 libc = "0.2.183"
 dirs = "6"
+discord-rich-presence = "1.1.0"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 keyring-core = "1"

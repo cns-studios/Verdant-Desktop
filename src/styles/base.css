@@ -55,14 +55,14 @@ body {
 }
 
 body, body *, body *::before, body *::after {
-  transition: background-color 0.35s ease, color 0.35s ease, border-color 0.35s ease, box-shadow 0.35s ease;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 #root {
   width: 100%;
   height: 100%;
 }
-.verdant-overlay { position: fixed; inset: 0; z-index: 2100; background: rgba(31,28,24,.42); backdrop-filter: blur(2px); display:flex; align-items:center; justify-content:center; opacity: 0; pointer-events: none; transition: opacity .18s ease; }
+.verdant-overlay { position: fixed; inset: 0; z-index: 2100; background: rgba(31,28,24,.42); backdrop-filter: blur(2px); display:flex; align-items:center; justify-content:center; opacity: 0; pointer-events: none; transition: opacity .1s ease; }
 .verdant-overlay.open { opacity: 1; pointer-events: auto; }
 .verdant-panel { width:min(640px, 94vw); max-height: 86vh; overflow:auto; background: var(--surface); border:1px solid var(--border); border-radius:14px; box-shadow: 0 22px 52px rgba(37,35,31,.18); padding: 20px; transform: translateY(12px) scale(.98); transition: transform .18s ease; }
 .verdant-overlay.open .verdant-panel { transform: translateY(0) scale(1); }
@@ -83,8 +83,6 @@ body.reading-pane-hidden .reading-pane { display: none !important; }
 body.reading-pane-hidden .pane-resizer { display: none !important; }
 body.reading-pane-hidden .email-list-pane { flex:1 1 auto !important; width:auto !important; min-width:0 !important; max-width:none !important; border-right:0 !important; }
 html.theme-switching body { animation: theme-switch .36s ease both; }
-body[data-text-size="medium"] #root { zoom: 1.06; }
-body[data-text-size="large"] #root { zoom: 1.12; }
 body { -webkit-user-select: none; user-select: none; }
 ::selection { background-color: var(--green-muted); color: var(--text); }
 .app-content { flex:1; min-height:0; display:flex; width:100%; overflow:hidden; height:calc(100vh - 42px); position:relative; }

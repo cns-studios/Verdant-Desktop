@@ -1,5 +1,10 @@
 # Changelog
 
+## [2.22.24]
+- Optional Discord Rich Presence, displaying Verdants Activity in Discord
+- Optimized performance on Linux
+- New App Icon and Settings
+
 ## [2.2.23]
 - You can now sort your mailbox locally and dynamically using Machine Learning
 - Fix an issue where elevated CLI Updating defaulted the update channel to "Stable"

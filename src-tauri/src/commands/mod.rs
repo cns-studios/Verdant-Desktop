@@ -3,6 +3,7 @@ pub mod attachments;
 pub mod auth;
 pub mod autostart;
 pub mod compose;
+pub mod discord;
 pub mod mail;
 pub mod unsubscribe;
 pub mod updater;

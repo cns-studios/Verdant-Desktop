@@ -6,10 +6,21 @@
   import StatusScreen from "./components/shell/StatusScreen.svelte";
   import { getLang, t } from "./lib/i18n/index.svelte.js";
   import { mail } from "./state/mail.svelte.js";
-  import { prefs } from "./state/prefs.svelte.js";
+  import { getCurrentWebview } from "@tauri-apps/api/webview";
+  import { initDiscordPresence } from "./state/discord.svelte.js";
+  import { prefs, TEXT_ZOOM } from "./state/prefs.svelte.js";
   import { session } from "./state/session.svelte.js";
 
-  onMount(() => session.boot());
+  onMount(() => {
+    session.boot();
+    return initDiscordPresence();
+  });
+
+  $effect(() => {
+    getCurrentWebview()
+      .setZoom(TEXT_ZOOM[prefs.app.textSize] ?? 1)
+      .catch((error) => console.error("Failed to set zoom", error));
+  });
 
   $effect(() => {
     document.documentElement.lang = getLang();
