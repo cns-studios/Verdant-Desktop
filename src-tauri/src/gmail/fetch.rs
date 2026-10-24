@@ -1,7 +1,7 @@
 use futures_util::StreamExt;
 use serde_json::{json, Value};
 
-use super::{collect_attachments, extract_body, gmail_api_get, header_value, mailbox_from_labels, strip_confusable_chars, AttachmentMeta};
+use super::{is_rate_limit_error, collect_attachments, extract_body, gmail_api_get, header_value, mailbox_from_labels, strip_confusable_chars, AttachmentMeta};
 use crate::db::gmail_message_cached;
 use crate::state::DbState;
 
@@ -200,13 +200,18 @@ pub(crate) async fn fetch_and_store_messages(
     });
 
     let results: Vec<Result<(), String>> = stream.buffer_unordered(GMAIL_FETCH_CONCURRENCY).collect().await;
+    let mut rate_limited = None;
     for res in results {
         if let Err(e) = res {
-            log::error!("Gmail fetch error account={}: {}", account_id, e);
-            if e.contains("429") {
-                return Err(e);
+            if is_rate_limit_error(&e) {
+                rate_limited.get_or_insert(e);
+                continue;
             }
+            log::error!("Gmail fetch error account={}: {}", account_id, e);
         }
+    }
+    if let Some(e) = rate_limited {
+        return Err(e);
     }
     let _ = full_len;
     {

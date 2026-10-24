@@ -6,7 +6,7 @@ use tokio::sync::oneshot;
 use super::notify::notify_new_mail;
 use super::sync_mailbox_internal_for;
 use crate::db::Account;
-use crate::gmail::sync_mailbox_page_internal_for;
+use crate::gmail::{is_rate_limit_error, sync_mailbox_page_internal_for};
 use crate::state::DbState;
 
 pub(crate) const GMAIL_SYNC_INTERVAL_SECS: u64 = 120;
@@ -64,6 +64,10 @@ pub(crate) async fn sync_gmail_account(app: &tauri::AppHandle, state: &DbState, 
 
     for mailbox in mailboxes {
         if let Err(e) = sync_mailbox_internal_for(state, account.id, mailbox).await {
+            if is_rate_limit_error(&e) {
+                log::warn!("Gmail sync paused account={}: {}", account.id, e);
+                break;
+            }
             log::error!("Gmail sync error account={} mailbox={}: {}", account.id, mailbox, e);
             continue;
         }
@@ -74,6 +78,10 @@ pub(crate) async fn sync_gmail_account(app: &tauri::AppHandle, state: &DbState, 
                 mailbox,
                 None,
             ).await {
+                if is_rate_limit_error(&e) {
+                    log::warn!("Gmail sync paused account={}: {}", account.id, e);
+                    break;
+                }
                 log::error!("Gmail Inbox newest-page reconciliation failed account={}: {}", account.id, e);
             }
         }
