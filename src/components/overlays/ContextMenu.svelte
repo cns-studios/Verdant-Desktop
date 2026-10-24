@@ -1,6 +1,7 @@
 <script>
   import { t } from "../../lib/i18n/index.svelte.js";
   import { mail } from "../../state/mail.svelte.js";
+  import { session } from "../../state/session.svelte.js";
   import { smart } from "../../state/smartInbox.svelte.js";
   import { openCategoryPopup, ui } from "../../state/ui.svelte.js";
   import Icon from "../ui/Icon.svelte";
@@ -21,12 +22,14 @@
     else if (box.includes("ARCHIVE")) list.push({ icon: "inbox", label: "reading.move_to_inbox", run: () => mail.moveToInbox(rows) });
     else if (!isDraft && !isSent) list.push({ icon: "archive", label: "reading.archive", run: () => mail.archive(rows) });
 
-    list.push({
-      icon: "trash",
-      label: isTrash ? "reading.permanent_delete" : "reading.delete",
-      danger: true,
-      run: () => mail.trash(rows),
-    });
+    if (!isTrash || session.canDeleteForever) {
+      list.push({
+        icon: "trash",
+        label: isTrash ? "reading.permanent_delete" : "reading.delete",
+        danger: true,
+        run: () => mail.trash(rows),
+      });
+    }
     if (!isSent) list.push({ icon: "mail", label: "reading.mark_unread", run: () => mail.markRead(rows, false) });
     if (movable) {
       list.push({

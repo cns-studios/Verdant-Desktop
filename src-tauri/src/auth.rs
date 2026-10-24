@@ -14,7 +14,7 @@ use crate::state::now_epoch;
 
 const AUTH_URL: &str = "https://accounts.google.com/o/oauth2/v2/auth";
 const TOKEN_URL: &str = "https://oauth2.googleapis.com/token";
-const SCOPE: &str = "https://mail.google.com/";
+const SCOPE: &str = "https://www.googleapis.com/auth/gmail.modify";
 const REDIRECT_PORT: u16 = 8765;
 const AUTH_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 const DRAIN_GRACE: Duration = Duration::from_secs(2);

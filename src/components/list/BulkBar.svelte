@@ -2,6 +2,7 @@
   import { t } from "../../lib/i18n/index.svelte.js";
   import { mail } from "../../state/mail.svelte.js";
   import { selection } from "../../state/selection.svelte.js";
+  import { session } from "../../state/session.svelte.js";
   import { smart } from "../../state/smartInbox.svelte.js";
   import { openCategoryPopup } from "../../state/ui.svelte.js";
   import Icon from "../ui/Icon.svelte";
@@ -10,6 +11,21 @@
   const selectedRows = $derived(mail.rows.filter((row) => selection.has(row.key)));
   const masterState = $derived(selection.masterState(visibleKeys));
   const allStarred = $derived(selectedRows.length > 0 && selectedRows.every((row) => (row.thread ?? row.email).starred));
+
+  const box = $derived(mail.mailbox.toUpperCase());
+  const isTrash = $derived(box.includes("TRASH"));
+  const isSent = $derived(box.includes("SENT"));
+  const isDraft = $derived(box.includes("DRAFT"));
+  const isArchive = $derived(box.includes("ARCHIVE"));
+  const movable = $derived(!isDraft && !isSent && !isTrash);
+  const anyUnread = $derived(selectedRows.some((row) => !(row.thread ?? row.email).is_read));
+
+  const move = $derived.by(() => {
+    if (isTrash) return { icon: "rotate", label: "reading.restore", run: (rows) => mail.restore(rows) };
+    if (isArchive) return { icon: "inbox", label: "reading.move_to_inbox", run: (rows) => mail.moveToInbox(rows) };
+    if (isDraft || isSent) return null;
+    return { icon: "archive", label: "bulk.archive", run: (rows) => mail.archive(rows) };
+  });
 
   async function run(action) {
     if (!selectedRows.length) return;
@@ -41,20 +57,39 @@
     </span>
   </button>
   <div class="bulk-actions">
-    <button class="bulk-action" title={t("bulk.archive")} onclick={() => run((rows) => mail.archive(rows))}>
-      <Icon name="archive" size={14} /><span>{t("bulk.archive")}</span>
-    </button>
-    <button class="bulk-action danger" title={t("bulk.delete")} onclick={() => run((rows) => mail.trash(rows))}>
-      <Icon name="trash" size={14} /><span>{t("bulk.delete")}</span>
-    </button>
-    <button
-      class={["bulk-action", allStarred && "active"]}
-      title={t("bulk.star")}
-      onclick={() => selectedRows.length && mail.toggleStar(selectedRows)}
-    >
-      <Icon name="star" size={14} /><span>{t("bulk.star")}</span>
-    </button>
-    {#if smart.sorted}
+    {#if move}
+      <button class="bulk-action" title={t(move.label)} onclick={() => run(move.run)}>
+        <Icon name={move.icon} size={14} /><span>{t(move.label)}</span>
+      </button>
+    {/if}
+    {#if !isTrash || session.canDeleteForever}
+      <button
+        class="bulk-action danger"
+        title={t(isTrash ? "reading.permanent_delete" : "bulk.delete")}
+        onclick={() => run((rows) => mail.trash(rows))}
+      >
+        <Icon name={isTrash ? "trash-x" : "trash"} size={14} /><span>{t(isTrash ? "reading.permanent_delete" : "bulk.delete")}</span>
+      </button>
+    {/if}
+    {#if !isSent}
+      <button
+        class="bulk-action"
+        title={t(anyUnread ? "bulk.mark_read" : "bulk.mark_unread")}
+        onclick={() => selectedRows.length && mail.markRead(selectedRows, anyUnread)}
+      >
+        <Icon name={anyUnread ? "check" : "mail"} size={14} /><span>{t(anyUnread ? "bulk.mark_read" : "bulk.mark_unread")}</span>
+      </button>
+    {/if}
+    {#if movable}
+      <button
+        class={["bulk-action", allStarred && "active"]}
+        title={t("bulk.star")}
+        onclick={() => selectedRows.length && mail.toggleStar(selectedRows)}
+      >
+        <Icon name="star" size={14} /><span>{t("bulk.star")}</span>
+      </button>
+    {/if}
+    {#if movable && smart.sorted}
       <button class="bulk-action smart-move-action" title={t("bulk.move")} onclick={chooseCategory}>
         <Icon name="folder" size={14} /><span>{t("bulk.move")}</span>
       </button>

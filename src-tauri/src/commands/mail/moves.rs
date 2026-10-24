@@ -163,15 +163,8 @@ pub async fn permanent_delete_email(state: State<'_, Arc<DbState>>, email_id: St
 
     if let Some(ref acc) = account {
         if acc.provider == "gmail" {
-            let gmail_id = email_id.splitn(2, ':').nth(1).unwrap_or(&email_id).to_string();
-            if let Ok(token_info) = ensure_token(&state).await {
-                let client = reqwest::Client::new();
-                let url = format!("https://gmail.googleapis.com/gmail/v1/users/me/messages/{}", gmail_id);
-                client.delete(url).bearer_auth(&token_info.access_token).send().await
-                    .map_err(|e| format!("Gmail delete error: {}", e))?;
-            } else {
-                return Err("Failed to get Gmail token".to_string());
-            }
+            // The gmail.modify scope cannot delete messages outright; Gmail purges Trash after 30 days.
+            return Err("Gmail messages in Trash are deleted automatically after 30 days".to_string());
         } else if acc.provider == "imap" {
             let msg_id = email_id.splitn(2, ':').nth(1).unwrap_or(&email_id).to_string();
             let acc_clone = acc.clone();

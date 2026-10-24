@@ -23,6 +23,10 @@ class Session {
     return this.accounts.find((account) => account.is_active) ?? null;
   }
 
+  get canDeleteForever() {
+    return this.activeAccount?.provider === "imap";
+  }
+
   async boot() {
     this.status = "booting";
     try {

@@ -141,6 +141,8 @@ export default {
   "bulk.archive": "Archivieren",
   "bulk.delete": "Löschen",
   "bulk.star": "Markieren",
+  "bulk.mark_read": "Als gelesen",
+  "bulk.mark_unread": "Als ungelesen",
   "bulk.move": "Verschieben",
   "bulk.move_prompt": "Kategoriename eingeben",
   "bulk.close": "Schließen",

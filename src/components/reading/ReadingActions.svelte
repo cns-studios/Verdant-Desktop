@@ -2,6 +2,7 @@
   import { t } from "../../lib/i18n/index.svelte.js";
   import { compose } from "../../state/compose.svelte.js";
   import { mail } from "../../state/mail.svelte.js";
+  import { session } from "../../state/session.svelte.js";
   import { smart } from "../../state/smartInbox.svelte.js";
   import { openCategoryPopup, ui } from "../../state/ui.svelte.js";
   import Icon from "../ui/Icon.svelte";
@@ -16,6 +17,8 @@
   const isTrash = $derived(!!email && box.includes("TRASH"));
   const isSent = $derived(!!email && box.includes("SENT"));
   const isArchive = $derived(!!email && box.includes("ARCHIVE"));
+
+  const canDelete = $derived(!isTrash || session.canDeleteForever);
 
   const unsubscribeTarget = $derived(email ?? mail.conversation.messages.at(-1) ?? null);
   const canUnsubscribe = $derived(
@@ -44,10 +47,8 @@
       );
     }
     if (isTrash) {
-      entries.push(
-        { label: "reading.restore", run: () => mail.restore([row]) },
-        { label: "reading.permanent_delete", run: () => mail.trash([row]) },
-      );
+      entries.push({ label: "reading.restore", run: () => mail.restore([row]) });
+      if (session.canDeleteForever) entries.push({ label: "reading.permanent_delete", run: () => mail.trash([row]) });
     }
     return entries;
   });
@@ -67,13 +68,15 @@
   {#if move}
     <button class="icon-btn" title={t(move.label)} onclick={act(move.run)}><Icon name={move.icon} /></button>
   {/if}
-  <button
-    class="icon-btn danger"
-    title={t(isTrash ? "reading.permanent_delete" : "reading.delete")}
-    onclick={act(() => mail.trash([row]))}
-  >
-    <Icon name={isTrash ? "trash-x" : "trash"} />
-  </button>
+  {#if canDelete}
+    <button
+      class="icon-btn danger"
+      title={t(isTrash ? "reading.permanent_delete" : "reading.delete")}
+      onclick={act(() => mail.trash([row]))}
+    >
+      <Icon name={isTrash ? "trash-x" : "trash"} />
+    </button>
+  {/if}
   {#if !isSent}
     <button class="icon-btn" title={t("reading.mark_unread")} onclick={act(() => mail.markRead([row], false))}>
       <Icon name="mail" />

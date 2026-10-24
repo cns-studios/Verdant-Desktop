@@ -141,6 +141,8 @@ export default {
   "bulk.archive": "Archive",
   "bulk.delete": "Delete",
   "bulk.star": "Star",
+  "bulk.mark_read": "Mark read",
+  "bulk.mark_unread": "Mark unread",
   "bulk.move": "Move",
   "bulk.move_prompt": "Enter a category name",
   "bulk.close": "Close",
