@@ -17,7 +17,6 @@
   }
 </script>
 
-<div class="settings-section-label">{t("settings.appearance.title")}</div>
 <div class="settings-card">
   <div class="theme-tabs" role="tablist" aria-label={t("settings.appearance.title")}>
     {#each THEMES as theme (theme.id)}
@@ -36,7 +35,6 @@
   </div>
 </div>
 
-<div class="settings-section-label">{t("settings.appearance.text_size")}</div>
 <div class="settings-card settings-text-size-card">
   <div class="settings-text-size-heading">
     <span>{t("settings.appearance.text_size_description")}</span>

@@ -39,7 +39,6 @@
   }
 </script>
 
-<div class="settings-section-label">{t("settings.advanced.update_channel")}</div>
 <div class="settings-card">
   <div class="settings-row">
     <span>{t("settings.advanced.update_channel")}</span>
@@ -52,7 +51,8 @@
   <div class="settings-help" style:margin-top="8px">{t("settings.advanced.channel_info")}</div>
 </div>
 
-<div class="settings-section-label">{t("settings.advanced.sync_all")}</div>
+<hr class="settings-divider" />
+
 <div class="settings-card">
   <div class="settings-help">{t("settings.advanced.cache_info")}</div>
 </div>

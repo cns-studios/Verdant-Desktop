@@ -20,6 +20,7 @@ const DEFAULT_APP = {
   textSize: "small",
   useDarkMode: false,
   discordRpc: false,
+  loadImages: true,
 };
 
 const DEFAULT_UPDATE = { autoCheck: true, autoDownload: false, channel: "stable" };

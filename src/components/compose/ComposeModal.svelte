@@ -40,6 +40,17 @@
     compose.addAttachments(await Promise.all(files.map(fileToAttachment)));
   }
 
+  function onEditorKeydown(event) {
+    if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
+    const key = event.key.toLowerCase();
+    const command = key === "z" ? (event.shiftKey ? "redo" : "undo") : key === "y" && !event.shiftKey ? "redo" : null;
+    if (!command) return;
+    event.preventDefault();
+    event.stopPropagation();
+    document.execCommand(command);
+    compose.bodyHtml = editor.innerHTML;
+  }
+
   function onKeydown(event) {
     if (eventCombo(event) !== prefs.hotkeys.send) return;
     event.preventDefault();
@@ -88,6 +99,7 @@
         aria-multiline="true"
         data-placeholder={t("compose.placeholder")}
         bind:this={editor}
+        onkeydown={onEditorKeydown}
         bind:innerHTML={compose.bodyHtml}
       ></div>
     </div>

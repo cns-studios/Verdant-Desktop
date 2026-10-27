@@ -27,7 +27,6 @@
   });
 </script>
 
-<div class="settings-section-label">{t("settings.app.language")}</div>
 <div class="settings-card">
   <div class="settings-row">
     <span>{t("settings.app.language")}</span>
@@ -39,7 +38,6 @@
   </div>
 </div>
 
-<div class="settings-section-label">{t("settings.app.connected_inboxes")}</div>
 <div class="settings-inbox-list">
   {#each session.accounts as account (account.id)}
     <div
@@ -61,7 +59,7 @@
   {/each}
 </div>
 
-<div class="settings-section-label">{t("settings.app.update")}</div>
+<div class="settings-bottom">
 <div class="settings-card">
   <div class="settings-info-row">
     <span>{t("settings.app.installed_version")}</span>
@@ -86,4 +84,5 @@
       {t(updates.ready ? "settings.app.download_update" : "settings.app.check_update")}
     {/if}
   </button>
+</div>
 </div>

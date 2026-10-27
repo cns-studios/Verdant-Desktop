@@ -73,7 +73,6 @@
 </div>
 
 {#if smart.sorted}
-  <div class="settings-section-label">{t("settings.smart.groups")}</div>
   <ul class="sis-rows">
     {#each smart.categories as category (category.slug)}
       <li class={["sis-row", editing === category.slug && "editing"]} style:--group-color={category.color || "#7b8075"}>

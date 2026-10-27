@@ -24,14 +24,17 @@
 .settings-switch:has(input:checked)::before { background:var(--green); border-color:var(--green); }
 .settings-switch:has(input:checked)::after { left:16px; }
 .settings-switch:has(input:focus-visible)::before { outline:2px solid var(--green-light); outline-offset:2px; }
-.settings-card { border:1px solid var(--border); border-radius:12px; background:var(--bg); padding:10px 12px; display:grid; gap:8px; }
+.settings-card { padding:2px 0; display:grid; gap:8px; }
+.settings-pane.active:has(> .settings-bottom) { display:flex; flex-direction:column; }
+.settings-bottom { margin-top:auto; display:grid; gap:6px; }
+.settings-divider { border:0; border-top:1px solid var(--border); margin:10px 0; width:100%; }
+.email-images-banner { display:flex; align-items:center; flex-wrap:wrap; gap:8px; padding:8px 12px; margin-bottom:10px; border:1px solid var(--border); border-radius:8px; background:var(--surface); font:400 12px 'DM Sans', sans-serif; color:var(--text-mid); }
+.email-images-banner span { flex:1; min-width:160px; }
 .settings-info-row { display:flex; justify-content:space-between; gap:12px; font:400 12px 'DM Sans', sans-serif; color:var(--text-mid); }
 .settings-info-row strong { color: var(--text); font-weight:500; }
 .settings-help { font:400 12px/1.5 'DM Sans', sans-serif; color:var(--text-mid); margin-top:2px; }
 .settings-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:6px; }
 .settings-danger { color:var(--settings-danger-color); border-color:var(--settings-danger-color-border); background: var(--surface3); }
-.settings-section-label { font: 500 10px 'DM Sans', sans-serif; letter-spacing: 0.7px; text-transform: uppercase; color: var(--text-muted); margin-top: 10px; margin-bottom: 2px; padding: 0 2px;}
-.settings-section-label:first-child { margin-top: 0; }
 .settings-inbox-list {
   display: grid;
   gap: 6px;

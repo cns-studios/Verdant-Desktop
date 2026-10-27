@@ -20,7 +20,6 @@
   }
 </script>
 
-<div class="settings-section-label">{t("settings.behavior.notifications")}</div>
 <div class="settings-card">
   <label class="settings-switch">
     <input
@@ -51,7 +50,8 @@
   </div>
 </div>
 
-<div class="settings-section-label">{t("settings.behavior.discord")}</div>
+<hr class="settings-divider" />
+
 <div class="settings-card">
   <label class="settings-switch">
     <input
@@ -64,7 +64,22 @@
   <div class="settings-help">{t("settings.behavior.discord_rpc_help")}</div>
 </div>
 
-<div class="settings-section-label">{t("settings.behavior.start_on_login")}</div>
+<hr class="settings-divider" />
+
+<div class="settings-card">
+  <label class="settings-switch">
+    <input
+      type="checkbox"
+      checked={prefs.app.loadImages}
+      onchange={(event) => saveAppPrefs({ loadImages: event.currentTarget.checked })}
+    />
+    {t("settings.behavior.load_images")}
+  </label>
+  <div class="settings-help">{t("settings.behavior.load_images_help")}</div>
+</div>
+
+<hr class="settings-divider" />
+
 <div class="settings-card">
   <label class="settings-switch">
     <input type="checkbox" checked={prefs.app.autostart} onchange={(event) => setAutostart(event.currentTarget.checked)} />

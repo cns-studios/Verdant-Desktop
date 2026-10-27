@@ -1,7 +1,9 @@
 <script>
   import { openExternalUrl } from "../../lib/api.js";
   import { escapeHtml, sanitizeUnicodeNoise } from "../../lib/format.js";
-  import { sanitizeEmailHtml } from "../../lib/sanitize.js";
+  import { t } from "../../lib/i18n/index.svelte.js";
+  import { hasEmailImages, sanitizeEmailHtml } from "../../lib/sanitize.js";
+  import { prefs, saveAppPrefs } from "../../state/prefs.svelte.js";
 
   const STYLE = `
     :host { display: block; overflow-x: auto; -webkit-user-select: text; user-select: text; }
@@ -25,9 +27,11 @@
 
   let { email, class: className = "" } = $props();
 
-  const html = $derived(
-    sanitizeEmailHtml(sanitizeUnicodeNoise(email.body_html || `<pre>${escapeHtml(email.snippet || "")}</pre>`)),
-  );
+  let loadedFor = $state(null);
+
+  const source = $derived(sanitizeUnicodeNoise(email.body_html || `<pre>${escapeHtml(email.snippet || "")}</pre>`));
+  const blockImages = $derived(prefs.app.loadImages === false && loadedFor !== email.id && hasEmailImages(source));
+  const html = $derived(sanitizeEmailHtml(source, { blockImages }));
 
   function openLink(event) {
     const anchor = (event.target instanceof Element ? event.target : event.target?.parentElement)?.closest("a[href]");
@@ -56,4 +60,11 @@
   }
 </script>
 
+{#if blockImages}
+  <div class="email-images-banner">
+    <span>{t("reading.images_blocked")}</span>
+    <button class="verdant-btn" onclick={() => (loadedFor = email.id)}>{t("reading.images_load")}</button>
+    <button class="verdant-btn" onclick={() => saveAppPrefs({ loadImages: true })}>{t("reading.images_always")}</button>
+  </div>
+{/if}
 <div class={className} {@attach emailContent}></div>
