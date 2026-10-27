@@ -167,7 +167,9 @@ pub async fn get_mailbox_counts(state: State<'_, Arc<DbState>>) -> Result<Mailbo
 
     let mut stmt = conn
         .prepare_cached(
-            "SELECT mailbox, COUNT(*), SUM(CASE WHEN is_read=0 THEN 1 ELSE 0 END)
+            "SELECT mailbox, COUNT(*), SUM(CASE WHEN is_read=0
+                          AND labels NOT LIKE '%SPAM%' AND labels NOT LIKE '%TRASH%' AND labels NOT LIKE '%CATEGORY_PROMOTIONS%'
+                      THEN 1 ELSE 0 END)
              FROM emails WHERE account_id=?1 GROUP BY mailbox",
         )
         .map_err(|e| e.to_string())?;

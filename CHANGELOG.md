@@ -1,9 +1,13 @@
 # Changelog
 
-## [2.22.24]
+## [2.2.24]
 - Optional Discord Rich Presence, displaying Verdants Activity in Discord
 - Optimized performance on Linux
 - New App Icon and Settings
+- Change if you want to automatically load images from mails, in Settings.
+- Minor improvements in the Compose window.
+- Major fixes across mail loading and security problems
+- The unread mails counter for your Inbox now only counts unread **Important** mails
 
 ## [2.2.23]
 - You can now sort your mailbox locally and dynamically using Machine Learning
