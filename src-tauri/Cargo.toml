@@ -38,6 +38,7 @@ semver = "1"
 imap = "2.4"
 native-tls = "0.2"
 mailparse = "0.15"
+encoding_rs = "0.8"
 lettre = { version = "0.11", default-features = false, features = ["smtp-transport", "native-tls", "builder"] }
 aes-gcm = "0.10"
 sha2 = "0.10"

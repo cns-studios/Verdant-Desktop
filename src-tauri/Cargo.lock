@@ -12,6 +12,7 @@ dependencies = [
  "dirs",
  "discord-rich-presence",
  "dotenvy",
+ "encoding_rs",
  "futures-util",
  "hex",
  "imap",

@@ -8,9 +8,17 @@ pub(crate) fn parse_body(parsed: &mailparse::ParsedMail) -> String {
     replace_cid_with_data_uris(&html, &embedded_images)
 }
 
+fn is_attachment(part: &mailparse::ParsedMail) -> bool {
+    part.get_content_disposition().disposition == mailparse::DispositionType::Attachment
+}
+
+fn is_plain_body(body: &str) -> bool {
+    body.trim_start().starts_with("<pre>")
+}
+
 pub(crate) fn extract_html(parsed: &mailparse::ParsedMail) -> String {
+    let ct = parsed.ctype.mimetype.to_lowercase();
     if parsed.subparts.is_empty() {
-        let ct = parsed.ctype.mimetype.to_lowercase();
         if ct == "text/html" {
             return parsed.get_body().unwrap_or_default();
         }
@@ -19,24 +27,32 @@ pub(crate) fn extract_html(parsed: &mailparse::ParsedMail) -> String {
         }
         return String::new();
     }
-    let mut html_result = None;
-    let mut plain_result = None;
-    for part in &parsed.subparts {
-        let ct = part.ctype.mimetype.to_lowercase();
-        if ct == "text/html" && html_result.is_none() {
-            html_result = part.get_body().ok();
-        } else if ct == "text/plain" && plain_result.is_none() {
-            if let Ok(body) = part.get_body() {
-                plain_result = Some(format!("<pre>{}</pre>", html_escape(&body)));
+
+    let parts = parsed.subparts.iter().filter(|part| !is_attachment(part));
+    match ct.as_str() {
+        // Alternatives are ordered from plainest to richest: prefer the last HTML one.
+        "multipart/alternative" => {
+            let mut plain_fallback = String::new();
+            for part in parts.rev() {
+                let body = extract_html(part);
+                if body.is_empty() {
+                    continue;
+                }
+                if !is_plain_body(&body) {
+                    return body;
+                }
+                if plain_fallback.is_empty() {
+                    plain_fallback = body;
+                }
             }
-        } else if ct.starts_with("multipart/") {
-            let nested = extract_html(part);
-            if !nested.is_empty() && html_result.is_none() {
-                html_result = Some(nested);
-            }
+            plain_fallback
         }
+        // The first part is the document; the rest are resources it references.
+        "multipart/related" => parts.map(extract_html).find(|body| !body.is_empty()).unwrap_or_default(),
+        // multipart/mixed & co.: every inline body part is shown, in order
+        // (e.g. Apple Mail splits text around inline attachments).
+        _ => parts.map(extract_html).filter(|body| !body.is_empty()).collect::<Vec<_>>().join("\n"),
     }
-    html_result.or(plain_result).unwrap_or_default()
 }
 
 pub(crate) fn extract_snippet(parsed: &mailparse::ParsedMail) -> String {

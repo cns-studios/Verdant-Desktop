@@ -3,6 +3,8 @@ use base64::Engine as _;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::imap_client::html_escape;
+
 #[derive(Serialize, Deserialize, Clone)]
 pub struct AttachmentMeta {
     pub filename: String,
@@ -58,6 +60,19 @@ pub fn strip_confusable_chars(input: &str) -> String {
         .collect()
 }
 
+fn content_type_charset(payload: &Value) -> Option<String> {
+    let headers = payload.get("headers").and_then(Value::as_array)?;
+    let content_type = header_value(headers, "Content-Type")?;
+    content_type.split(';').skip(1).find_map(|param| {
+        let (key, value) = param.split_once('=')?;
+        key.trim()
+            .eq_ignore_ascii_case("charset")
+            .then(|| value.trim().trim_matches('"').to_string())
+    })
+}
+
+// The Gmail API undoes the transfer encoding but leaves the bytes in the part's
+// declared charset, so non-UTF-8 mails must be decoded explicitly.
 pub(crate) fn decode_part(payload: &Value) -> Option<String> {
     let data = payload
         .get("body")
@@ -72,78 +87,81 @@ pub(crate) fn decode_part(payload: &Value) -> Option<String> {
         .or_else(|_| STANDARD.decode(data.as_bytes()))
         .ok()?;
 
-    let decoded = String::from_utf8_lossy(&bytes).into_owned();
+    let encoding = content_type_charset(payload)
+        .and_then(|label| encoding_rs::Encoding::for_label(label.as_bytes()))
+        .unwrap_or(encoding_rs::UTF_8);
+    let (decoded, _, _) = encoding.decode(&bytes);
     if decoded.is_empty() {
         return None;
     }
-    Some(strip_confusable_chars(&decoded))
+    Some(decoded.into_owned())
 }
 
-pub fn extract_body(payload: &Value) -> Option<String> {
-    let mime = payload
+fn part_mime(payload: &Value) -> String {
+    payload
         .get("mimeType")
         .and_then(Value::as_str)
         .unwrap_or_default()
-        .to_ascii_lowercase();
+        .to_ascii_lowercase()
+}
+
+fn is_attachment(payload: &Value) -> bool {
+    let has_filename = payload
+        .get("filename")
+        .and_then(Value::as_str)
+        .is_some_and(|name| !name.trim().is_empty());
+    let disposition_attachment = payload
+        .get("headers")
+        .and_then(Value::as_array)
+        .and_then(|headers| header_value(headers, "Content-Disposition"))
+        .is_some_and(|value| value.trim_start().to_ascii_lowercase().starts_with("attachment"));
+    has_filename || disposition_attachment
+}
+
+fn is_plain_body(body: &str) -> bool {
+    body.trim_start().starts_with("<pre>")
+}
+
+pub fn extract_body(payload: &Value) -> Option<String> {
+    let mime = part_mime(payload);
 
     if mime == "text/html" {
-        if let Some(text) = decode_part(payload) {
-            return Some(text);
-        }
+        return decode_part(payload);
     }
     if mime == "text/plain" {
-        if let Some(text) = decode_part(payload) {
-            return Some(format!("<pre>{}</pre>", text));
-        }
+        return decode_part(payload).map(|text| format!("<pre>{}</pre>", html_escape(&text)));
     }
 
-    let parts = match payload.get("parts").and_then(Value::as_array) {
-        Some(p) => p,
-        None => return None,
-    };
+    let parts: Vec<&Value> = payload
+        .get("parts")
+        .and_then(Value::as_array)?
+        .iter()
+        .filter(|part| !is_attachment(part))
+        .collect();
 
-    if mime == "multipart/alternative" {
-        let mut html_result: Option<String> = None;
-        let mut plain_result: Option<String> = None;
-
-        for part in parts {
-            let part_mime = part
-                .get("mimeType")
-                .and_then(Value::as_str)
-                .unwrap_or_default()
-                .to_ascii_lowercase();
-
-            if part_mime == "text/html" && html_result.is_none() {
-                let decoded = decode_part(part);
-                html_result = decoded;
-            } else if part_mime == "text/plain" && plain_result.is_none() {
-                if let Some(text) = decode_part(part) {
-                    plain_result = Some(format!("<pre>{}</pre>", text));
-                }
-            } else if part_mime.starts_with("multipart/") {
-                if let Some(nested) = extract_body(part) {
-                    if html_result.is_none() {
-                        html_result = Some(nested);
+    match mime.as_str() {
+        // Alternatives are ordered from plainest to richest: prefer the last HTML one.
+        "multipart/alternative" => {
+            let mut plain_fallback = None;
+            for part in parts.iter().rev() {
+                if let Some(body) = extract_body(part) {
+                    if !is_plain_body(&body) {
+                        return Some(body);
                     }
+                    plain_fallback.get_or_insert(body);
                 }
             }
+            plain_fallback
         }
-
-        return html_result.or(plain_result);
-    }
-
-    let mut plain_fallback: Option<String> = None;
-    for part in parts {
-        if let Some(found) = extract_body(part) {
-            if !found.trim_start().starts_with("<pre>") {
-                return Some(found);
-            }
-            if plain_fallback.is_none() {
-                plain_fallback = Some(found);
-            }
+        // The first part is the document; the rest are resources it references.
+        "multipart/related" => parts.iter().find_map(|part| extract_body(part)),
+        // multipart/mixed & co.: every inline body part is shown, in order
+        // (e.g. Apple Mail splits text around inline attachments).
+        _ => {
+            let bodies: Vec<String> = parts.iter().filter_map(|part| extract_body(part)).collect();
+            (!bodies.is_empty()).then(|| bodies.join("\n"))
         }
     }
-    return plain_fallback;
 }
 
 pub fn collect_attachments(payload: &Value, out: &mut Vec<AttachmentMeta>) {
