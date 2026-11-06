@@ -4,6 +4,7 @@ import "./styles/base.css";
 import "./styles/titlebar.css";
 import "./styles/sidebar.css";
 import "./styles/list.css";
+import "./styles/subscriptions.css";
 import "./styles/reading.css";
 import "./styles/compose.css";
 import "./styles/settings.css";

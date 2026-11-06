@@ -36,6 +36,7 @@ export const icons = {
   "folder": svg("<path d=\"M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z\" />"),
   "globe": svg("<path stroke=\"none\" d=\"M0 0h24v24H0z\" fill=\"none\" />\n  <path d=\"M7 9a4 4 0 1 0 8 0a4 4 0 0 0 -8 0\" />\n  <path d=\"M5.75 15a8.015 8.015 0 1 0 9.25 -13\" />\n  <path d=\"M11 17v4\" />\n  <path d=\"M7 21h8\" />"),
   "h-1": svg("<path stroke=\"none\" d=\"M0 0h24v24H0z\" fill=\"none\" />\n  <path d=\"M19 18v-8l-2 2\" />\n  <path d=\"M4 6v12\" />\n  <path d=\"M12 6v12\" />\n  <path d=\"M11 18h2\" />\n  <path d=\"M3 18h2\" />\n  <path d=\"M4 12h8\" />\n  <path d=\"M3 6h2\" />\n  <path d=\"M11 6h2\" />"),
+  "subscriptions": svg("<path d=\"M4 4h16a1 1 0 0 1 1 1v13a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2v-13a1 1 0 0 1 1 -1\" /><path d=\"M8 8h8\" /><path d=\"M8 12h8\" /><path d=\"M8 16h4\" />"),
   "inbox": svg("<path stroke=\"none\" d=\"M0 0h24v24H0z\" fill=\"none\" />\n  <path d=\"M4 6a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2l0 -12\" />\n  <path d=\"M4 13h3l3 3h4l3 -3h3\" />"),
   "info-circle": svg("<path stroke=\"none\" d=\"M0 0h24v24H0z\" fill=\"none\" />\n  <path d=\"M3 12a9 9 0 1 0 18 0a9 9 0 0 0 -18 0\" />\n  <path d=\"M12 9h.01\" />\n  <path d=\"M11 12h1v4h1\" />"),
   "italic": svg("<path stroke=\"none\" d=\"M0 0h24v24H0z\" fill=\"none\" />\n  <path d=\"M11 5l6 0\" />\n  <path d=\"M7 19l6 0\" />\n  <path d=\"M14 5l-4 14\" />"),

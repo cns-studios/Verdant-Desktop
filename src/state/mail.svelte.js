@@ -6,6 +6,7 @@ import { t } from "../lib/i18n/index.svelte.js";
 import { findVerificationCode, mentionsCode } from "../lib/verificationCode.js";
 import { selection } from "./selection.svelte.js";
 import { categoryLabel, smart } from "./smartInbox.svelte.js";
+import { resetSubscriptions, subscriptions } from "./subscriptions.svelte.js";
 import { showToast } from "./ui.svelte.js";
 
 const ANIMATION_WINDOW_MS = 1800;
@@ -27,6 +28,7 @@ const EMPTY_COUNTS = {
 };
 
 export const CATEGORY_PREFIX = "CATEGORY:";
+export const SUBSCRIPTIONS = "SUBSCRIPTIONS";
 
 const isThreadBox = (mailbox) => mailbox === "INBOX" || mailbox.startsWith(CATEGORY_PREFIX);
 const serverMailbox = (mailbox) => (mailbox.startsWith(CATEGORY_PREFIX) ? "INBOX" : mailbox);
@@ -134,6 +136,7 @@ class MailStore {
     this.search = "";
     this.counts = { ...EMPTY_COUNTS };
     this.#nextPage.clear();
+    resetSubscriptions();
     this.clearSelection();
     selection.exit();
   }
@@ -167,6 +170,11 @@ class MailStore {
     }
     this.mailbox = mailbox;
     if (animate) this.#startAnimation();
+    if (mailbox === SUBSCRIPTIONS) {
+      this.refreshCounts();
+      await subscriptions.load();
+      return;
+    }
 
     const loaded = this.#load(mailbox);
     const synced = sync ? this.sync(mailbox, true).catch((error) => console.warn("Sync unavailable; using local cache", error)) : null;
@@ -181,6 +189,7 @@ class MailStore {
   }
 
   async reload(mailbox = this.mailbox) {
+    if (mailbox === SUBSCRIPTIONS) return subscriptions.load();
     try {
       if (isThreadBox(mailbox)) {
         this.threads[mailbox] = await this.#fetchThreads(mailbox);
@@ -196,6 +205,7 @@ class MailStore {
   }
 
   async sync(mailbox = this.mailbox, force = false) {
+    if (mailbox === SUBSCRIPTIONS) return;
     const now = Date.now();
     if (!force && now - (this.#lastSynced.get(mailbox) || 0) < RESYNC_COOLDOWN_MS) return;
     this.#lastSynced.set(mailbox, now);
@@ -224,7 +234,7 @@ class MailStore {
   }
 
   async fetchMore() {
-    if (this.#fetchingMore || this.deepResults || this.search.trim()) return;
+    if (this.mailbox === SUBSCRIPTIONS || this.#fetchingMore || this.deepResults || this.search.trim()) return;
     const target = serverMailbox(this.mailbox);
     const cursor = this.#nextPage.get(target);
     if (!cursor) return;
@@ -379,6 +389,11 @@ class MailStore {
     }
   }
 
+  dropCachedViews() {
+    this.threads = {};
+    this.emails = {};
+  }
+
   async sendDraft(email) {
     if (!email.draft_id) {
       showToast(t("toast.draft_no_id"), "error");
@@ -504,7 +519,9 @@ class MailStore {
     });
     setTimeout(() => keys.forEach((key) => this.dusting.delete(key)), DUST_WINDOW_MS);
 
-    if (this.deepResults) {
+    if (this.mailbox === SUBSCRIPTIONS) {
+      subscriptions.load();
+    } else if (this.deepResults) {
       this.deepResults = this.deepResults.filter((email) => !keys.has(email.id));
     } else if (isThreadBox(this.mailbox)) {
       this.threads[this.mailbox] = (this.threads[this.mailbox] ?? []).filter((thread) => !keys.has(thread.thread_id));

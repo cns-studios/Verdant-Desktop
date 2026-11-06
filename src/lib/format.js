@@ -68,6 +68,7 @@ const MAILBOX_TITLE_KEYS = {
   SENT: "sidebar.sent",
   DRAFT: "sidebar.drafts",
   TRASH: "sidebar.trash",
+  SUBSCRIPTIONS: "sidebar.subscriptions",
 };
 
 export function mailboxTitle(mailbox) {

@@ -2,7 +2,7 @@
   import { tick } from "svelte";
   import { t } from "../../lib/i18n/index.svelte.js";
   import { compose } from "../../state/compose.svelte.js";
-  import { mail } from "../../state/mail.svelte.js";
+  import { mail, SUBSCRIPTIONS } from "../../state/mail.svelte.js";
   import { prefs, setSidebarCollapsed } from "../../state/prefs.svelte.js";
   import { session } from "../../state/session.svelte.js";
   import { smart } from "../../state/smartInbox.svelte.js";
@@ -17,6 +17,7 @@
     { id: "SENT", icon: "send", label: "sidebar.sent", count: "sent_total" },
     { id: "DRAFT", icon: "file-text", label: "sidebar.drafts", count: "drafts_total" },
     { id: "TRASH", icon: "trash", label: "sidebar.trash", count: "trash_total" },
+    { id: SUBSCRIPTIONS, icon: "subscriptions", label: "sidebar.subscriptions" },
   ];
 
   let sidebar;
@@ -133,7 +134,7 @@
       >
         <Icon name={box.icon} />
         <span class="nav-text">{t(box.label)}</span>
-        {#if mail.counts[box.count] > 0}
+        {#if box.count && mail.counts[box.count] > 0}
           <span class="nav-badge subtle">{mail.counts[box.count]}</span>
         {/if}
       </div>

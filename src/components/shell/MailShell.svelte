@@ -4,7 +4,7 @@
   import { canRunHotkey, eventCombo, isTypingTarget } from "../../lib/hotkeys.js";
   import { t } from "../../lib/i18n/index.svelte.js";
   import { compose } from "../../state/compose.svelte.js";
-  import { mail } from "../../state/mail.svelte.js";
+  import { mail, SUBSCRIPTIONS } from "../../state/mail.svelte.js";
   import { prefs } from "../../state/prefs.svelte.js";
   import { selection } from "../../state/selection.svelte.js";
   import { session } from "../../state/session.svelte.js";
@@ -14,11 +14,12 @@
   import ComposeModal from "../compose/ComposeModal.svelte";
   import ListPane from "../list/ListPane.svelte";
   import ReadingPane from "../reading/ReadingPane.svelte";
+  import SubscriptionsPane from "../subscriptions/SubscriptionsPane.svelte";
   import Sidebar from "../sidebar/Sidebar.svelte";
   import PaneResizer from "./PaneResizer.svelte";
   import Titlebar from "./Titlebar.svelte";
 
-  const MAILBOX_CYCLE = ["INBOX", "STARRED", "ARCHIVE", "SENT", "DRAFT", "TRASH"];
+  const MAILBOX_CYCLE = ["INBOX", "STARRED", "ARCHIVE", "SENT", "DRAFT", "TRASH", SUBSCRIPTIONS];
   const DOUBLE_ESCAPE_MS = 400;
 
   let refreshing = false;
@@ -112,7 +113,11 @@
 <Titlebar {subtitle} />
 <div class="app-content">
   <Sidebar />
-  <ListPane />
+  {#if mail.mailbox === SUBSCRIPTIONS}
+    <SubscriptionsPane />
+  {:else}
+    <ListPane />
+  {/if}
   <PaneResizer />
   <ReadingPane />
 </div>

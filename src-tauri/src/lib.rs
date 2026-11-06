@@ -205,6 +205,9 @@ pub fn run() {
             commands::shell::open_external_url,
             commands::shell::fetch_remote_image,
             commands::unsubscribe::unsubscribe_from_list,
+            commands::subscriptions::get_subscriptions,
+            commands::subscriptions::get_sender_emails,
+            commands::subscriptions::unsubscribe_sender,
 
             commands::window::get_startup_flags,
             commands::window::hide_main_window,
