@@ -5,6 +5,9 @@
   import { categoryLabel, smart } from "../../state/smartInbox.svelte.js";
   import { ui } from "../../state/ui.svelte.js";
   import Icon from "../ui/Icon.svelte";
+  import SettingsItem from "./SettingsItem.svelte";
+  import SettingsSection from "./SettingsSection.svelte";
+  import Toggle from "./Toggle.svelte";
 
   let editing = $state(null);
   let draftName = $state("");
@@ -17,9 +20,8 @@
     ui.smartSetup = { resort };
   }
 
-  async function toggle(event) {
-    const input = event.currentTarget;
-    if (input.checked) {
+  async function toggle(on, input) {
+    if (on) {
       input.checked = false;
       openSetup(false);
       return;
@@ -59,68 +61,66 @@
       : t("settings.smart.group_meta", { n: category.message_count });
 </script>
 
-<div class="sis-settings-head">
-  <div>
-    <h3>{t("settings.smart.title")}</h3>
-    <p>{t("settings.smart.description")}</p>
-    {#if session.accounts.length > 1 && session.activeAccount}
-      <p class="sis-for">{t("settings.smart.for_account", { email: session.activeAccount.email })}</p>
-    {/if}
-  </div>
-  <label class="settings-switch sis-switch" title={t("settings.smart.title")}>
-    <input type="checkbox" checked={smart.enabled} aria-label={t("settings.smart.title")} onchange={toggle} />
-  </label>
-</div>
+<SettingsSection>
+  <SettingsItem label={t("settings.smart.title")} help={t("settings.smart.description")}>
+    <Toggle label={t("settings.smart.title")} checked={smart.enabled} onchange={toggle} />
+  </SettingsItem>
+</SettingsSection>
+{#if session.accounts.length > 1 && session.activeAccount}
+  <p class="set-note">{t("settings.smart.for_account", { email: session.activeAccount.email })}</p>
+{/if}
 
 {#if smart.sorted}
-  <ul class="sis-rows">
-    {#each smart.categories as category (category.slug)}
-      <li class={["sis-row", editing === category.slug && "editing"]} style:--group-color={category.color || "#7b8075"}>
-        <span class="sis-dot"></span>
-        <span class="sis-row-name" role="presentation" ondblclick={() => startRename(category)}>
-          {#if editing === category.slug}
-            <input
-              class="sis-rename"
-              maxlength="40"
-              aria-label={t("smart.rename")}
-              bind:value={draftName}
-              {@attach focusAndSelect}
-              onblur={() => finishRename(true)}
-              onkeydown={(event) => {
-                if (event.key === "Enter") finishRename(true);
-                if (event.key === "Escape") {
-                  event.stopPropagation();
-                  finishRename(false);
-                }
-              }}
-            />
-          {:else}
-            {categoryLabel(category)}
-          {/if}
-        </span>
-        <span class="sis-row-meta">{meta(category)}</span>
-        <button
-          class="sis-icon-btn"
-          aria-label={t("smart.rename")}
-          title={t("smart.rename")}
-          onclick={() => startRename(category)}
-        >
-          <Icon name="pencil" />
-        </button>
-      </li>
-    {/each}
-  </ul>
-  <p class="settings-help">{t("settings.smart.groups_help")}</p>
-  <div class="sis-resort">
-    <div>
-      <strong>{t("settings.smart.resort_title")}</strong>
-      <p>{t("settings.smart.resort_body")}</p>
-    </div>
-    <button class="verdant-btn" onclick={() => openSetup(true)}>{t("settings.smart.resort_button")}</button>
-  </div>
+  <SettingsSection title={t("settings.section.groups")}>
+    <ul class="sis-rows">
+      {#each smart.categories as category (category.slug)}
+        <li class={["sis-row", editing === category.slug && "editing"]} style:--group-color={category.color || "#7b8075"}>
+          <span class="sis-dot"></span>
+          <span class="sis-row-name" role="presentation" ondblclick={() => startRename(category)}>
+            {#if editing === category.slug}
+              <input
+                class="sis-rename"
+                maxlength="40"
+                aria-label={t("smart.rename")}
+                bind:value={draftName}
+                {@attach focusAndSelect}
+                onblur={() => finishRename(true)}
+                onkeydown={(event) => {
+                  if (event.key === "Enter") finishRename(true);
+                  if (event.key === "Escape") {
+                    event.stopPropagation();
+                    finishRename(false);
+                  }
+                }}
+              />
+            {:else}
+              {categoryLabel(category)}
+            {/if}
+          </span>
+          <span class="sis-row-meta">{meta(category)}</span>
+          <button
+            class="sis-icon-btn"
+            aria-label={t("smart.rename")}
+            title={t("smart.rename")}
+            onclick={() => startRename(category)}
+          >
+            <Icon name="pencil" />
+          </button>
+        </li>
+      {/each}
+    </ul>
+  </SettingsSection>
+  <p class="set-note">{t("settings.smart.groups_help")}</p>
+
+  <SettingsSection>
+    <SettingsItem label={t("settings.smart.resort_title")} help={t("settings.smart.resort_body")}>
+      <button class="verdant-btn" onclick={() => openSetup(true)}>{t("settings.smart.resort_button")}</button>
+    </SettingsItem>
+  </SettingsSection>
 {:else if smart.enabled}
-  <div class="sis-empty">
-    <p>{t("settings.smart.not_sorted")}</p>
-    <button class="verdant-btn primary" onclick={() => openSetup(false)}>{t("smart.setup.sort")}</button>
-  </div>
+  <SettingsSection>
+    <SettingsItem help={t("settings.smart.not_sorted")}>
+      <button class="verdant-btn primary" onclick={() => openSetup(false)}>{t("smart.setup.sort")}</button>
+    </SettingsItem>
+  </SettingsSection>
 {/if}

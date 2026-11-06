@@ -38,7 +38,7 @@
     {:else if mail.conversation.loading}
       <div class="thread-loading">{t("toast.fetching")}</div>
     {:else if mail.conversation.error}
-      <div class="thread-loading" style:color="#8a3b3b">{mail.conversation.error}</div>
+      <div class="thread-loading" style:color="var(--danger)">{mail.conversation.error}</div>
     {:else if mail.selectedThreadId}
       {#key mail.selectedThreadId}
         <ThreadView />

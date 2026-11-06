@@ -5,6 +5,8 @@
   import { session } from "../../state/session.svelte.js";
   import { ui } from "../../state/ui.svelte.js";
   import { updates } from "../../state/updates.svelte.js";
+  import SettingsItem from "./SettingsItem.svelte";
+  import SettingsSection from "./SettingsSection.svelte";
 
   const inboxStatus = $derived(
     t("settings.app.inbox_status", { unread: mail.counts.inbox_unread, total: mail.counts.inbox_total }),
@@ -27,62 +29,48 @@
   });
 </script>
 
-<div class="settings-card">
-  <div class="settings-row">
-    <span>{t("settings.app.language")}</span>
-    <select value={getLang()} onchange={(event) => setLang(event.currentTarget.value)}>
+<SettingsSection title={t("settings.section.general")}>
+  <SettingsItem label={t("settings.app.language")}>
+    <select class="set-select" value={getLang()} onchange={(event) => setLang(event.currentTarget.value)}>
       {#each LANGUAGES as language (language.code)}
         <option value={language.code}>{language.label}</option>
       {/each}
     </select>
-  </div>
-</div>
+  </SettingsItem>
+</SettingsSection>
 
-<div class="settings-inbox-list">
+<SettingsSection title={t("settings.section.accounts")}>
   {#each session.accounts as account (account.id)}
-    <div
-      class="settings-inbox-item"
-      title={account.is_active ? `${inboxStatus} · ${t("settings.app.last_sync")}: ${lastSync}` : null}
+    <SettingsItem
+      label={account.display_name || account.email}
+      active={account.is_active}
+      help={account.is_active ? `${account.provider} · ${inboxStatus}` : account.provider}
+      title={account.is_active ? `${t("settings.app.last_sync")}: ${lastSync}` : undefined}
     >
-      <div class="settings-inbox-main">
-        <strong>{account.display_name || account.email}</strong>
-        <span class="settings-inbox-provider">
-          {account.provider}{#if account.is_active}&nbsp;· {inboxStatus}{/if}
-        </span>
-      </div>
-      <div class="settings-inbox-actions">
-        <button class="verdant-btn settings-danger" onclick={() => remove(account)}>
-          {t(account.is_active ? "settings.app.logout" : "settings.app.remove_account")}
-        </button>
-      </div>
-    </div>
+      <button class="verdant-btn settings-danger" onclick={() => remove(account)}>
+        {t(account.is_active ? "settings.app.logout" : "settings.app.remove_account")}
+      </button>
+    </SettingsItem>
   {/each}
-</div>
+</SettingsSection>
 
-<div class="settings-bottom">
-<div class="settings-card">
-  <div class="settings-info-row">
-    <span>{t("settings.app.installed_version")}</span>
-    <strong>v{updates.version || t("app.version_unknown")}</strong>
-  </div>
-  <div class="settings-info-row">
-    <span>{t("settings.app.update_status")}</span>
-    <strong style:color={updates.status.error ? "#8a3b3b" : null}>
-      {updates.status.text || t("settings.app.update_not_checked")}
-    </strong>
-  </div>
-</div>
-<div class="settings-actions">
-  <button
-    class="verdant-btn"
-    disabled={updates.busy}
-    onclick={() => (updates.ready ? updates.installFromSettings() : updates.checkFromSettings())}
+<SettingsSection title={t("settings.section.updates")}>
+  <SettingsItem
+    label={t("settings.app.installed_version")}
+    help={updates.status.text || t("settings.app.update_not_checked")}
+    error={!!updates.status.error}
   >
-    {#if updates.busy}
-      {updates.busyLabel}
-    {:else}
-      {t(updates.ready ? "settings.app.download_update" : "settings.app.check_update")}
-    {/if}
-  </button>
-</div>
-</div>
+    <span class="set-value muted">v{updates.version || t("app.version_unknown")}</span>
+    <button
+      class={["verdant-btn", updates.ready && "primary"]}
+      disabled={updates.busy}
+      onclick={() => (updates.ready ? updates.installFromSettings() : updates.checkFromSettings())}
+    >
+      {#if updates.busy}
+        {updates.busyLabel}
+      {:else}
+        {t(updates.ready ? "settings.app.download_update" : "settings.app.check_update")}
+      {/if}
+    </button>
+  </SettingsItem>
+</SettingsSection>

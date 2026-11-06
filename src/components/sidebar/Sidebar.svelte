@@ -88,6 +88,13 @@
     </button>
   </div>
 
+  <div class="compose-wrap">
+    <button class="compose-btn" onclick={() => compose.openNew()}>
+      <Icon name="plus" />
+      <span class="compose-btn-label">{t("sidebar.compose")}</span>
+    </button>
+  </div>
+
   <div class="sidebar-section">
     <div
       class={["nav-item", mail.mailbox === "INBOX" && "active"]}
@@ -139,13 +146,6 @@
         {/if}
       </div>
     {/each}
-  </div>
-
-  <div class="compose-wrap">
-    <button class="compose-btn" onclick={() => compose.openNew()}>
-      <Icon name="plus" />
-      <span class="compose-btn-label">{t("sidebar.compose")}</span>
-    </button>
   </div>
 
   <div class="sidebar-footer">

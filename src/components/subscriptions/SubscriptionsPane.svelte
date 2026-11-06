@@ -7,6 +7,7 @@
   import { subscriptions as subs } from "../../state/subscriptions.svelte.js";
   import { showToast } from "../../state/ui.svelte.js";
   import Avatar from "../ui/Avatar.svelte";
+  import EmptyState from "../ui/EmptyState.svelte";
   import Icon from "../ui/Icon.svelte";
   import Overlay from "../ui/Overlay.svelte";
 
@@ -147,12 +148,12 @@
     {:else if subs.error}
       <div class="subs-empty">{subs.error}</div>
     {:else if !subs.items.length}
-      <div class="subs-empty">{t("subs.empty")}</div>
+      <EmptyState icon="subscriptions" title={t("empty.subs.title")} body={t("subs.empty")} />
     {:else}
       {#each subs.visibleActive as item, index (item.sender_key)}
         {@render card(item, false, index)}
       {:else}
-        {#if !subs.query.trim()}<div class="subs-empty">{t("subs.empty_done")}</div>{/if}
+        {#if !subs.query.trim()}<EmptyState icon="check" title={t("empty.subs_done.title")} body={t("subs.empty_done")} />{/if}
       {/each}
       {#if subs.visibleDone.length}
         <div class="subs-section">{t("subs.done")}</div>

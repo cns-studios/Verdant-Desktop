@@ -34,14 +34,15 @@
 </script>
 
 <div class="account-popover-backdrop" role="presentation" onclick={close}></div>
-<div class="account-popover">
-  <div class="account-popover-section">
-    {#if session.accounts.length}
-      <div class="account-popover-label">{t("sidebar.accounts")}</div>
+<div class="account-popover" role="menu">
+  {#if session.accounts.length}
+    <div class="account-popover-head">{t("sidebar.accounts")}</div>
+    <div class="account-list">
       {#each session.accounts as account (account.id)}
         <div
           class={["account-item", account.is_active && "is-active"]}
-          role="button"
+          role="menuitemradio"
+          aria-checked={account.is_active}
           tabindex="0"
           onclick={() => switchTo(account)}
           onkeydown={activate(() => switchTo(account))}
@@ -50,28 +51,30 @@
             {(account.display_name || account.email).slice(0, 2).toUpperCase()}
           </div>
           <div class="account-item-info">
-            <div class="account-item-email" title={account.email}>{account.email}</div>
-            <div class="account-item-provider">
-              {account.provider === "imap" ? detectProvider(account.email).name : "Gmail"}
+            <div class="account-item-name">{account.display_name || account.email}</div>
+            <div class="account-item-provider" title={account.email}>
+              {account.display_name ? account.email : account.provider === "imap" ? detectProvider(account.email).name : "Gmail"}
             </div>
           </div>
           {#if account.is_active}
-            <div class="account-active-dot"></div>
+            <span class="account-active-mark"><Icon name="check" size={16} /></span>
           {:else}
-            <button class="account-remove-btn" title={t("reading.delete")} onclick={(event) => remove(event, account)}>×</button>
+            <button class="account-remove-btn" title={t("reading.delete")} aria-label={t("reading.delete")} onclick={(event) => remove(event, account)}>
+              <Icon name="x" size={14} />
+            </button>
           {/if}
         </div>
       {/each}
-    {/if}
-  </div>
+    </div>
+  {/if}
 
-  <div class="account-popover-section">
+  <div class="account-popover-actions">
     {#each ACTIONS as action (action.label)}
       {@const run = () => {
         close();
         action.run();
       }}
-      <div class="account-popover-action" role="button" tabindex="0" onclick={run} onkeydown={activate(run)}>
+      <div class="account-popover-action" role="menuitem" tabindex="0" onclick={run} onkeydown={activate(run)}>
         <Icon name={action.icon} />
         {t(action.label)}
       </div>

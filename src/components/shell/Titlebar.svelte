@@ -22,7 +22,7 @@
   <div class="app-header-left">
     <img class="app-logo-mark" src={logoUrl} alt="" draggable="false" />
     <span class="app-title">{t("app.title")}</span>
-    <span class="app-subtitle">- {subtitle}</span>
+    <span class="app-subtitle">{subtitle}</span>
   </div>
   <div class="app-header-controls">
     <WindowControls />

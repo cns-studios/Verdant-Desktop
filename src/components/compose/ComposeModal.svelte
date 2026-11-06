@@ -60,7 +60,7 @@
 </script>
 
 <div
-  class={["modal-overlay", compose.open && "open"]}
+  class={["modal-overlay", compose.open && !compose.busy && "open"]}
   role="presentation"
   onclick={(event) => event.target === event.currentTarget && compose.close()}
   onkeydown={onKeydown}

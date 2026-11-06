@@ -1,4 +1,7 @@
 .ob-root {
+    /* onboarding keeps its original palette */
+    --bg: #f5f3ef; --surface: #eeece7; --surface2: #e7e4dd; --border: #b4afa2;
+    --text: #1e2119; --text-mid: #4a4d45; --text-muted: #6c7065; --white: #fafaf8;
     --ob-panel: #3d5238;
     --ob-panel-ink: #eef2e9;
     --ob-panel-muted: rgba(238, 242, 233, .62);
@@ -16,6 +19,9 @@
     color: var(--text);
 }
 :root.dark .ob-root {
+    --bg: #1f1c18; --surface: #2a2622; --surface2: #353026; --border: #4a4640;
+    --text: #f0ebe3; --text-mid: #dad2c5; --text-muted: #b5ac9d; --white: #2a2622;
+    --green-pale: #2e362c;
     --ob-panel: #232b1f;
     --ob-stem: #8fa684;
     --ob-leaf: #7f9d72;

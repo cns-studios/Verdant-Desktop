@@ -42,6 +42,9 @@
     } else if (ui.addAccountOpen) return;
     else if (ui.accountPopoverOpen) ui.accountPopoverOpen = false;
     else if (ui.settingsOpen) ui.settingsOpen = false;
+    else if (compose.busy) {
+      if (compose.holding) compose.cancelSend();
+    }
     else if (compose.open) compose.close();
     else if (selection.active || selection.count > 0) {
       const now = performance.now();
@@ -75,7 +78,7 @@
     if (combo === keys.close) return dismissTopmost();
     if (!keys.enabled) return;
 
-    const overlayOpen = ui.settingsOpen || compose.open;
+    const overlayOpen = ui.settingsOpen || (compose.open && !compose.busy);
     const typing = isTypingTarget(event.target);
     const actions = [
       ["compose", combo === keys.compose, () => compose.openNew()],

@@ -26,7 +26,7 @@
       <div class="update-progress-track">
         <div
           class={["update-progress-bar", working && "indeterminate"]}
-          style:background={offer.phase === "failed" ? "#c08d8d" : null}
+          style:background={offer.phase === "failed" ? "var(--danger)" : null}
         ></div>
       </div>
     </div>

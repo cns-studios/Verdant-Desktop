@@ -37,6 +37,7 @@ class ComposeStore {
   bodyHtml = $state("");
   attachments = $state([]);
   holding = $state(false);
+  holdUntil = $state(0);
   busy = $state(false);
   focus = $state({ target: "", tick: 0 });
 
@@ -245,6 +246,7 @@ class ComposeStore {
 
   #hold() {
     this.holding = true;
+    this.holdUntil = Date.now() + SEND_HOLD_MS;
     return new Promise((resolve, reject) => {
       const finish = (settle) => {
         clearTimeout(this.#holdTimer);

@@ -22,7 +22,7 @@
   }
 
   .status-title {
-    font: 500 15px "Fraunces", serif;
+    font: 500 17px var(--font-accent);
     color: var(--text);
   }
 
@@ -34,9 +34,9 @@
     margin-top: 8px;
     padding: 8px 16px;
     border: none;
-    border-radius: 8px;
+    border-radius: var(--r);
     background: var(--green);
-    color: #fff;
+    color: var(--on-accent);
     font-family: inherit;
     cursor: pointer;
   }

@@ -3,11 +3,16 @@
   import { t } from "../../lib/i18n/index.svelte.js";
   import { prefs, saveAppPrefs } from "../../state/prefs.svelte.js";
   import { showToast } from "../../state/ui.svelte.js";
+  import SettingsItem from "./SettingsItem.svelte";
+  import SettingsSection from "./SettingsSection.svelte";
+  import Toggle from "./Toggle.svelte";
 
   const IMPORTANCE = [
     { value: "all", label: "settings.behavior.all_mail" },
     { value: "important", label: "settings.behavior.only_important" },
   ];
+
+  const importance = $derived(prefs.app.notificationImportance === "important" ? "important" : "all");
 
   async function setAutostart(enabled) {
     saveAppPrefs({ autostart: enabled });
@@ -20,77 +25,59 @@
   }
 </script>
 
-<div class="settings-card">
-  <label class="settings-switch">
-    <input
-      type="checkbox"
+<SettingsSection title={t("settings.section.notifications")}>
+  <SettingsItem label={t("settings.behavior.notifications")} help={t("settings.behavior.notifications_help")}>
+    <Toggle
+      label={t("settings.behavior.notifications")}
       checked={prefs.app.showNotifications}
-      onchange={(event) => saveAppPrefs({ showNotifications: event.currentTarget.checked })}
+      onchange={(on) => saveAppPrefs({ showNotifications: on })}
     />
-    {t("settings.behavior.notifications")}
-  </label>
-  <div
-    class="settings-radio-group"
-    style:margin-top="6px"
-    style:opacity={prefs.app.showNotifications ? null : 0.5}
-    style:pointer-events={prefs.app.showNotifications ? null : "none"}
-  >
-    {#each IMPORTANCE as option (option.value)}
-      <label class="settings-radio">
-        <input
-          type="radio"
-          name="notification-importance"
-          value={option.value}
-          checked={(prefs.app.notificationImportance === "important") === (option.value === "important")}
-          onchange={() => saveAppPrefs({ notificationImportance: option.value })}
-        />
-        {t(option.label)}
-      </label>
-    {/each}
-  </div>
-</div>
+    {#snippet below()}
+      <div class={["set-segmented", !prefs.app.showNotifications && "disabled"]} role="radiogroup">
+        {#each IMPORTANCE as option (option.value)}
+          <label class={["set-segment", importance === option.value && "active"]}>
+            <input
+              type="radio"
+              name="notification-importance"
+              value={option.value}
+              checked={importance === option.value}
+              disabled={!prefs.app.showNotifications}
+              onchange={() => saveAppPrefs({ notificationImportance: option.value })}
+            />
+            {t(option.label)}
+          </label>
+        {/each}
+      </div>
+    {/snippet}
+  </SettingsItem>
+</SettingsSection>
 
-<hr class="settings-divider" />
-
-<div class="settings-card">
-  <label class="settings-switch">
-    <input
-      type="checkbox"
-      checked={prefs.app.discordRpc}
-      onchange={(event) => saveAppPrefs({ discordRpc: event.currentTarget.checked })}
-    />
-    {t("settings.behavior.discord_rpc")}
-  </label>
-  <div class="settings-help">{t("settings.behavior.discord_rpc_help")}</div>
-</div>
-
-<hr class="settings-divider" />
-
-<div class="settings-card">
-  <label class="settings-switch">
-    <input
-      type="checkbox"
+<SettingsSection title={t("settings.section.privacy")}>
+  <SettingsItem label={t("settings.behavior.load_images")} help={t("settings.behavior.load_images_help")}>
+    <Toggle
+      label={t("settings.behavior.load_images")}
       checked={prefs.app.loadImages}
-      onchange={(event) => saveAppPrefs({ loadImages: event.currentTarget.checked })}
+      onchange={(on) => saveAppPrefs({ loadImages: on })}
     />
-    {t("settings.behavior.load_images")}
-  </label>
-  <div class="settings-help">{t("settings.behavior.load_images_help")}</div>
-</div>
+  </SettingsItem>
+  <SettingsItem label={t("settings.behavior.discord_rpc")} help={t("settings.behavior.discord_rpc_help")}>
+    <Toggle
+      label={t("settings.behavior.discord_rpc")}
+      checked={prefs.app.discordRpc}
+      onchange={(on) => saveAppPrefs({ discordRpc: on })}
+    />
+  </SettingsItem>
+</SettingsSection>
 
-<hr class="settings-divider" />
-
-<div class="settings-card">
-  <label class="settings-switch">
-    <input type="checkbox" checked={prefs.app.autostart} onchange={(event) => setAutostart(event.currentTarget.checked)} />
-    {t("settings.behavior.start_on_login")}
-  </label>
-  <label class="settings-switch">
-    <input
-      type="checkbox"
+<SettingsSection title={t("settings.section.startup")}>
+  <SettingsItem label={t("settings.behavior.start_on_login")}>
+    <Toggle label={t("settings.behavior.start_on_login")} checked={prefs.app.autostart} onchange={setAutostart} />
+  </SettingsItem>
+  <SettingsItem label={t("settings.behavior.run_in_background")}>
+    <Toggle
+      label={t("settings.behavior.run_in_background")}
       checked={prefs.app.runInBackground}
-      onchange={(event) => saveAppPrefs({ runInBackground: event.currentTarget.checked })}
+      onchange={(on) => saveAppPrefs({ runInBackground: on })}
     />
-    {t("settings.behavior.run_in_background")}
-  </label>
-</div>
+  </SettingsItem>
+</SettingsSection>

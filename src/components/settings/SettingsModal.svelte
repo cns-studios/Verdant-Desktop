@@ -39,30 +39,31 @@
 <svelte:document onkeydown={cycleTabs} />
 
 <Overlay onclose={close} panelClass="settings-panel" label={t("settings.title")}>
-  <div class="settings-grid">
-    <nav class="settings-tabs" role="tablist" aria-orientation="vertical">
-      <h2 class="settings-title">{t("settings.title")}</h2>
-      {#each TABS as tab, index (tab.id)}
-        <button
-          role="tab"
-          aria-selected={current === tab.id}
-          class={["settings-tab", current === tab.id && "active"]}
-          bind:this={tabButtons[index]}
-          onclick={() => (current = tab.id)}
-        >
-          <span class="settings-tab-icon"><Icon name={tab.icon} size={15} /></span>
-          <span class="settings-tab-label">{t(tab.label)}</span>
-        </button>
-      {/each}
-    </nav>
-    <div class="settings-content">
-      <header class="settings-content-head">
-        <h3>{t(active.label)}</h3>
-        <button class="verdant-close" aria-label={t("reading.close")} onclick={close}>×</button>
-      </header>
-      <section class="settings-pane active">
+  <div class="settings-shell">
+    <header class="settings-top">
+      <div class="settings-head">
+        <h2 class="settings-title">{t("settings.title")}</h2>
+        <button class="verdant-close" aria-label={t("reading.close")} onclick={close}><Icon name="x" size={16} /></button>
+      </div>
+      <nav class="settings-tabs" role="tablist">
+        {#each TABS as tab, index (tab.id)}
+          <button
+            role="tab"
+            aria-selected={current === tab.id}
+            class={["settings-tab", current === tab.id && "active"]}
+            bind:this={tabButtons[index]}
+            onclick={() => (current = tab.id)}
+          >
+            <Icon name={tab.icon} size={15} />
+            <span class="settings-tab-label">{t(tab.label)}</span>
+          </button>
+        {/each}
+      </nav>
+    </header>
+    <section class="settings-pane">
+      <div class="settings-column">
         <Pane />
-      </section>
-    </div>
+      </div>
+    </section>
   </div>
 </Overlay>

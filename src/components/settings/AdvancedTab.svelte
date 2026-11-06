@@ -5,6 +5,8 @@
   import { prefs, saveUpdatePrefs } from "../../state/prefs.svelte.js";
   import { showToast, ui } from "../../state/ui.svelte.js";
   import { updates } from "../../state/updates.svelte.js";
+  import SettingsItem from "./SettingsItem.svelte";
+  import SettingsSection from "./SettingsSection.svelte";
 
   const CHANNELS = ["stable", "nightly"];
 
@@ -39,24 +41,23 @@
   }
 </script>
 
-<div class="settings-card">
-  <div class="settings-row">
-    <span>{t("settings.advanced.update_channel")}</span>
-    <select value={prefs.update.channel} onchange={(event) => setChannel(event.currentTarget.value)}>
+<SettingsSection title={t("settings.section.updates")}>
+  <SettingsItem label={t("settings.advanced.update_channel")} help={t("settings.advanced.channel_info")}>
+    <select class="set-select" value={prefs.update.channel} onchange={(event) => setChannel(event.currentTarget.value)}>
       {#each CHANNELS as channel (channel)}
         <option value={channel}>{t(`settings.advanced.channel.${channel}`)}</option>
       {/each}
     </select>
-  </div>
-  <div class="settings-help" style:margin-top="8px">{t("settings.advanced.channel_info")}</div>
-</div>
+  </SettingsItem>
+</SettingsSection>
 
-<hr class="settings-divider" />
-
-<div class="settings-card">
-  <div class="settings-help">{t("settings.advanced.cache_info")}</div>
-</div>
-<div class="settings-actions">
-  <button class="verdant-btn" disabled={syncing} onclick={syncAll}>{t("settings.advanced.sync_all")}</button>
-  <button class="verdant-btn settings-danger" onclick={clearCache}>{t("settings.advanced.clear_cache")}</button>
-</div>
+<SettingsSection title={t("settings.section.data")}>
+  <SettingsItem help={t("settings.advanced.cache_info")}>
+    {#snippet below()}
+      <div class="set-actions">
+        <button class="verdant-btn" disabled={syncing} onclick={syncAll}>{t("settings.advanced.sync_all")}</button>
+        <button class="verdant-btn settings-danger" onclick={clearCache}>{t("settings.advanced.clear_cache")}</button>
+      </div>
+    {/snippet}
+  </SettingsItem>
+</SettingsSection>

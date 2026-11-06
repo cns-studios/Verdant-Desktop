@@ -6,6 +6,7 @@
   import { selection } from "../../state/selection.svelte.js";
   import { categoryLabel, smart } from "../../state/smartInbox.svelte.js";
   import { ui } from "../../state/ui.svelte.js";
+  import EmptyState from "../ui/EmptyState.svelte";
   import Icon from "../ui/Icon.svelte";
   import BulkBar from "./BulkBar.svelte";
   import MailRow from "./MailRow.svelte";
@@ -16,6 +17,7 @@
     { id: "Unread", label: "list.filter.unread" },
     { id: "Attachments", label: "list.filter.attachments" },
   ];
+  const EMPTY_ICONS = { INBOX: "inbox", STARRED: "star", ARCHIVE: "archive", SENT: "send", DRAFT: "file-text", TRASH: "trash" };
   const DRAG_THRESHOLD = 6;
   const LONG_PRESS_MS = 450;
   const FETCH_MORE_DISTANCE = 80;
@@ -35,6 +37,23 @@
       ? `width:${prefs.listPaneWidth}px;min-width:${prefs.listPaneWidth}px;flex:0 0 ${prefs.listPaneWidth}px`
       : null,
   );
+
+  const empty = $derived.by(() => {
+    const query = mail.search.trim();
+    if (query) return { icon: "search", title: t("empty.search.title"), body: t("empty.search.body", { q: query }) };
+    if (mail.filter === "Unread" || mail.filter === "Attachments") {
+      return {
+        icon: "list",
+        title: t("empty.filter.title"),
+        body: t("empty.filter.body"),
+        action: t("empty.filter.action"),
+        onaction: () => (mail.filter = "All"),
+      };
+    }
+    if (mail.categorySlug) return { icon: "tag", title: t("empty.category.title"), body: t("empty.category.body") };
+    const box = EMPTY_ICONS[mail.mailbox] ? mail.mailbox : "INBOX";
+    return { icon: EMPTY_ICONS[box], title: t(`empty.${box}.title`), body: t(`empty.${box}.body`) };
+  });
 
   $effect(() => {
     if (ui.focusSearch) searchInput?.focus();
@@ -162,6 +181,8 @@
   >
     {#if mail.loading}
       <div class="list-loading"><div class="list-spinner"></div></div>
+    {:else if !mail.rows.length}
+      <EmptyState {...empty} />
     {:else}
       {#key viewKey}
         {#each mail.rows as row, index (row.key)}

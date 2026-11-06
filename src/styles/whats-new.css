@@ -4,8 +4,8 @@
     left: 0;
     width: 100%;
     height: 100%;
-    background: rgba(31, 28, 24, 0.35);
-    backdrop-filter: blur(4px);
+    background: var(--scrim);
+
     z-index: 1000;
     animation: whatsnew-fadeIn 0.2s ease-in-out;
 }
@@ -51,14 +51,14 @@
     transform: translate(-50%, -50%);
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: 14px;
+    border-radius: var(--r-lg);
     width: min(540px, 96vw);
     max-height: 80vh;
     display: flex;
     flex-direction: column;
     z-index: 1001;
-    animation: whatsnew-slideUp 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
-    box-shadow: 0 22px 52px rgba(37, 35, 31, 0.18);
+    animation: whatsnew-slideUp 0.28s cubic-bezier(.2,.7,.2,1);
+    box-shadow:var(--shadow-lg);
     overflow: hidden;
 }
 
@@ -86,14 +86,14 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 20px 24px;
+    padding: 12px 16px;
     border-bottom: 1px solid var(--border);
-    background: linear-gradient(135deg, var(--green-pale), rgba(74, 94, 69, 0.05));
+    background: var(--surface);
 }
 
 .whatsnew-title {
     margin: 0;
-    font-family: 'Fraunces', serif;
+    font-family:var(--font-accent);
     font-size: 18px;
     font-weight: 500;
     letter-spacing: -0.3px;
@@ -104,7 +104,7 @@
 }
 
 .whatsnew-title::before {
-    content: '✨';
+    content: none;
     font-size: 20px;
 }
 
@@ -120,7 +120,7 @@
     transition: all 0.12s;
     width: 30px;
     height: 30px;
-    border-radius: 8px;
+    border-radius: var(--r);
     background: var(--surface2);
 }
 
@@ -138,14 +138,14 @@
 .whatsnew-content {
     flex: 1;
     overflow-y: auto;
-    padding: 24px;
+    padding: 16px;
     scrollbar-width: thin;
     scrollbar-color: var(--border) transparent;
 }
 
 .whatsnew-version {
-    font-family: 'Fraunces', serif;
-    font-size: 32px;
+    font-family:var(--font-accent);
+    font-size: 28px;
     font-weight: 400;
     letter-spacing: -0.5px;
     margin-bottom: 20px;
@@ -162,7 +162,7 @@
 .whatsnew-changes li {
     padding: 10px 0;
     color: var(--text-mid);
-    font-family: 'DM Sans', sans-serif;
+    font-family:var(--font);
     font-size: 13.5px;
     line-height: 1.6;
     margin-left: 0;
@@ -184,7 +184,7 @@
     display: flex;
     justify-content: flex-end;
     gap: 10px;
-    padding: 16px 24px;
+    padding: 10px 16px;
     border-top: 1px solid var(--border);
     background: var(--surface2);
 }
@@ -192,10 +192,10 @@
 .whatsnew-dismiss-btn {
     padding: 8px 20px;
     background: var(--green);
-    color: white;
+    color:var(--on-accent);
     border: none;
-    border-radius: 8px;
-    font-family: 'DM Sans', sans-serif;
+    border-radius: var(--r);
+    font-family:var(--font);
     font-size: 12px;
     font-weight: 500;
     cursor: pointer;
@@ -204,7 +204,7 @@
 
 .whatsnew-dismiss-btn:hover {
     background: var(--accent);
-    transform: translateY(-1px);
+
 }
 
 .whatsnew-dismiss-btn:active {
@@ -215,14 +215,14 @@
     margin: 12px 0;
     padding: 12px 16px;
     border-left: 3px solid var(--green);
-    background: rgba(76, 175, 80, 0.08);
-    border-radius: 6px;
+    background: var(--surface2);
+    border-radius: var(--r-sm);
 }
 
 .whatsnew-blockquote p {
     margin: 8px 0;
     color: var(--text);
-    font-family: 'DM Sans', sans-serif;
+    font-family:var(--font);
     font-size: 13.5px;
     line-height: 1.6;
     font-style: italic;
@@ -241,8 +241,8 @@
     background: var(--surface2);
     color: var(--green);
     padding: 2px 6px;
-    border-radius: 4px;
-    font-family: 'Fira Code', monospace;
+    border-radius: var(--r-sm);
+    font-family: var(--font-mono);
     font-size: 12px;
     font-weight: 500;
     border: 1px solid var(--border);
@@ -259,4 +259,4 @@
     color: var(--text);
 }
 
-.whatsnew-empty { color:var(--text-muted); font:400 13.5px/1.6 'DM Sans', sans-serif; }
+.whatsnew-empty { color:var(--text-muted); font:400 13.5px/1.6 var(--font); }

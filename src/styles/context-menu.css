@@ -4,11 +4,11 @@
     min-width: 190px;
     background: var(--white);
     border: 1px solid var(--border);
-    border-radius: 12px;
-    box-shadow: 0 16px 40px rgba(30, 33, 25, .18);
-    padding: 6px;
+    border-radius: var(--r);
+    box-shadow:var(--shadow-lg);
+    padding: 4px;
     transform-origin: top left;
-    animation: context-menu-in .14s cubic-bezier(.34, 1.56, .64, 1) forwards;
+    animation: context-menu-in .14s cubic-bezier(.2,.7,.2,1) forwards;
     -webkit-user-select: none;
     user-select: none;
 }
@@ -21,12 +21,12 @@
     align-items: center;
     gap: 10px;
     width: 100%;
-    padding: 8px 10px;
+    padding: 6px 8px;
     border: 0;
-    border-radius: 8px;
+    border-radius: var(--r);
     background: transparent;
     color: var(--text-mid);
-    font: 500 12px 'DM Sans', sans-serif;
+    font: 500 12px var(--font);
     text-align: left;
     cursor: pointer;
     transition: background .1s, color .1s;
@@ -41,8 +41,8 @@
     margin: 5px 8px;
     opacity: .5;
 }
-.category-popup { position:fixed; z-index:1000; min-width:190px; padding:6px; border:1px solid var(--border); border-radius:10px; background:var(--white); box-shadow:var(--shadow-lg); }
+.category-popup { position:fixed; z-index:1000; min-width:190px; padding:6px; border:1px solid var(--border); border-radius:var(--r); background:var(--white); box-shadow:var(--shadow-lg); }
 .category-popup-title { padding:6px 9px 5px; color:var(--text-muted); font-size:11px; }
-.category-popup-item { width:100%; display:flex; align-items:center; gap:8px; padding:8px 9px; border:0; border-radius:6px; background:transparent; color:var(--text); text-align:left; font:inherit; font-size:12px; cursor:pointer; }
+.category-popup-item { width:100%; display:flex; align-items:center; gap:8px; padding:8px 9px; border:0; border-radius:var(--r-sm); background:transparent; color:var(--text); text-align:left; font:inherit; font-size:12px; cursor:pointer; }
 .category-popup-item:hover { background:var(--surface2); }
 .category-popup-dot { width:8px; height:8px; border-radius:50%; background:var(--category-color); flex-shrink:0; }

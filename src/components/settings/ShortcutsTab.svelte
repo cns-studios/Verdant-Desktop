@@ -3,6 +3,10 @@
   import { t } from "../../lib/i18n/index.svelte.js";
   import { prefs, saveHotkeys } from "../../state/prefs.svelte.js";
   import { showToast } from "../../state/ui.svelte.js";
+  import Icon from "../ui/Icon.svelte";
+  import SettingsItem from "./SettingsItem.svelte";
+  import SettingsSection from "./SettingsSection.svelte";
+  import Toggle from "./Toggle.svelte";
 
   const MODIFIER_KEYS = ["Control", "Shift", "Alt", "Meta"];
 
@@ -29,30 +33,36 @@
 
 <svelte:document onkeydowncapture={capture} />
 
-<label class="settings-switch" style:margin-bottom="10px">
-  <input
-    type="checkbox"
-    checked={prefs.hotkeys.enabled}
-    onchange={(event) => saveHotkeys({ enabled: event.currentTarget.checked })}
-  />
-  {t("settings.shortcuts.enabled")}
-</label>
-<div class="settings-shortcut-list">
+<SettingsSection>
+  <SettingsItem label={t("settings.shortcuts.enabled")}>
+    <Toggle
+      label={t("settings.shortcuts.enabled")}
+      checked={prefs.hotkeys.enabled}
+      onchange={(on) => saveHotkeys({ enabled: on })}
+    />
+  </SettingsItem>
+</SettingsSection>
+
+<SettingsSection>
   {#each EDITABLE_HOTKEYS as shortcut (shortcut.key)}
     {@const combo = prefs.hotkeys[shortcut.key]}
-    <div class="settings-shortcut-row">
-      <span class="settings-shortcut-label">{t(shortcut.label)}</span>
-      <div class="settings-shortcut-controls">
-        <span class={["settings-shortcut-key", listening === shortcut.key && "listening"]}>
-          {listening === shortcut.key ? t("settings.shortcuts.listening") : formatCombo(combo)}
-        </span>
-        <button class="verdant-btn settings-shortcut-edit" onclick={() => (listening = shortcut.key)}>
-          {t("settings.shortcuts.edit")}
-        </button>
-        <button class="verdant-btn settings-shortcut-unset" disabled={!combo} onclick={() => set(shortcut.key, "")}>
-          {t("settings.shortcuts.unset")}
-        </button>
-      </div>
-    </div>
+    <SettingsItem label={t(shortcut.label)} disabled={!prefs.hotkeys.enabled}>
+      <button
+        class={["settings-shortcut-key", listening === shortcut.key && "listening", !combo && "empty"]}
+        title={t("settings.shortcuts.edit")}
+        onclick={() => (listening = shortcut.key)}
+      >
+        {listening === shortcut.key ? t("settings.shortcuts.listening") : combo ? formatCombo(combo) : "—"}
+      </button>
+      <button
+        class="set-icon-btn"
+        title={t("settings.shortcuts.unset")}
+        aria-label={t("settings.shortcuts.unset")}
+        disabled={!combo}
+        onclick={() => set(shortcut.key, "")}
+      >
+        <Icon name="x" size={14} />
+      </button>
+    </SettingsItem>
   {/each}
-</div>
+</SettingsSection>

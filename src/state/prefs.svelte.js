@@ -9,6 +9,7 @@ const HOTKEYS_KEY = "verdant.hotkeys";
 const SIDEBAR_KEY = "verdant.sidebarCollapsed";
 const LIST_WIDTH_KEY = "verdant.listPaneWidth";
 
+export const THEMES = ["light", "dark", "midnight"];
 export const TEXT_SIZES = ["small", "medium", "large"];
 export const TEXT_ZOOM = { small: 1, medium: 1.1, large: 1.2 };
 
@@ -18,6 +19,7 @@ const DEFAULT_APP = {
   showNotifications: true,
   notificationImportance: "all",
   textSize: "small",
+  theme: "light",
   useDarkMode: false,
   discordRpc: false,
   loadImages: true,
@@ -31,7 +33,9 @@ function normalizeChannel(value) {
 }
 
 function loadApp() {
-  const app = { ...DEFAULT_APP, ...readJson(APP_KEY, {}) };
+  const stored = readJson(APP_KEY, {});
+  const app = { ...DEFAULT_APP, ...stored };
+  if (!THEMES.includes(stored.theme)) app.theme = stored.useDarkMode === true ? "dark" : "light";
   if (!TEXT_SIZES.includes(app.textSize)) app.textSize = "small";
   return app;
 }

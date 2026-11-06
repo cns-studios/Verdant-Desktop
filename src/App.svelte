@@ -16,6 +16,13 @@
     return initDiscordPresence();
   });
 
+  function suppressNativeMenu(event) {
+    if (import.meta.env.DEV || event.defaultPrevented) return;
+    const target = event.target instanceof Element ? event.target : null;
+    if (target?.closest("input, textarea, [contenteditable='true'], [contenteditable='']")) return;
+    event.preventDefault();
+  }
+
   $effect(() => {
     getCurrentWebview()
       .setZoom(TEXT_ZOOM[prefs.app.textSize] ?? 1)
@@ -24,7 +31,8 @@
 
   $effect(() => {
     document.documentElement.lang = getLang();
-    document.documentElement.classList.toggle("dark", !!prefs.app.useDarkMode);
+    document.documentElement.classList.toggle("dark", prefs.app.theme !== "light");
+    document.documentElement.classList.toggle("midnight", prefs.app.theme === "midnight");
   });
 
   $effect(() => {
@@ -33,6 +41,8 @@
     document.body.classList.toggle("reading-pane-hidden", !mail.hasSelection);
   });
 </script>
+
+<svelte:document oncontextmenu={suppressNativeMenu} />
 
 {#if session.status === "booting"}
   <div class="boot-screen"><div class="boot-spinner"></div></div>
