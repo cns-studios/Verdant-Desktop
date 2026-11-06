@@ -3,7 +3,7 @@
   import { t } from "../../lib/i18n/index.svelte.js";
   import { portal } from "../../lib/portal.js";
   import { session } from "../../state/session.svelte.js";
-  import { toasts, ui } from "../../state/ui.svelte.js";
+  import { progress, toasts, ui } from "../../state/ui.svelte.js";
   import { updates } from "../../state/updates.svelte.js";
   import SendingPopup from "../compose/SendingPopup.svelte";
   import Onboarding from "../onboarding/Onboarding.svelte";
@@ -70,6 +70,16 @@
           })}
         </div>
       </div>
+    </div>
+  {/if}
+
+  {#if progress.active}
+    <div class="bulk-progress" role="progressbar" aria-valuemin="0" aria-valuemax={progress.total} aria-valuenow={progress.done} transition:fly={{ y: 20, duration: 200 }}>
+      <div class="bulk-progress-text">
+        <span>{progress.label}</span>
+        <span class="bulk-progress-count">{progress.done} / {progress.total}</span>
+      </div>
+      <div class="bulk-progress-track"><div class="bulk-progress-fill" style:width="{(progress.done / progress.total) * 100}%"></div></div>
     </div>
   {/if}
 

@@ -247,6 +247,8 @@ export default {
   "toast.draft_saved": "Entwurf gespeichert",
   "toast.archived": "E-Mail archiviert",
   "toast.trashed": "E-Mail in den Papierkorb verschoben",
+  "progress.working": "Wird verarbeitet…",
+  "progress.unsubscribing": "Abmeldung läuft…",
   "toast.star_updated": "Markierungsstatus aktualisiert",
   "toast.read_marked": "Als gelesen markiert",
   "toast.unread_marked": "Als ungelesen markiert",

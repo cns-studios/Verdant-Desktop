@@ -11,6 +11,23 @@ export function showToast(message, type = "info", timeout = 2200) {
   }, timeout);
 }
 
+export const PROGRESS_MIN = 10;
+
+export const progress = $state({ active: false, label: "", done: 0, total: 0 });
+
+export function startProgress(label, total) {
+  if (total < PROGRESS_MIN) return null;
+  Object.assign(progress, { active: true, label, done: 0, total });
+  return {
+    tick() {
+      progress.done = Math.min(progress.total, progress.done + 1);
+    },
+    finish() {
+      progress.active = false;
+    },
+  };
+}
+
 export const ui = $state({
   settingsOpen: false,
   accountPopoverOpen: false,

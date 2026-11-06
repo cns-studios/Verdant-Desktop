@@ -7,7 +7,7 @@ import { findVerificationCode, mentionsCode } from "../lib/verificationCode.js";
 import { selection } from "./selection.svelte.js";
 import { categoryLabel, smart } from "./smartInbox.svelte.js";
 import { resetSubscriptions, subscriptions } from "./subscriptions.svelte.js";
-import { showToast } from "./ui.svelte.js";
+import { showToast, startProgress } from "./ui.svelte.js";
 
 const ANIMATION_WINDOW_MS = 1800;
 const RESYNC_COOLDOWN_MS = 10 * 1000;
@@ -491,7 +491,15 @@ class MailStore {
 
   async #applyToMessages(rows, action) {
     const ids = await this.#messageIds(rows);
-    const results = await Promise.allSettled(ids.map((id) => action(id)));
+    const tracker = startProgress(t("progress.working"), ids.length);
+    let results;
+    try {
+      results = await Promise.allSettled(
+        ids.map((id) => Promise.resolve(action(id)).finally(() => tracker?.tick())),
+      );
+    } finally {
+      tracker?.finish();
+    }
     const failures = results.filter((result) => result.status === "rejected");
     if (ids.length && failures.length === ids.length) {
       showToast(String(failures[0].reason), "error", 4000);

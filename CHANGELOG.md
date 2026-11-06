@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.2.25
+- Added a clearer progress bar for larger bulk actions
+- New Subscription tab, so you can unsubscribe all those nasty newsletters at once
+- Improved the Discord RPC feature
+
 ## [2.2.24]
 - Optional Discord Rich Presence, displaying Verdants Activity in Discord
 - Optimized performance on Linux

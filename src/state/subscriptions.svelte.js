@@ -1,5 +1,7 @@
 import { SvelteSet } from "svelte/reactivity";
 import * as api from "../lib/api.js";
+import { t } from "../lib/i18n/index.svelte.js";
+import { startProgress } from "./ui.svelte.js";
 
 const CONCURRENCY = 3;
 
@@ -81,6 +83,7 @@ class SubscriptionsStore {
     const queue = keys.filter((key) => this.status[key] !== "busy");
     queue.forEach((key) => (this.status[key] = "busy"));
     const results = { ok: 0, failed: 0 };
+    const tracker = startProgress(t("progress.unsubscribing"), queue.length);
 
     const worker = async () => {
       while (queue.length) {
@@ -97,9 +100,14 @@ class SubscriptionsStore {
           this.status[key] = "error";
           results.failed += 1;
         }
+        tracker?.tick();
       }
     };
-    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, queue.length) }, worker));
+    try {
+      await Promise.all(Array.from({ length: Math.min(CONCURRENCY, queue.length) }, worker));
+    } finally {
+      tracker?.finish();
+    }
     return results;
   }
 }

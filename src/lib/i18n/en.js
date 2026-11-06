@@ -247,6 +247,8 @@ export default {
   "toast.draft_saved": "Draft saved",
   "toast.archived": "Email archived",
   "toast.trashed": "Email moved to trash",
+  "progress.working": "Working…",
+  "progress.unsubscribing": "Unsubscribing…",
   "toast.star_updated": "Star status updated",
   "toast.read_marked": "Marked as read",
   "toast.unread_marked": "Marked as unread",
