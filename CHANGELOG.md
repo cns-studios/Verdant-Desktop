@@ -1,4 +1,7 @@
 # Changelog
+## 2.3.0
+- Verdant got an updated look! Click around to discover it
+- Multiple bug fixes and performance improvements, making the app snappier
 
 ## 2.2.25
 - Added a clearer progress bar for larger bulk actions
