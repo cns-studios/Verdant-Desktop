@@ -11,7 +11,7 @@
 .email-attachment-sub { font:400 11px var(--font); color:var(--text-muted); }
 .email-attachment-download { border:1px solid var(--border); background: var(--surface2); color: var(--text); border-radius:var(--r); padding:5px 9px; font:500 11px var(--font); cursor:pointer; }
 .attachment-download-modal { position: fixed; inset: 0; z-index: 2500; background: transparent; pointer-events:none; }
-.attachment-download-card { position:absolute; right:14px; top:14px; width:min(340px, calc(100vw - 28px)); background: var(--surface); border:1px solid var(--border); border-radius:var(--r); padding:14px; box-shadow:var(--shadow-lg); display:flex; align-items:center; gap:10px; transform: translateX(120%); opacity:0; transition: transform .24s ease, opacity .24s ease; }
+.attachment-download-card { position:absolute; right:14px; top:14px; width:min(340px, calc(100vw - 28px)); background: var(--surface); border:1px solid var(--border); border-radius:var(--r); padding:14px; box-shadow:var(--shadow-lg); display:flex; align-items:center; gap:10px; transform: translateX(120%); opacity:0; transition: transform .24s var(--ease), opacity .24s var(--ease); }
 .attachment-download-modal.open .attachment-download-card { transform: translateX(0); opacity:1; }
 .attachment-download-icon { width:18px; height:18px; display:flex; align-items:center; justify-content:center; flex-shrink:0; color: var(--green); }
 .attachment-download-icon.is-spinning { border:2px solid var(--green-muted); border-top-color: var(--green); border-radius:50%; animation: verdant-spin .8s linear infinite; }
@@ -30,7 +30,7 @@
   font: 500 12px var(--font);
   cursor: pointer;
   white-space: nowrap;
-  transition: background .12s, border-color .12s;
+  transition: background-color var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease);
 }
 .unsubscribe-btn:hover {
   background: var(--green-pale);

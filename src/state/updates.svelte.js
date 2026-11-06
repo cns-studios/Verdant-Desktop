@@ -163,7 +163,7 @@ class Updates {
       const version = await this.loadVersion();
       const store = await Store.load(STORE_FILE);
       if (!version || (await store.get("lastSeenVersion")) === version) return;
-      await this.openWhatsNew();
+      if (prefs.app.showWhatsNew !== false) await this.openWhatsNew();
       await store.set("lastSeenVersion", version);
       await store.save();
     } catch (error) {

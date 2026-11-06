@@ -73,6 +73,13 @@
   <SettingsItem label={t("settings.behavior.start_on_login")}>
     <Toggle label={t("settings.behavior.start_on_login")} checked={prefs.app.autostart} onchange={setAutostart} />
   </SettingsItem>
+  <SettingsItem label={t("settings.behavior.whats_new")} help={t("settings.behavior.whats_new_help")}>
+    <Toggle
+      label={t("settings.behavior.whats_new")}
+      checked={prefs.app.showWhatsNew !== false}
+      onchange={(on) => saveAppPrefs({ showWhatsNew: on })}
+    />
+  </SettingsItem>
   <SettingsItem label={t("settings.behavior.run_in_background")}>
     <Toggle
       label={t("settings.behavior.run_in_background")}

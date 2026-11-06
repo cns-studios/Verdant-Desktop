@@ -321,26 +321,31 @@ class MailStore {
     return row.thread ? this.selectThread(row.thread) : this.selectEmail(row.email);
   }
 
-  async archive(rows) {
-    if (await this.#applyToMessages(rows, api.archiveEmail)) this.#removed(rows, t("toast.archived"));
+  // List actions are optimistic: the rows animate out and the list closes up right away,
+  // the backend work happens afterwards, and the list is restored if it fails.
+  archive(rows) {
+    return this.#optimistic(rows, api.archiveEmail, t("toast.archived"));
   }
 
-  async restore(rows) {
-    if (await this.#applyToMessages(rows, api.restoreFromTrash)) this.#removed(rows, t("toast.restored"));
+  restore(rows) {
+    return this.#optimistic(rows, api.restoreFromTrash, t("toast.restored"));
   }
 
-  async moveToInbox(rows) {
-    if (await this.#applyToMessages(rows, api.moveToInbox)) this.#removed(rows, t("toast.moved_to_inbox"));
+  moveToInbox(rows) {
+    return this.#optimistic(rows, api.moveToInbox, t("toast.moved_to_inbox"));
   }
 
-  async trash(rows) {
+  trash(rows) {
     const permanent = this.mailbox === "TRASH" || rows.every((row) => row.email?.mailbox === "TRASH");
-    const done = await this.#applyToMessages(rows, permanent ? api.permanentDeleteEmail : api.trashEmail);
-    if (done) this.#removed(rows, t(permanent ? "toast.permanently_deleted" : "toast.trashed"));
+    return this.#optimistic(
+      rows,
+      permanent ? api.permanentDeleteEmail : api.trashEmail,
+      t(permanent ? "toast.permanently_deleted" : "toast.trashed"),
+    );
   }
 
   async markRead(rows, isRead) {
-    await this.#applyToMessages(rows, (id) => api.setEmailReadStatus(id, isRead));
+    const ids = this.#messageIds(rows);
     for (const row of rows) {
       (row.thread ?? row.email).is_read = isRead;
       if (row.thread?.thread_id === this.selectedThreadId) {
@@ -348,34 +353,40 @@ class MailStore {
       }
     }
     showToast(t(isRead ? "toast.read_marked" : "toast.unread_marked"));
+    await this.#applyToMessages(rows, (id) => api.setEmailReadStatus(id, isRead), ids);
     await this.#changed();
   }
 
   async toggleStar(rows) {
     const starred = !rows.every((row) => (row.thread ?? row.email).starred);
     const differing = rows.filter((row) => !!(row.thread ?? row.email).starred !== starred);
+    const ids = this.#messageIds(differing);
     differing.forEach((row) => ((row.thread ?? row.email).starred = starred));
     showToast(t("toast.star_updated"));
-    await this.#applyToMessages(differing, api.toggleStarred);
-    if (this.mailbox === "STARRED" && !starred) this.#removed(differing);
+    const leaving = this.mailbox === "STARRED" && !starred;
+    if (leaving) this.#dropRows(differing);
+    const ok = await this.#applyToMessages(differing, api.toggleStarred, ids);
+    if (ok && leaving) this.#settled();
     else await this.#changed();
   }
 
   async moveToCategory(rows, category) {
-    const ids = await this.#messageIds(rows);
-    if (!ids.length) return;
+    const ids = this.#messageIds(rows);
+    const message = t("toast.moved_to_category", { category: categoryLabel(category) });
+    const leaving = this.categorySlug && this.categorySlug !== category.slug;
+    if (leaving) this.#dropRows(rows, message);
+    else showToast(message);
     try {
-      await api.moveEmailsToCategory(ids, category.slug);
+      const resolved = await ids;
+      if (!resolved.length) return await this.#changed();
+      await api.moveEmailsToCategory(resolved, category.slug);
     } catch (error) {
       showToast(String(error), "error");
+      await this.#changed();
       return;
     }
-    const message = t("toast.moved_to_category", { category: categoryLabel(category) });
-    if (this.categorySlug && this.categorySlug !== category.slug) this.#removed(rows, message);
-    else {
-      showToast(message);
-      await this.#changed();
-    }
+    if (leaving) this.#settled();
+    else await this.#changed();
   }
 
   async unsubscribe(email) {
@@ -489,8 +500,17 @@ class MailStore {
     return perRow.flat();
   }
 
-  async #applyToMessages(rows, action) {
-    const ids = await this.#messageIds(rows);
+  async #optimistic(rows, action, message) {
+    const ids = this.#messageIds(rows); // snapshot before the list changes
+    this.#dropRows(rows, message);
+    const ok = await this.#applyToMessages(rows, action, ids);
+    if (ok) this.#settled();
+    else await this.#changed(); // put the rows back
+    return ok;
+  }
+
+  async #applyToMessages(rows, action, pendingIds = this.#messageIds(rows)) {
+    const ids = await pendingIds;
     const tracker = startProgress(t("progress.working"), ids.length);
     let results;
     try {
@@ -519,6 +539,11 @@ class MailStore {
   }
 
   #removed(rows, message = "") {
+    this.#dropRows(rows, message);
+    this.#settled();
+  }
+
+  #dropRows(rows, message = "") {
     if (message) showToast(message);
     const keys = new Set(rows.map((row) => row.key));
     keys.forEach((key) => {
@@ -539,6 +564,9 @@ class MailStore {
 
     if (keys.has(this.selectedThreadId) || keys.has(this.selectedEmail?.id)) this.clearSelection();
     this.#invalidateOtherViews();
+  }
+
+  #settled() {
     this.refreshCounts();
     this.sync(this.mailbox).catch(() => {});
   }

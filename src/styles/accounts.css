@@ -1,6 +1,6 @@
 .account-popover-backdrop { position:fixed; inset:0; z-index:1900; }
-.account-popover { position:fixed; bottom:74px; left:12px; width:272px; background:var(--white); border:1px solid var(--border); border-radius:var(--r-lg); box-shadow:var(--shadow-lg); z-index:2000; overflow:hidden; transform-origin:bottom left; animation:popover-in .14s ease-out both; }
-@keyframes popover-in { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:none; } }
+.account-popover { position:fixed; bottom:74px; left:12px; width:272px; background:var(--white); border:1px solid var(--border); border-radius:var(--r-lg); box-shadow:var(--shadow-lg); z-index:2000; overflow:hidden; transform-origin:bottom left; animation:popover-in var(--t) var(--ease-out) both; }
+@keyframes popover-in { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
 
 .account-popover-head { padding:12px 14px 6px; font:600 13px var(--font); color:var(--text-mid); }
 .account-list { display:grid; gap:2px; padding:0 6px 8px; max-height:280px; overflow-x:hidden; overflow-y:auto; grid-template-columns:minmax(0, 1fr); }

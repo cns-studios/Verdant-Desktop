@@ -1,5 +1,6 @@
 <script>
   import { fly } from "svelte/transition";
+  import { DUR, easeOut } from "../../lib/motion.js";
   import { t } from "../../lib/i18n/index.svelte.js";
   import { updates } from "../../state/updates.svelte.js";
 
@@ -7,7 +8,7 @@
   const working = $derived(["downloading", "installing", "restarting"].includes(offer.phase));
 </script>
 
-<div class="update-toast open" transition:fly={{ y: 20, duration: 300 }}>
+<div class="update-toast open" transition:fly={{ y: 16, duration: DUR.base, easing: easeOut }}>
   <div class="update-toast-header">
     <div>
       <div class="update-toast-title">{t("update.title", { version: offer.info.latestVersion })}</div>

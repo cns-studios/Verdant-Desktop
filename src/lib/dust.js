@@ -27,7 +27,7 @@ function spawnParticles(node) {
           { transform: "translate(0,0) scale(1)", opacity: 1 },
           { transform: `translate(${dx}px, ${dy}px) rotate(${rotation}deg) scale(${scale})`, opacity: 0 },
         ],
-        { duration: 550 + Math.random() * 400, easing: "cubic-bezier(0.15, 0.6, 0.35, 1)", fill: "forwards" },
+        { duration: 550 + Math.random() * 400, easing: "cubic-bezier(.4, 0, .2, 1)", fill: "forwards" },
       ).finished,
     );
   }
@@ -44,7 +44,7 @@ export function dust(node, { removed }) {
   const paddingBottom = parseFloat(style.paddingBottom) || 0;
 
   return {
-    duration: 550,
+    duration: 420,
     css: (t) => {
       const opacity = Math.max(0, (t - (1 - FADE_SHARE)) / FADE_SHARE);
       const size = Math.min(1, t / (1 - FADE_SHARE));

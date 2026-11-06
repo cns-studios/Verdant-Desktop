@@ -8,12 +8,12 @@
     box-shadow:var(--shadow-lg);
     padding: 4px;
     transform-origin: top left;
-    animation: context-menu-in .14s cubic-bezier(.2,.7,.2,1) forwards;
+    animation: context-menu-in var(--t) var(--ease-out) forwards;
     -webkit-user-select: none;
     user-select: none;
 }
 @keyframes context-menu-in {
-    from { opacity: 0; transform: scale(.96) translateY(-4px); }
+    from { opacity: 0; transform: scale(.97) translateY(-4px); }
     to   { opacity: 1; transform: scale(1)  translateY(0); }
 }
 .email-context-item {

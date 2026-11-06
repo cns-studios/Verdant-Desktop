@@ -431,5 +431,8 @@ export default {
 
   "whatsnew.title": "What's New",
   "whatsnew.dismiss": "Cool!",
+  "whatsnew.show_after_updates": "Show this after updates",
+  "settings.behavior.whats_new": "Show What's New after updates",
+  "settings.behavior.whats_new_help": "Open the release notes the first time you launch a new version.",
   "whatsnew.no_changes": "No new changes in this version.",
 };

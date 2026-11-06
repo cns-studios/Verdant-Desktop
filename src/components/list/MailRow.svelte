@@ -9,8 +9,8 @@
   import Icon from "../ui/Icon.svelte";
   import CodeChip from "./CodeChip.svelte";
 
-  const STAGGER_MS = 40;
-  const MAX_STAGGER_MS = 1200;
+  const STAGGER_MS = 14;
+  const MAX_STAGGER_MS = 180;
 
   let { row, index } = $props();
 
@@ -39,7 +39,6 @@
   style:animation-delay={mail.animate ? `${Math.min(index * STAGGER_MS, MAX_STAGGER_MS)}ms` : null}
   out:dust={{ removed: () => mail.dusting.has(row.key) }}
 >
-  <span class="email-checkbox"><Icon name="check" size={12} /></span>
   {#if !item.is_read}
     <div class="unread-dot"></div>
   {/if}
@@ -47,7 +46,10 @@
     <span class={["star-badge", !mail.animate && "pop"]}><Icon name="star-filled" size={18} /></span>
   {/if}
   <div class="email-item-main">
-    <Avatar sender={avatarSender} mailbox={row.thread ? "INBOX" : row.email.mailbox || ""} />
+    <div class="avatar-slot">
+      <Avatar sender={avatarSender} mailbox={row.thread ? "INBOX" : row.email.mailbox || ""} />
+      <span class="email-checkbox"><Icon name="check" size={13} /></span>
+    </div>
     <div class="email-item-inner">
       <div class="email-top">
         <span class="email-sender">

@@ -3,7 +3,7 @@
 .subs-toolbar .chip:disabled { opacity:.5; cursor:default; }
 
 .subs-list { padding:6px 0; }
-.sub-card { border-bottom:1px solid var(--surface); animation:fadeSlideIn 0.5s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.sub-card { border-bottom:1px solid var(--surface); animation:fadeSlideIn var(--t) var(--ease-out) both; }
 .suppress-anim .sub-card { animation:none !important; }
 .sub-card.selected { background:var(--green-pale); }
 .sub-card.done { opacity:.6; }
@@ -12,7 +12,7 @@
 .sub-text { display:flex; flex-direction:column; gap:2px; min-width:0; flex:1; }
 .sub-name { font-size:13px; font-weight:500; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .sub-meta { font-size:11.5px; color:var(--text-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.sub-chevron { display:flex; color:var(--text-muted); transition:transform .15s; }
+.sub-chevron { display:flex; color:var(--text-muted); transition:transform var(--t) var(--ease); }
 .sub-chevron.open { transform:rotate(90deg); }
 .sub-check { width:16px; height:16px; flex-shrink:0; border-radius:var(--r-sm); border:1.5px solid var(--border); background:var(--white); display:flex; align-items:center; justify-content:center; padding:0; cursor:pointer; color:var(--on-accent); }
 .sub-check svg { opacity:0; }

@@ -16,9 +16,9 @@ body.is-sending .toast-wrap { top:84px; }
 .compose-maximized .modal-footer { flex-shrink:0; }
 #compose-max-btn { display:flex; align-items:center; justify-content:center; }
 #compose-max-btn svg { width:14px; height:14px; }
-.modal-overlay { position:fixed; inset:0; background:var(--scrim); display:flex; align-items:flex-end; justify-content:flex-end; padding:16px; z-index:100; opacity:0; pointer-events:none; transition:opacity .12s; }
+.modal-overlay { position:fixed; inset:0; background:var(--scrim); display:flex; align-items:flex-end; justify-content:flex-end; padding:16px; z-index:100; opacity:0; pointer-events:none; transition:opacity var(--t) var(--ease); }
 .modal-overlay.open { opacity:1; pointer-events:all; }
-.compose-modal { width:540px; max-width:calc(100vw - 32px); background:var(--white); border:1px solid var(--border); border-radius:var(--r-lg); box-shadow:var(--shadow-lg); display:flex; flex-direction:column; overflow:hidden; transform:translateY(8px); transition:transform .14s ease-out; height:auto; }
+.compose-modal { width:540px; max-width:calc(100vw - 32px); background:var(--white); border:1px solid var(--border); border-radius:var(--r-lg); box-shadow:var(--shadow-lg); display:flex; flex-direction:column; overflow:hidden; transform:translateY(12px); transition:transform var(--t) var(--ease-out); height:auto; }
 .modal-overlay.open .compose-modal { transform:none; }
 .modal-header { height:44px; padding:0 8px 0 18px; background:var(--surface); border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; }
 .modal-title { font:500 15px var(--font-accent); color:var(--text); letter-spacing:-.01em; }

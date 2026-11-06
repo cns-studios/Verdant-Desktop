@@ -1,6 +1,7 @@
 <script>
   import { onMount } from "svelte";
   import { fade } from "svelte/transition";
+  import { DUR, ease } from "../../lib/motion.js";
   import * as api from "../../lib/api.js";
   import { t } from "../../lib/i18n/index.svelte.js";
   import { mail } from "../../state/mail.svelte.js";
@@ -96,7 +97,7 @@
 <div
   class={["sis-overlay", "open", phase === "sorting" && "is-sorting", settled && "is-sorted"]}
   role="presentation"
-  transition:fade={{ duration: 180 }}
+  transition:fade={{ duration: DUR.base, easing: ease }}
   onclick={(event) => event.target === event.currentTarget && close()}
 >
   <div class="sis-dialog" role="dialog" tabindex="-1" aria-modal="true" aria-labelledby="sis-title" bind:this={dialog}>

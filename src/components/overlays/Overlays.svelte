@@ -1,5 +1,6 @@
 <script>
   import { fly } from "svelte/transition";
+  import { DUR, easeOut } from "../../lib/motion.js";
   import { t } from "../../lib/i18n/index.svelte.js";
   import { portal } from "../../lib/portal.js";
   import { session } from "../../state/session.svelte.js";
@@ -58,7 +59,7 @@
 
   {#if ui.attachmentDownload}
     <div class="attachment-download-modal open">
-      <div class="attachment-download-card" role="status" transition:fly={{ x: 80, duration: 240 }}>
+      <div class="attachment-download-card" role="status" transition:fly={{ x: 40, duration: DUR.base, easing: easeOut }}>
         <div class={["attachment-download-icon", ui.attachmentDownload.done ? "is-success" : "is-spinning"]}>
           {#if ui.attachmentDownload.done}
             <Icon name="check" />

@@ -1,6 +1,7 @@
 <script>
   import { escapeHtml } from "../../lib/format.js";
   import { t } from "../../lib/i18n/index.svelte.js";
+  import { prefs, saveAppPrefs } from "../../state/prefs.svelte.js";
   import { updates } from "../../state/updates.svelte.js";
   import Icon from "../ui/Icon.svelte";
 
@@ -81,6 +82,14 @@
     {/if}
   </div>
   <div class="whatsnew-footer">
+    <label class="whatsnew-optin">
+      <input
+        type="checkbox"
+        checked={prefs.app.showWhatsNew}
+        onchange={(event) => saveAppPrefs({ showWhatsNew: event.currentTarget.checked })}
+      />
+      <span>{t("whatsnew.show_after_updates")}</span>
+    </label>
     <button class="whatsnew-dismiss-btn" onclick={() => updates.closeWhatsNew(true)}>{t("whatsnew.dismiss")}</button>
   </div>
 </div>

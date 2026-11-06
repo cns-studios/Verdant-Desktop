@@ -1,5 +1,7 @@
 <script>
   import { tick } from "svelte";
+  import logoUrl from "../../assets/logo.png";
+  import { startDrag, toggleMaximize } from "../../lib/windowDrag.js";
   import { t } from "../../lib/i18n/index.svelte.js";
   import { compose } from "../../state/compose.svelte.js";
   import { mail, SUBSCRIPTIONS } from "../../state/mail.svelte.js";
@@ -81,7 +83,8 @@
   onmouseenter={slideOut}
   onmouseleave={slideBackSoon}
 >
-  <div class="sidebar-header">
+  <div class="sidebar-header" role="presentation" onpointerdown={startDrag} ondblclick={toggleMaximize}>
+    <img class="sidebar-logo" src={logoUrl} alt="" draggable="false" />
     <div class="sidebar-menu-label">{t("sidebar.mailboxes")}</div>
     <button class="sidebar-collapse-btn" title={collapseLabel} aria-label={collapseLabel} onclick={toggleCollapsed}>
       <Icon name={prefs.sidebarCollapsed ? "sidebar-expand" : "sidebar-collapse"} />

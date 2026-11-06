@@ -12,6 +12,12 @@
   --font-accent: 'Fraunces', Georgia, serif;
   --font-mono:   'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
 
+  --ease:   cubic-bezier(.4, 0, .2, 1);
+  --ease-out: cubic-bezier(.2, .8, .2, 1);
+  --t-fast: .12s;
+  --t:      .18s;
+  --t-slow: .24s;
+
   --r-sm: 4px;
   --r:    6px;
   --r-lg: 10px;
@@ -123,10 +129,16 @@ body {
 }
 
 html.theme-switching body, html.theme-switching body * {
-  transition: background-color .15s ease, color .15s ease, border-color .15s ease;
+  transition: background-color .15s var(--ease), color .15s var(--ease), border-color .15s var(--ease);
 }
 
 button, input, select, textarea { font-family: inherit; }
+
+/* every interactive thing eases the same way */
+:where(button, a, input, select, summary, label, [role="button"], [role="tab"], .nav-item, .email-item, .chip, .icon-btn) {
+  transition: background-color var(--t-fast) var(--ease), color var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease), opacity var(--t-fast) var(--ease), transform var(--t-fast) var(--ease);
+}
+:where(.verdant-btn, .compose-btn, .send-btn, .cancel-btn, .update-toast-btn, .chip):active { transform: scale(.975); }
 
 #root { width: 100%; height: 100%; }
 
@@ -139,9 +151,9 @@ button, input, select, textarea { font-family: inherit; }
 
 :focus-visible { outline: 2px solid var(--green); outline-offset: 1px; }
 
-.verdant-overlay { position: fixed; inset: 0; z-index: 2100; background: var(--scrim); display:flex; align-items:center; justify-content:center; opacity: 0; pointer-events: none; transition: opacity .1s ease; }
+.verdant-overlay { position: fixed; inset: 0; z-index: 2100; background: var(--scrim); display:flex; align-items:center; justify-content:center; opacity: 0; pointer-events: none; transition: opacity var(--t) var(--ease); }
 .verdant-overlay.open { opacity: 1; pointer-events: auto; }
-.verdant-panel { width:min(600px, 94vw); max-height: 86vh; overflow:auto; background: var(--surface); border:1px solid var(--border); border-radius:var(--r-lg); box-shadow: var(--shadow-lg); padding: 20px; transform: translateY(6px); transition: transform .14s ease; }
+.verdant-panel { width:min(600px, 94vw); max-height: 86vh; overflow:auto; background: var(--surface); border:1px solid var(--border); border-radius:var(--r-lg); box-shadow: var(--shadow-lg); padding: 20px; transform: translateY(8px); transition: transform var(--t) var(--ease-out); }
 .verdant-overlay.open .verdant-panel { transform: none; }
 .verdant-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom:8px; }
 .verdant-head h2 { font: 500 20px var(--font-accent); color: var(--text); letter-spacing: -.01em; }
@@ -155,7 +167,7 @@ button, input, select, textarea { font-family: inherit; }
 .verdant-btn.primary:hover { background: var(--accent); border-color: var(--accent); }
 
 .toast-wrap { position: fixed; top:14px; left:50%; transform: translateX(-50%); z-index:2400; display:grid; gap:8px; }
-.toast { min-width:220px; max-width:520px; padding:10px 14px; border-radius:var(--r-lg); border:1px solid var(--border); background: var(--surface); color: var(--text); font:500 12.5px var(--font); box-shadow:var(--shadow-lg); animation: toast-in .18s ease-out forwards; }
+.toast { min-width:220px; max-width:520px; padding:10px 14px; border-radius:var(--r-lg); border:1px solid var(--border); background: var(--surface); color: var(--text); font:500 12.5px var(--font); box-shadow:var(--shadow-lg); animation: toast-in var(--t) var(--ease-out) forwards; }
 .toast.info { border-color: var(--green-muted); }
 .toast.error { background: var(--danger-bg); border-color: var(--danger-border); color: var(--danger); }
 
@@ -163,17 +175,19 @@ button, input, select, textarea { font-family: inherit; }
 .bulk-progress-text { display:flex; justify-content:space-between; gap:12px; margin-bottom:8px; }
 .bulk-progress-count { color: var(--text-mid); font: 500 11px var(--font); font-variant-numeric:tabular-nums; }
 .bulk-progress-track { height:2px; background: var(--surface2); overflow:hidden; }
-.bulk-progress-fill { height:100%; background: var(--green); transition: width .15s ease; }
-@keyframes toast-in { from { opacity:0; transform: translateY(-8px);} to { opacity:1; transform: none;} }
+.bulk-progress-fill { height:100%; background: var(--green); transition: width var(--t) var(--ease); }
+@keyframes toast-in { from { opacity:0; transform: translateY(-10px);} to { opacity:1; transform: none;} }
 @keyframes verdant-spin { to { transform: rotate(360deg); } }
 
 body.reading-pane-hidden .reading-pane { display: none !important; }
 body.reading-pane-hidden .pane-resizer { display: none !important; }
 body.reading-pane-hidden .email-list-pane { flex:1 1 auto !important; width:auto !important; min-width:0 !important; max-width:none !important; border-right:0 !important; }
-html.theme-switching body { animation: theme-switch .36s ease both; }
+html.theme-switching body { animation: theme-switch .36s var(--ease) both; }
 ::selection { background-color: var(--green-muted); color: var(--text); }
 
-.app-content { flex:1; min-height:0; display:flex; width:100%; overflow:hidden; height:calc(100vh - 38px); position:relative; }
+.app-shell { display:flex; width:100%; height:100vh; position:relative; overflow:hidden; }
+.app-main { flex:1; min-width:0; display:flex; flex-direction:column; }
+.app-content { flex:1; min-height:0; display:flex; width:100%; overflow:hidden; position:relative; }
 .boot-screen { position:fixed; inset:0; z-index:99999; background:var(--bg); display:flex; align-items:center; justify-content:center; }
 .boot-spinner { width:20px; height:20px; border:2px solid var(--border); border-top-color:var(--green); border-radius:50%; animation:list-spin .7s linear infinite; }
 @keyframes list-spin { to { transform:rotate(360deg); } }

@@ -427,6 +427,9 @@ export default {
 
   "whatsnew.title": "Neuerungen",
   "whatsnew.dismiss": "Super!",
+  "whatsnew.show_after_updates": "Nach Updates anzeigen",
+  "settings.behavior.whats_new": "Neuigkeiten nach Updates anzeigen",
+  "settings.behavior.whats_new_help": "Öffnet die Release-Notes beim ersten Start einer neuen Version.",
   "whatsnew.no_changes": "Diese Version enthält keine neuen Änderungen.",
   "settings.appearence.light": "Hell",
   "settings.appearence.dark": "Dunkel",

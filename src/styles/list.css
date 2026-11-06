@@ -19,7 +19,7 @@
 .deep-search-btn:disabled { opacity:.6; cursor:default; }
 
 .filter-bar { position:relative; min-height:26px; }
-.filter-chips { display:flex; gap:2px; overflow-x:auto; scrollbar-width:none; transition:opacity .12s ease; }
+.filter-chips { display:flex; gap:2px; overflow-x:auto; scrollbar-width:none; transition:opacity .12s var(--ease); }
 .filter-chips::-webkit-scrollbar { display:none; }
 .filter-bar.bulk-mode .filter-chips { opacity:0; pointer-events:none; }
 .chip { height:26px; display:inline-flex; align-items:center; padding:0 10px; border-radius:var(--r); font-size:12px; white-space:nowrap; cursor:pointer; border:1px solid transparent; background:transparent; color:var(--text-muted); }
@@ -27,7 +27,7 @@
 .chip.active { background:var(--green-pale); color:var(--green); font-weight:500; }
 
 /* ---------- bulk bar ---------- */
-.bulk-bar { position:absolute; left:0; right:0; top:0; display:flex; align-items:center; justify-content:flex-start; gap:4px; opacity:0; visibility:hidden; transition:opacity .12s ease, visibility .12s; }
+.bulk-bar { position:absolute; left:0; right:0; top:0; display:flex; align-items:center; justify-content:flex-start; gap:4px; opacity:0; visibility:hidden; transition:opacity .12s var(--ease), visibility .12s; }
 .filter-bar.bulk-mode .bulk-bar { opacity:1; visibility:visible; }
 .bulk-master { width:24px; height:24px; display:flex; align-items:center; justify-content:center; appearance:none; -webkit-appearance:none; border:none; border-radius:var(--r); background:transparent; cursor:pointer; color:var(--text-mid); }
 .bulk-master:hover { background:var(--surface2); }
@@ -47,9 +47,9 @@
 .bulk-action.close { margin-left:auto; }
 
 /* ---------- sync / loading ---------- */
-.list-sync-bar { position:relative; height:2px; flex-shrink:0; margin-top:-1px; background:transparent; overflow:hidden; pointer-events:none; opacity:0; transition:opacity .2s ease; }
+.list-sync-bar { position:relative; height:2px; flex-shrink:0; margin-top:-1px; background:transparent; overflow:hidden; pointer-events:none; opacity:0; transition:opacity .2s var(--ease); }
 .list-sync-bar.visible { opacity:1; }
-.list-sync-bar-inner { position:absolute; top:0; bottom:0; width:30%; background:var(--green); animation:list-sync-slide 1.1s cubic-bezier(.4,0,.2,1) infinite; }
+.list-sync-bar-inner { position:absolute; top:0; bottom:0; width:30%; background:var(--green); animation:list-sync-slide 1.1s var(--ease) infinite; }
 @keyframes list-sync-slide { 0% { left:-30%; } 100% { left:100%; } }
 .list-loading { display:flex; align-items:center; justify-content:center; height:100%; min-height:160px; }
 .list-spinner { width:18px; height:18px; border:2px solid var(--border); border-top-color:var(--green); border-radius:50%; animation:list-spin .7s linear infinite; }
@@ -63,14 +63,13 @@
 .email-item:hover { background:var(--surface); }
 .email-item.active { background:var(--green-pale); box-shadow:inset 2px 0 0 var(--green); }
 .email-item.selected { background:var(--green-pale); }
-.email-list.multi-select .email-item { padding-left:40px; }
 .email-list.multi-select .unread-dot { display:none; }
 
 .email-item-main { display:flex; align-items:flex-start; gap:12px; width:100%; }
 .email-item-inner { position:relative; flex:1; min-width:0; }
-.email-top { display:block; min-height:17px; margin-bottom:2px; padding-right:58px; }
-.email-sender { display:block; font-size:13px; color:var(--text-mid); line-height:17px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.email-time { position:absolute; right:16px; top:13px; text-align:right; white-space:nowrap; font:400 11px var(--font); font-variant-numeric:tabular-nums; color:var(--text-muted); z-index:2; }
+.email-top { display:flex; align-items:baseline; gap:10px; min-height:17px; margin-bottom:2px; }
+.email-sender { flex:1; min-width:0; font-size:13px; color:var(--text-mid); line-height:17px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.email-time { flex-shrink:0; white-space:nowrap; font:400 11.5px/17px var(--font); font-variant-numeric:tabular-nums; color:var(--text-muted); }
 .email-subject { font-size:12.5px; color:var(--text); line-height:17px; margin-bottom:2px; padding-right:18px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .email-preview { font-size:12px; color:var(--text-muted); line-height:16px; padding-right:18px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .email-item.unread .email-sender { font-weight:600; color:var(--text); }
@@ -80,31 +79,35 @@
 .thread-count { display:inline-flex; align-items:center; justify-content:center; margin-left:6px; min-width:18px; height:16px; padding:0 5px; border-radius:var(--r-sm); background:var(--surface2); font:500 10.5px var(--font); color:var(--text-muted); vertical-align:1px; }
 .unread-dot { position:absolute; top:18px; left:8px; width:5px; height:5px; background:var(--green); border-radius:50%; }
 
-.sender-avatar { width:32px; height:32px; margin-top:1px; border-radius:50%; flex-shrink:0; display:flex; align-items:center; justify-content:center; font:600 10.5px var(--font); color:var(--avatar-ink); background:var(--avatar-bg); overflow:hidden; }
+.sender-avatar { width:32px; height:32px; border-radius:50%; flex-shrink:0; display:flex; align-items:center; justify-content:center; font:600 10.5px var(--font); color:var(--avatar-ink); background:var(--avatar-bg); overflow:hidden; }
 .sender-avatar img, .meta-avatar img { width:100%; height:100%; object-fit:cover; display:block; }
 .sender-avatar.has-image, .meta-avatar.has-image { background:var(--surface2); color:transparent; }
 .sender-avatar.has-image img, .meta-avatar.has-image img, .thread-bubble-avatar.has-image img { width:18px; height:18px; margin:auto; border-radius:4px; }
 
-.email-checkbox { position:absolute; left:14px; top:50%; transform:translateY(-50%); width:14px; height:14px; border:1.5px solid var(--text-muted); border-radius:var(--r-sm); background:var(--white); color:var(--on-accent); display:none; align-items:center; justify-content:center; pointer-events:none; }
-.email-list.multi-select .email-checkbox { display:flex; }
-.email-checkbox svg { width:10px; height:10px; opacity:0; }
+/* avatar and checkbox share one slot; bulk mode cross-fades them */
+.avatar-slot { position:relative; width:32px; height:32px; margin-top:1px; flex-shrink:0; }
+.avatar-slot .sender-avatar { transition:opacity var(--t) var(--ease), transform var(--t) var(--ease); }
+.email-checkbox { position:absolute; inset:0; margin:auto; width:22px; height:22px; border:1.5px solid var(--text-muted); border-radius:var(--r); background:var(--white); color:var(--on-accent); display:flex; align-items:center; justify-content:center; opacity:0; transform:scale(.7); pointer-events:none; transition:opacity var(--t) var(--ease), transform var(--t) var(--ease-out), background-color var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease); }
+.email-checkbox svg { width:13px; height:13px; opacity:0; transform:scale(.6); transition:opacity var(--t-fast) var(--ease), transform var(--t-fast) var(--ease-out); }
+.email-list.multi-select .avatar-slot .sender-avatar { opacity:0; transform:scale(.7); }
+.email-list.multi-select .email-checkbox { opacity:1; transform:none; }
 .email-item.selected .email-checkbox { background:var(--green); border-color:var(--green); }
-.email-item.selected .email-checkbox svg { opacity:1; }
+.email-item.selected .email-checkbox svg { opacity:1; transform:none; }
 
 .star-badge { position:absolute; right:16px; bottom:12px; color:var(--green); display:flex; align-items:center; justify-content:center; pointer-events:none; z-index:2; }
 .star-badge svg { width:13px; height:13px; }
-.star-badge.pop { animation: star-pop .2s ease-out; }
+.star-badge.pop { animation: star-pop var(--t) var(--ease-out); }
 @keyframes star-pop { from { opacity:0; transform:scale(.4); } to { opacity:1; transform:none; } }
 
-.email-item { animation:fadeSlideIn .18s ease-out both; }
-@keyframes fadeSlideIn { from { opacity:0; } to { opacity:1; } }
+.email-item { animation:fadeSlideIn var(--t) var(--ease-out) both; }
+@keyframes fadeSlideIn { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:none; } }
 .suppress-anim .email-item { animation:none !important; }
-#email-list .email-item.dust-out { animation:none !important; opacity:0; transition:opacity .15s ease-out; pointer-events:none; }
+#email-list .email-item.dust-out { animation:none !important; opacity:0; transition:opacity var(--t) var(--ease); pointer-events:none; }
 .dust-layer { position:fixed; inset:0; pointer-events:none; z-index:3000; }
 .dust-particle { position:fixed; border-radius:50%; pointer-events:none; will-change:transform, opacity; }
 
 /* ---------- empty state ---------- */
-.empty-state { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; min-height:100%; padding:48px 32px 64px; text-align:center; animation:fadeSlideIn .2s ease-out both; }
+.empty-state { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; min-height:100%; padding:48px 32px 64px; text-align:center; animation:fadeSlideIn .2s var(--ease) both; }
 .empty-state-icon { width:44px; height:44px; margin-bottom:8px; border-radius:50%; display:flex; align-items:center; justify-content:center; background:var(--green-pale); color:var(--green); }
 .empty-state-title { font:400 19px/1.25 var(--font-accent); letter-spacing:-.015em; color:var(--text); }
 .empty-state-body { max-width:30ch; font-size:12.5px; line-height:1.5; color:var(--text-muted); }

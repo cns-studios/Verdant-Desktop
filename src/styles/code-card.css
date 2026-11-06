@@ -1,82 +1,67 @@
+/* ---------- verification code card (reading pane) ---------- */
 .vc-card {
+    position: relative;
     display: flex;
     align-items: center;
     gap: 14px;
-    max-width: 640px;
-    margin: 14px auto 18px;
-    padding: 14px 14px 14px 16px;
-    border: 1px solid var(--green-muted);
-    border-radius: var(--r);
-    background: var(--green-pale);
-    animation: vc-card-in .35s cubic-bezier(.22, 1, .36, 1) both;
+    margin: 0 0 18px;
+    padding: 12px 12px 12px 14px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    background: var(--white);
+    box-shadow: 0 1px 0 rgba(0, 0, 0, .03);
+    animation: vc-card-in var(--t) var(--ease-out) both;
+    transition: border-color var(--t) var(--ease), background-color var(--t) var(--ease);
 }
 @keyframes vc-card-in {
     from { opacity: 0; transform: translateY(-6px); }
     to { opacity: 1; transform: none; }
 }
+.vc-card.copied { border-color: var(--green); background: var(--green-pale); }
 
 .vc-badge {
     flex-shrink: 0;
-    width: 36px;
-    height: 36px;
+    width: 34px;
+    height: 34px;
     display: flex;
     align-items: center;
     justify-content: center;
-    border-radius: var(--r);
-    background: var(--white);
+    border-radius: 50%;
+    background: var(--green-pale);
     color: var(--green);
+    transition: background-color var(--t) var(--ease), color var(--t) var(--ease);
 }
-.vc-badge svg { width: 19px; height: 19px; }
+.vc-card.copied .vc-badge { background: var(--green); color: var(--on-accent); }
+.vc-badge svg { width: 18px; height: 18px; }
 
-.vc-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
-.vc-label {
-    font: 500 11.5px var(--font);
-    letter-spacing: .04em;
-
-    color: var(--text-muted);
-}
+.vc-main { flex: 1; min-width: 0; display: flex; align-items: center; }
 .vc-digits {
-    display: block;
-    height: 34px;
-    font: 500 27px/34px var(--font);
+    padding: 0 0 2px;
+    overflow: hidden;
+    border: 0;
+    background: none;
+    font: 600 26px/1.15 var(--font);
     font-variant-numeric: tabular-nums;
+    letter-spacing: .14em;
     color: var(--text);
     white-space: nowrap;
-    -webkit-user-select: text;
-    user-select: text;
+    cursor: pointer;
+    transition: color var(--t) var(--ease);
 }
-
-.vc-digit {
-    display: inline-block;
-    width: .66em;
-    text-align: center;
-    overflow: hidden;
-    vertical-align: top;
-    animation: vc-type .22s cubic-bezier(.2,.7,.2,1) both;
-    animation-delay: calc(280ms + var(--i) * 105ms);
+.vc-digits:hover, .vc-card.copied .vc-digits { color: var(--green); }
+/* digits roll up into place one after another */
+.vc-d { display: inline-block; animation: vc-roll .26s var(--ease-out) both; animation-delay: calc(60ms + var(--i) * 28ms); }
+@keyframes vc-roll {
+    from { opacity: 0; transform: translateY(100%); }
+    to { opacity: 1; transform: none; }
 }
-.vc-digit:nth-child(4) { width: .96em; padding-left: .3em; }
-@keyframes vc-type {
-    from { width: 0; padding-left: 0; opacity: 0; transform: translateY(5px); }
-}
-.vc-caret {
-    display: inline-block;
-    width: 2px;
-    height: 24px;
-    margin: 5px 0 0 3px;
-    border-radius: 2px;
-    background: var(--green-mid);
-    vertical-align: top;
-    animation: vc-blink .7s steps(1) 1s 2, vc-caret-out .25s ease 2.4s forwards;
-}
-@keyframes vc-blink { 50% { opacity: 0; } }
-@keyframes vc-caret-out { to { opacity: 0; } }
 
 .vc-copy, .vc-chip-copy {
     display: inline-flex;
     align-items: center;
     border: 0;
-    font-family:var(--font);
+    font-family: var(--font);
     font-weight: 500;
     cursor: pointer;
     white-space: nowrap;
@@ -84,30 +69,36 @@
 .vc-copy {
     flex-shrink: 0;
     gap: 8px;
-    height: 38px;
-    padding: 0 16px 0 13px;
+    height: 34px;
+    padding: 0 14px 0 12px;
     border-radius: var(--r);
     background: var(--green);
-    color:var(--on-accent);
-    font-size: 13.5px;
-    transition: background-color .15s ease, transform .1s ease;
+    color: var(--on-accent);
+    font-size: 13px;
 }
 .vc-copy:hover { background: var(--accent); }
-.vc-copy:active { transform: translateY(1px); }
+.vc-copy:active { transform: scale(.97); }
 .vc-copy:focus-visible, .vc-chip-copy:focus-visible { outline: 2px solid var(--green-mid); outline-offset: 2px; }
 
+/* copy -> check icon swap */
 .vc-copy-icon { position: relative; width: 16px; height: 16px; flex-shrink: 0; }
 .vc-copy-icon svg {
     position: absolute;
     inset: 0;
     width: 100%;
     height: 100%;
-    transition: opacity .16s ease, transform .28s cubic-bezier(.2,.7,.2,1);
+    transition: opacity var(--t) var(--ease), transform var(--t) var(--ease);
 }
-.vc-copy-icon svg:last-child { opacity: 0; transform: scale(.4) rotate(-30deg); }
-.copied .vc-copy-icon svg:first-child { opacity: 0; transform: scale(.4); }
+.vc-copy-icon svg:last-child { opacity: 0; transform: scale(.5); }
+.copied .vc-copy-icon svg:first-child { opacity: 0; transform: scale(.5); }
 .copied .vc-copy-icon svg:last-child { opacity: 1; transform: none; }
 
+@media (max-width: 520px) {
+    .vc-copy .vc-copy-text { display: none; }
+    .vc-copy { padding: 0 11px; }
+}
+
+/* ---------- compact chip (mail list rows) ---------- */
 .vc-chip {
     display: inline-flex;
     align-items: stretch;
@@ -118,9 +109,9 @@
     border-radius: var(--r);
     background: var(--white);
     overflow: hidden;
-    transition: border-color .15s ease;
+    transition: border-color .15s var(--ease);
 }
-.vc-chip.vc-enter { animation: vc-chip-in .4s cubic-bezier(.22, 1, .36, 1) both; }
+.vc-chip.vc-enter { animation: vc-chip-in var(--t) var(--ease-out) both; }
 .suppress-anim .vc-chip.vc-enter { animation: none; }
 @keyframes vc-chip-in {
     from { opacity: 0; transform: translateY(-4px) scale(.97); }
@@ -144,7 +135,7 @@
     background: var(--green-pale);
     color: var(--green);
     font-size: 12px;
-    transition: background-color .15s ease, color .15s ease;
+    transition: background-color .15s var(--ease), color .15s var(--ease);
 }
 :root.dark .vc-chip-copy { color: var(--text); }
 .vc-chip-copy:hover { background: var(--green-muted); }
@@ -157,8 +148,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .vc-card, .vc-digit, .vc-chip.vc-enter { animation: none; }
-    .vc-caret { display: none; }
+    .vc-card, .vc-d, .vc-chip.vc-enter { animation: none; }
     .vc-copy-icon svg { transition: none; }
 }
 

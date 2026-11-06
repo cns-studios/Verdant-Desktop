@@ -1,6 +1,5 @@
 <script>
   import { openExternalUrl } from "../../lib/api.js";
-  import { mailboxTitle } from "../../lib/format.js";
   import { canRunHotkey, eventCombo, isTypingTarget } from "../../lib/hotkeys.js";
   import { t } from "../../lib/i18n/index.svelte.js";
   import { compose } from "../../state/compose.svelte.js";
@@ -8,7 +7,6 @@
   import { prefs } from "../../state/prefs.svelte.js";
   import { selection } from "../../state/selection.svelte.js";
   import { session } from "../../state/session.svelte.js";
-  import { categoryLabel, smart } from "../../state/smartInbox.svelte.js";
   import { showToast, ui } from "../../state/ui.svelte.js";
   import { updates } from "../../state/updates.svelte.js";
   import ComposeModal from "../compose/ComposeModal.svelte";
@@ -24,12 +22,6 @@
 
   let refreshing = false;
   let lastSelectionEscape = 0;
-
-  const subtitle = $derived.by(() => {
-    if (compose.open) return t("sidebar.compose_title");
-    if (ui.settingsOpen) return t("settings.title");
-    return (mail.categorySlug && categoryLabel(smart.bySlug(mail.categorySlug))) || mailboxTitle(mail.mailbox);
-  });
 
   function dismissTopmost() {
     if (ui.contextMenu || ui.categoryPopup) {
@@ -113,15 +105,19 @@
 <svelte:window onkeydown={onKeydown} />
 <svelte:document onclickcapture={openExternalLink} />
 
-<Titlebar {subtitle} />
-<div class="app-content">
+<div class="app-shell">
   <Sidebar />
-  {#if mail.mailbox === SUBSCRIPTIONS}
-    <SubscriptionsPane />
-  {:else}
-    <ListPane />
-  {/if}
-  <PaneResizer />
-  <ReadingPane />
+  <div class="app-main">
+    <Titlebar />
+    <div class="app-content">
+      {#if mail.mailbox === SUBSCRIPTIONS}
+        <SubscriptionsPane />
+      {:else}
+        <ListPane />
+      {/if}
+      <PaneResizer />
+      <ReadingPane />
+    </div>
+  </div>
 </div>
 <ComposeModal />

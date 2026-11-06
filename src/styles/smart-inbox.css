@@ -8,7 +8,7 @@
     padding: 16px;
     background: var(--scrim);
     opacity: 0;
-    transition: opacity .14s ease;
+    transition: opacity var(--t) var(--ease);
 }
 .sis-overlay.open { opacity: 1; }
 
@@ -22,8 +22,8 @@
     border-radius: var(--r-lg);
     background: var(--white);
     box-shadow: var(--shadow-lg);
-    transform: translateY(6px);
-    transition: transform .14s ease-out;
+    transform: translateY(8px);
+    transition: transform var(--t) var(--ease-out);
 }
 .sis-overlay.open .sis-dialog { transform: none; }
 .sis-dialog:focus { outline: none; }
@@ -111,7 +111,7 @@
     border-radius: inherit;
     background: var(--group-color);
     opacity: .3;
-    transition: width .8s cubic-bezier(.3, .7, .2, 1) calc(var(--i, 0) * 90ms), opacity .3s ease;
+    transition: width .8s var(--ease) calc(var(--i, 0) * 90ms), opacity .3s var(--ease);
 }
 .is-sorting .sis-bar i {
     width: calc(var(--share) * var(--progress, 0) * 100%);

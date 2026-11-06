@@ -23,6 +23,7 @@ const DEFAULT_APP = {
   useDarkMode: false,
   discordRpc: false,
   loadImages: true,
+  showWhatsNew: true,
 };
 
 const DEFAULT_UPDATE = { autoCheck: true, autoDownload: false, channel: "stable" };
