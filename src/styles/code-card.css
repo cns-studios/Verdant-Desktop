@@ -65,16 +65,17 @@
     font-weight: 500;
     cursor: pointer;
     white-space: nowrap;
+    min-width: 0;
 }
+.vc-copy-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .vc-copy {
-    flex-shrink: 0;
+    flex-shrink: 1;
     gap: 8px;
-    height: 34px;
-    padding: 0 14px 0 12px;
+    padding: 7px 14px 7px 12px;
     border-radius: var(--r);
     background: var(--green);
     color: var(--on-accent);
-    font-size: 13px;
+    font-size: 12px;
 }
 .vc-copy:hover { background: var(--accent); }
 .vc-copy:active { transform: scale(.97); }
@@ -103,6 +104,7 @@
     display: inline-flex;
     align-items: stretch;
     max-width: 100%;
+    min-width: 0;
     height: 26px;
     margin-top: 7px;
     border: 1px solid var(--green-muted);
@@ -126,8 +128,12 @@
     font-variant-numeric: tabular-nums;
     letter-spacing: .03em;
     color: var(--text);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
-.vc-chip-code svg { width: 14px; height: 14px; color: var(--green-mid); }
+.vc-chip-code svg { flex-shrink: 0; width: 14px; height: 14px; color: var(--green-mid); }
 .vc-chip-copy {
     gap: 5px;
     padding: 0 9px 0 8px;

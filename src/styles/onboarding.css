@@ -282,17 +282,16 @@
     margin-top: 4px;
 }
 .ob-primary {
-    height: 34px;
-    padding: 0 18px;
-    border: 0;
+    padding: 7px 14px;
+    border: 1px solid var(--green);
     border-radius: var(--r);
     background: var(--green);
     color: #fff;
-    font: 600 13px var(--font);
+    font: 500 12px var(--font);
     cursor: pointer;
     transition: background-color .12s ease;
 }
-.ob-primary:hover { background: var(--accent); }
+.ob-primary:hover { background: var(--accent); border-color: var(--accent); }
 .ob-primary:disabled { opacity: .55; cursor: default; transform: none; }
 .ob-link {
     display: inline-flex;
@@ -358,9 +357,9 @@
     padding: 0 8px;
     border: 1px solid var(--border);
     border-radius: var(--r);
-    background: var(--white);
+    background: var(--surface2);
     color: var(--text);
-    font: 400 12.5px var(--font);
+    font: 500 12px var(--font);
     cursor: pointer;
 }
 

@@ -1,5 +1,6 @@
 <script>
   import { tick } from "svelte";
+  import { mailboxTitle } from "../../lib/format.js";
   import logoUrl from "../../assets/logo.png";
   import { startDrag, toggleMaximize } from "../../lib/windowDrag.js";
   import { t } from "../../lib/i18n/index.svelte.js";
@@ -7,7 +8,7 @@
   import { mail, SUBSCRIPTIONS } from "../../state/mail.svelte.js";
   import { prefs, setSidebarCollapsed, setSidebarWidth } from "../../state/prefs.svelte.js";
   import { session } from "../../state/session.svelte.js";
-  import { smart } from "../../state/smartInbox.svelte.js";
+  import { categoryLabel, smart } from "../../state/smartInbox.svelte.js";
   import { ui } from "../../state/ui.svelte.js";
   import Icon from "../ui/Icon.svelte";
   import SmartCategories from "./SmartCategories.svelte";
@@ -23,6 +24,9 @@
   ];
 
   let sidebar;
+  const title = $derived(
+    mail.categorySlug ? categoryLabel(smart.bySlug(mail.categorySlug)) || mailboxTitle("INBOX") : mailboxTitle(mail.mailbox),
+  );
   let float = $state({ on: false, expanded: false, exiting: false });
   let hoverOutTimer = null;
   let stopWaitingForSlide = null;
@@ -109,7 +113,7 @@
 >
   <div class="sidebar-header" role="presentation" onpointerdown={startDrag} ondblclick={toggleMaximize}>
     <img class="sidebar-logo" src={logoUrl} alt="" draggable="false" />
-    <div class="sidebar-menu-label">{t("sidebar.mailboxes")}</div>
+    <div class="sidebar-menu-label">{title}</div>
     <button class="sidebar-collapse-btn" title={collapseLabel} aria-label={collapseLabel} onclick={toggleCollapsed}>
       <Icon name={prefs.sidebarCollapsed ? "sidebar-expand" : "sidebar-collapse"} />
     </button>

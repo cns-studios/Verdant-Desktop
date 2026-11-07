@@ -153,7 +153,7 @@ button, input, select, textarea { font-family: inherit; }
 
 .verdant-overlay { position: fixed; inset: 0; z-index: 2100; background: var(--scrim); display:flex; align-items:center; justify-content:center; opacity: 0; pointer-events: none; transition: opacity var(--t) var(--ease); }
 .verdant-overlay.open { opacity: 1; pointer-events: auto; }
-.verdant-panel { width:min(600px, 94vw); max-height: 86vh; overflow:auto; background: var(--surface); border:1px solid var(--border); border-radius:var(--r-lg); box-shadow: var(--shadow-lg); padding: 20px; transform: translateY(8px); transition: transform var(--t) var(--ease-out); }
+.verdant-panel { width:min(600px, 94vw); max-height: 86vh; overflow:auto; background: var(--surface); border:1px solid var(--border); border-radius:var(--r-lg); box-shadow: var(--shadow-lg); padding: 18px; transform: translateY(8px); transition: transform var(--t) var(--ease-out); }
 .verdant-overlay.open .verdant-panel { transform: none; }
 .verdant-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom:8px; }
 .verdant-head h2 { font: 500 20px var(--font-accent); color: var(--text); letter-spacing: -.01em; }
@@ -161,8 +161,8 @@ button, input, select, textarea { font-family: inherit; }
 .verdant-close:hover { background: var(--surface2); color: var(--text); }
 .verdant-panel p { font: 400 13px/1.5 var(--font); color: var(--text-mid); margin-bottom:12px; }
 .verdant-actions { display:flex; gap:6px; justify-content:flex-end; }
-.verdant-btn { height:30px; padding:0 14px; border-radius:var(--r); border:1px solid var(--border); background: var(--white); color: var(--text); font: 500 12px var(--font); cursor:pointer; display:inline-flex; align-items:center; gap:6px; }
-.verdant-btn:hover { background: var(--surface2); }
+.verdant-btn { padding:7px 14px; border-radius:var(--r); border:1px solid var(--border); background: var(--surface2); color: var(--text); font: 500 12px var(--font); cursor:pointer; display:inline-flex; align-items:center; gap:6px; }
+.verdant-btn:hover { background: var(--white); }
 .verdant-btn.primary { background: var(--green); color:var(--on-accent); border-color: var(--green); }
 .verdant-btn.primary:hover { background: var(--accent); border-color: var(--accent); }
 
@@ -202,3 +202,7 @@ body.resizing { cursor:col-resize; user-select:none; }
 :where(a[href]) { cursor: pointer; }
 :where(button, input, select, textarea):disabled { cursor: default !important; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
+
+/* ---------- tooltips ---------- */
+.vt-tip { position:fixed; z-index:99000; max-width:260px; padding:4px 8px; border:1px solid var(--border); border-radius:var(--r-sm); background:var(--surface); color:var(--text); font:500 11.5px/1.35 var(--font); box-shadow:var(--shadow-lg); pointer-events:none; white-space:normal; overflow-wrap:anywhere; opacity:0; visibility:hidden; transition:opacity var(--t-fast) var(--ease), visibility 0s linear var(--t-fast); }
+.vt-tip.show { opacity:1; visibility:visible; transition-delay:0s; }

@@ -191,10 +191,10 @@
 }
 
 .whatsnew-dismiss-btn {
-    padding: 8px 20px;
+    padding: 7px 14px;
     background: var(--green);
     color:var(--on-accent);
-    border: none;
+    border: 1px solid var(--green);
     border-radius: var(--r);
     font-family:var(--font);
     font-size: 12px;
@@ -205,7 +205,7 @@
 
 .whatsnew-dismiss-btn:hover {
     background: var(--accent);
-
+    border-color: var(--accent);
 }
 
 .whatsnew-dismiss-btn:active {

@@ -148,26 +148,26 @@
     display: inline-flex;
     align-items: center;
     gap: 9px;
-    height: 32px;
-    padding: 0 14px;
-    border: 0;
+    padding: 7px 14px;
+    border: 1px solid var(--green);
     border-radius: var(--r);
     background: var(--green);
     color:var(--on-accent);
-    font: 600 13px var(--font);
+    font: 500 12px var(--font);
     cursor: pointer;
 }
-.sis-primary:hover { background: var(--accent); }
+.sis-primary:hover { background: var(--accent); border-color: var(--accent); }
 .sis-primary:disabled { cursor: default; opacity: .75; }
 .sis-secondary {
-    padding: 6px 0;
-    border: 0;
-    background: none;
-    color: var(--text-mid);
-    font: 500 14px var(--font);
+    padding: 7px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    background: var(--surface2);
+    color: var(--text);
+    font: 500 12px var(--font);
     cursor: pointer;
 }
-.sis-secondary:hover { color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
+.sis-secondary:hover { background: var(--white); }
 .sis-dialog :is(button):focus-visible { outline: 2px solid var(--green-mid); outline-offset: 2px; }
 .sis-spinner {
     width: 14px;

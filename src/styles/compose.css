@@ -2,8 +2,8 @@
 .sending-popup { position:fixed; top:16px; left:50%; translate:-50% 0; z-index:2500; display:flex; align-items:center; gap:12px; min-width:220px; padding:10px 12px 10px 14px; overflow:hidden; background:var(--surface); border:1px solid var(--border); border-radius:var(--r-lg); box-shadow:var(--shadow-lg); }
 .sending-icon { width:30px; height:30px; flex-shrink:0; display:flex; align-items:center; justify-content:center; border-radius:50%; background:var(--green-pale); color:var(--green); }
 .sending-popup .text { flex:1; font:600 13px var(--font); color:var(--text); white-space:nowrap; }
-.sending-popup .cancel-btn { height:30px; padding:0 14px; border:1px solid var(--border); border-radius:var(--r); background:var(--white); color:var(--text); font:500 12.5px var(--font); cursor:pointer; flex-shrink:0; }
-.sending-popup .cancel-btn:hover { background:var(--green-pale); border-color:var(--green-muted); color:var(--green); }
+.sending-popup .cancel-btn { padding:7px 14px; border:1px solid var(--border); border-radius:var(--r); background:var(--surface2); color:var(--text); font:500 12px var(--font); cursor:pointer; flex-shrink:0; }
+.sending-popup .cancel-btn:hover { background:var(--white); }
 .sending-track { position:absolute; left:0; right:0; bottom:0; height:2px; background:transparent; }
 .sending-track i { display:block; height:100%; width:100%; background:var(--green); transform-origin:left; animation:sending-shrink 10s linear forwards; }
 @keyframes sending-shrink { from { transform:scaleX(1); } to { transform:scaleX(0); } }
@@ -18,7 +18,7 @@ body.is-sending .toast-wrap { top:84px; }
 #compose-max-btn svg { width:14px; height:14px; }
 .modal-overlay { position:fixed; inset:0; background:var(--scrim); display:flex; align-items:flex-end; justify-content:flex-end; padding:16px; z-index:100; opacity:0; pointer-events:none; transition:opacity var(--t) var(--ease); }
 .modal-overlay.open { opacity:1; pointer-events:all; }
-.compose-modal { width:540px; max-width:calc(100vw - 32px); background:var(--white); border:1px solid var(--border); border-radius:var(--r-lg); box-shadow:var(--shadow-lg); display:flex; flex-direction:column; overflow:hidden; transform:translateY(12px); transition:transform var(--t) var(--ease-out); height:auto; }
+.compose-modal { position:relative; width:540px; max-width:calc(100vw - 32px); background:var(--white); border:1px solid var(--border); border-radius:var(--r-lg); box-shadow:var(--shadow-lg); display:flex; flex-direction:column; overflow:hidden; transform:translateY(12px); transition:transform var(--t) var(--ease-out); height:auto; }
 .modal-overlay.open .compose-modal { transform:none; }
 .modal-header { height:44px; padding:0 8px 0 18px; background:var(--surface); border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; }
 .modal-title { font:500 15px var(--font-accent); color:var(--text); letter-spacing:-.01em; }
@@ -49,12 +49,12 @@ body.is-sending .toast-wrap { top:84px; }
 .compose-editor blockquote { border-left:2px solid var(--border); background:none; margin:8px 0; padding:8px 10px; color:var(--text-mid); }
 .compose-editor pre { background:var(--surface); border:1px solid var(--border); border-radius:var(--r); padding:10px; margin:8px 0; overflow-x:auto; }
 .compose-editor ul { margin:8px 0 8px 18px; }
-.compose-format-toolbar { display:none; width:fit-content; margin:8px 18px 0; padding:4px; border:1px solid var(--border); border-radius:var(--r); background:var(--surface); flex-wrap:wrap; gap:5px; }
-.compose-format-toolbar.open { display:flex; }
+.compose-format-toolbar { position:absolute; left:12px; bottom:58px; z-index:5; display:flex; gap:2px; padding:4px; border:1px solid var(--border); border-radius:var(--r); background:var(--surface); box-shadow:var(--shadow-lg); opacity:0; visibility:hidden; transform:translateY(6px); pointer-events:none; transition:opacity var(--t) var(--ease), transform var(--t) var(--ease), visibility 0s linear var(--t); }
+.compose-format-toolbar.open { opacity:1; visibility:visible; transform:none; pointer-events:auto; transition-delay:0s; }
 .compose-format-btn { width:26px; height:26px; border-radius:var(--r-sm); border:1px solid transparent; background:transparent; color:var(--text-mid); display:flex; align-items:center; justify-content:center; cursor:pointer; transition:background 0.12s, color 0.12s, border-color 0.12s; }
 .compose-format-btn svg { width:14px; height:14px; }
 .compose-format-btn:hover { background:var(--surface2); color:var(--text); }
-.compose-format-btn.active { background:var(--green-pale); color:var(--green); border-color:var(--green-muted); }
+.compose-format-btn.active { background:var(--green-pale); color:var(--green); }
 .compose-attachments { margin:0 18px 10px; display:flex; flex-wrap:wrap; gap:6px; min-height:20px; }
 .compose-attachment { display:inline-flex; align-items:center; gap:6px; padding:4px 8px; border-radius:var(--r-sm); border:1px solid var(--green-muted); background:var(--green-pale); color:var(--green); font-size:11px; max-width:100%; }
 .compose-attachment-name { max-width:180px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -66,7 +66,7 @@ body.is-sending .toast-wrap { top:84px; }
 .modal-tool svg { width:16px; height:16px; }
 .modal-tool.active { background:var(--green-pale); border-color:var(--green-muted); color:var(--green); }
 .modal-tool.compose-clear-btn:hover { background:var(--danger-bg); color:var(--danger); border-color:var(--danger-border); }
-.send-btn { height:32px; padding:0 16px; background:var(--green); color:var(--on-accent); border:none; border-radius:var(--r); font:600 12.5px var(--font); cursor:pointer; display:flex; align-items:center; gap:7px; }
-.send-btn:hover { background:var(--accent); }
+.send-btn { padding:7px 14px; background:var(--green); color:var(--on-accent); border:1px solid var(--green); border-radius:var(--r); font:500 12px var(--font); cursor:pointer; display:flex; align-items:center; gap:7px; }
+.send-btn:hover { background:var(--accent); border-color:var(--accent); }
 .send-btn svg { width:14px; height:14px; }
 .modal-footer-actions { display:flex; gap:8px; }

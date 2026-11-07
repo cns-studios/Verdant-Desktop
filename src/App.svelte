@@ -1,6 +1,7 @@
 <script>
   import { onMount } from "svelte";
   import Onboarding from "./components/onboarding/Onboarding.svelte";
+  import Tooltip from "./components/ui/Tooltip.svelte";
   import Overlays from "./components/overlays/Overlays.svelte";
   import MailShell from "./components/shell/MailShell.svelte";
   import StatusScreen from "./components/shell/StatusScreen.svelte";
@@ -62,3 +63,4 @@
 {/if}
 
 <Overlays />
+<Tooltip />

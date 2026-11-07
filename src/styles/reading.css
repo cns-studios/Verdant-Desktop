@@ -18,20 +18,18 @@
 .unsubscribe-btn {
   display: inline-flex;
   align-items: center;
-  height: 32px;
-  padding: 0 12px;
+  padding: 7px 14px;
   border: 1px solid var(--border);
-  border-radius: var(--r-sm);
-  background: transparent;
-  color: var(--green);
+  border-radius: var(--r);
+  background: var(--surface2);
+  color: var(--text);
   font: 500 12px var(--font);
   cursor: pointer;
   white-space: nowrap;
   transition: background-color var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease);
 }
 .unsubscribe-btn:hover {
-  background: var(--green-pale);
-  border-color: var(--green-muted);
+  background: var(--white);
 }
 .unsubscribe-btn.unsubscribed {
   color: var(--text-muted);
@@ -39,8 +37,7 @@
   opacity: .6;
 }
 .unsubscribe-btn.unsubscribed:hover {
-  background: transparent;
-  border-color: var(--border);
+  background: var(--surface2);
 }
 .unsubscribe-panel p {
   word-break: break-word;
@@ -57,9 +54,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 0 0 16px 0;
-  margin-bottom: 8px;
-  border-bottom: 1px solid var(--border);
+  padding: 0 8px 12px;
 }
 .thread-participant-label {
   font: 400 13px var(--font);
@@ -79,16 +74,14 @@
 .thread-stack {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 0;
 }
 
 /* ---------- thread messages ---------- */
-.thread-bubble { border:1px solid var(--border); border-radius:var(--r); overflow:hidden; background:var(--white); }
-.thread-bubble.collapsed { background:var(--surface); }
-.thread-bubble.collapsed:hover { border-color:var(--text-muted); }
-.thread-bubble.expanded { background:var(--white); }
-.thread-bubble-header { display:flex; align-items:center; gap:10px; padding:8px 12px; cursor:pointer; user-select:none; }
-.thread-bubble-header:hover { background:var(--surface); }
+.thread-bubble { border-top:1px solid var(--border-soft); background:transparent; }
+.thread-bubble:first-child { border-top:0; }
+.thread-bubble-header { display:flex; align-items:center; gap:10px; padding:10px 8px; border-radius:var(--r); cursor:pointer; user-select:none; }
+.thread-bubble.collapsed .thread-bubble-header:hover { background:var(--surface); }
 .thread-bubble-avatar { width:28px; height:28px; border-radius:50%; flex-shrink:0; display:flex; align-items:center; justify-content:center; font:600 10px var(--font); color:var(--avatar-ink); background:var(--avatar-bg); overflow:hidden; }
 .thread-bubble-avatar img { width:100%; height:100%; object-fit:cover; display:block; }
 .thread-bubble-avatar.has-image { background:var(--surface2); }
@@ -102,15 +95,15 @@
 .thread-bubble-to .rcpt-row, .meta-to .rcpt-row { display:flex; gap:8px; align-items:baseline; line-height:1.6; }
 .thread-bubble-to .rcpt-label, .meta-to .rcpt-label { font-weight:500; color:var(--text-muted); min-width:30px; flex-shrink:0; }
 .thread-bubble-to .rcpt-value, .meta-to .rcpt-value { color:var(--text-mid); word-break:break-word; }
-.thread-bubble-body { padding:4px 16px 16px 54px; }
+.thread-bubble-body { padding:2px 8px 14px 46px; }
 .thread-bubble-content, .thread-bubble-content * { -webkit-user-select:text; user-select:text; }
 .thread-bubble-content { font-size:13.5px; line-height:1.65; color:var(--text-mid); overflow-x:auto; }
-.thread-bubble-actions { padding:10px 16px 14px 54px; border-top:1px solid var(--border-soft); }
-.thread-reply-btn { display:inline-flex; align-items:center; gap:6px; height:30px; padding:0 12px; border:1px solid var(--border); border-radius:var(--r); background:var(--white); color:var(--text-mid); font:500 12px var(--font); cursor:pointer; }
-.thread-reply-btn:hover { background:var(--surface2); color:var(--text); }
+.thread-bubble-actions { display:flex; gap:8px; padding:0 8px 16px 46px; }
+.thread-reply-btn { display:inline-flex; align-items:center; gap:6px; padding:7px 14px; border:1px solid var(--border); border-radius:var(--r); background:var(--surface2); color:var(--text); font:500 12px var(--font); cursor:pointer; }
+.thread-reply-btn:hover { background:var(--white); color:var(--text); }
 .thread-bubble-attachments { margin-top:12px; max-width:420px; }
 .thread-attachments-label { font:500 12px var(--font); color:var(--text-muted); margin-bottom:6px; }
-.thread-attachment-item { display:flex; align-items:center; justify-content:space-between; gap:10px; height:32px; padding:0 4px 0 10px; border:1px solid var(--border); background:var(--surface); border-radius:var(--r); margin-bottom:4px; }
+.thread-attachment-item { display:flex; align-items:center; justify-content:space-between; gap:10px; height:32px; padding:0 4px 0 10px; background:var(--surface); border-radius:var(--r); margin-bottom:4px; }
 .thread-attachment-item:last-child { margin-bottom:0; }
 .thread-attachment-name { font:400 12px var(--font); color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; }
 .thread-attachment-dl { height:24px; border:0; background:transparent; color:var(--green); border-radius:var(--r-sm); padding:0 8px; font:500 11.5px var(--font); cursor:pointer; flex-shrink:0; }

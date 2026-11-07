@@ -1,10 +1,8 @@
 <script>
-  import { mailboxTitle } from "../../lib/format.js";
   import { t } from "../../lib/i18n/index.svelte.js";
   import { mail } from "../../state/mail.svelte.js";
   import { prefs } from "../../state/prefs.svelte.js";
   import { selection } from "../../state/selection.svelte.js";
-  import { categoryLabel, smart } from "../../state/smartInbox.svelte.js";
   import { ui } from "../../state/ui.svelte.js";
   import EmptyState from "../ui/EmptyState.svelte";
   import Icon from "../ui/Icon.svelte";
@@ -28,9 +26,6 @@
   let dragging = false;
   let suppressClick = false;
 
-  const title = $derived(
-    mail.categorySlug ? categoryLabel(smart.bySlug(mail.categorySlug)) || mailboxTitle("INBOX") : mailboxTitle(mail.mailbox),
-  );
   const viewKey = $derived(`${mail.mailbox}|${mail.deepResults ? "search" : "local"}`);
   const paneStyle = $derived(
     prefs.listPaneWidth > 0
@@ -129,10 +124,6 @@
 
 <div class="email-list-pane" style={paneStyle}>
   <div class="list-header">
-    <div class="list-title-row">
-      <span class="list-title">{title}</span>
-      <span class="list-count">{t("list.count", { n: mail.rows.length })}</span>
-    </div>
     <div class="search-row">
       <div class="search-bar has-deep-btn">
         <Icon name="search" />
@@ -162,6 +153,7 @@
           </div>
         {/each}
       </div>
+      <span class="list-count">{t("list.count", { n: mail.rows.length })}</span>
       <BulkBar />
     </div>
   </div>
