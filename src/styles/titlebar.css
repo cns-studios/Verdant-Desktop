@@ -1,6 +1,6 @@
-.app-header { height:44px; min-height:44px; flex-shrink:0; background:var(--surface); border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:flex-end; }
+.app-header { height:36px; min-height:36px; flex-shrink:0; background:var(--surface); border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:flex-end; }
 .app-header-controls { display:flex; align-items:stretch; align-self:stretch; }
-.app-win-btn { width:46px; height:100%; border:0; border-radius:0; background:transparent; color:var(--text-mid); display:inline-flex; align-items:center; justify-content:center; cursor:pointer; }
+.app-win-btn { width:42px; height:100%; border:0; border-radius:0; background:transparent; color:var(--text-mid); display:inline-flex; align-items:center; justify-content:center; cursor:pointer; }
 .app-win-btn:hover { background:var(--surface2); color:var(--text); }
 .app-win-btn.close:hover { background:#c42b1c; color:#fff; }
 .app-win-btn svg { width:14px; height:14px; stroke-width:1.75; }

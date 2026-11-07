@@ -138,7 +138,7 @@ button, input, select, textarea { font-family: inherit; }
 :where(button, a, input, select, summary, label, [role="button"], [role="tab"], .nav-item, .email-item, .chip, .icon-btn) {
   transition: background-color var(--t-fast) var(--ease), color var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease), opacity var(--t-fast) var(--ease), transform var(--t-fast) var(--ease);
 }
-:where(.verdant-btn, .compose-btn, .send-btn, .cancel-btn, .update-toast-btn, .chip):active { transform: scale(.975); }
+
 
 #root { width: 100%; height: 100%; }
 
@@ -196,3 +196,9 @@ html.theme-switching body { animation: theme-switch .36s var(--ease) both; }
 .pane-resizer { width:5px; margin:0 -2px; position:relative; z-index:5; cursor:col-resize; background:linear-gradient(to right, transparent 2px, var(--border) 2px, var(--border) 3px, transparent 3px); flex-shrink:0; }
 .pane-resizer:hover { background:linear-gradient(to right, transparent 1px, var(--green) 1px, var(--green) 4px, transparent 4px); }
 body.resizing { cursor:col-resize; user-select:none; }
+
+/* native feel: controls use the arrow cursor, only real links get a hand */
+:where(button, [role="button"], [role="tab"], select, summary, label, .nav-item, .email-item, .chip, .icon-btn, .user-row, .thread-bubble-header) { cursor: default !important; }
+:where(a[href]) { cursor: pointer; }
+:where(button, input, select, textarea):disabled { cursor: default !important; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }

@@ -66,11 +66,8 @@
       disabled={updates.busy}
       onclick={() => (updates.ready ? updates.installFromSettings() : updates.checkFromSettings())}
     >
-      {#if updates.busy}
-        {updates.busyLabel}
-      {:else}
-        {t(updates.ready ? "settings.app.download_update" : "settings.app.check_update")}
-      {/if}
+      {#if updates.busy}<span class="btn-spinner" aria-hidden="true"></span>{/if}
+      {t(updates.ready ? "settings.app.download_update" : "settings.app.check_update")}
     </button>
   </SettingsItem>
 </SettingsSection>

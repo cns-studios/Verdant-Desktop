@@ -5,10 +5,13 @@
   import { session } from "../../state/session.svelte.js";
   import { smart } from "../../state/smartInbox.svelte.js";
   import { openCategoryPopup, ui } from "../../state/ui.svelte.js";
+  import FloatingMenu from "../overlays/FloatingMenu.svelte";
   import Icon from "../ui/Icon.svelte";
 
   let menuOpen = $state(false);
   let moreButton;
+  let menuPos = $state({ x: 0, y: 0 });
+  let closedAt = 0;
 
   const row = $derived(mail.selectedRow);
   const email = $derived(mail.selectedEmail);
@@ -34,21 +37,21 @@
 
   const menu = $derived.by(() => {
     const entries = [];
-    if (smart.sorted) entries.push({ label: "reading.move_to_category", run: chooseCategory });
+    if (smart.sorted) entries.push({ icon: "folder", label: "reading.move_to_category", run: chooseCategory });
     entries.push(
-      { label: "reading.mark_read", run: () => mail.markRead([row], true) },
-      { label: "reading.mark_unread_action", run: () => mail.markRead([row], false) },
-      { label: "reading.toggle_star", run: () => mail.toggleStar([row]) },
+      { icon: "mailbox", label: "reading.mark_read", run: () => mail.markRead([row], true) },
+      { icon: "mail", label: "reading.mark_unread_action", run: () => mail.markRead([row], false) },
+      { icon: "star", label: "reading.toggle_star", run: () => mail.toggleStar([row]) },
     );
     if (isDraft) {
       entries.push(
-        { label: "reading.edit_draft", run: () => compose.openDraft(email) },
-        { label: "reading.send_draft", run: () => mail.sendDraft(email) },
+        { icon: "pencil", label: "reading.edit_draft", run: () => compose.openDraft(email) },
+        { icon: "send", label: "reading.send_draft", run: () => mail.sendDraft(email) },
       );
     }
     if (isTrash) {
-      entries.push({ label: "reading.restore", run: () => mail.restore([row]) });
-      if (session.canDeleteForever) entries.push({ label: "reading.permanent_delete", run: () => mail.trash([row]) });
+      entries.push({ icon: "rotate", label: "reading.restore", run: () => mail.restore([row]) });
+      if (session.canDeleteForever) entries.push({ icon: "trash-x", danger: true, label: "reading.permanent_delete", run: () => mail.trash([row]) });
     }
     return entries;
   });
@@ -59,10 +62,14 @@
     openCategoryPopup(rect.left, rect.bottom + 4, (category) => mail.moveToCategory([target], category));
   }
 
+  function closeMenu() {
+    menuOpen = false;
+    closedAt = performance.now();
+  }
+
   const act = (action) => () => row && action();
 </script>
 
-<svelte:document onclick={() => (menuOpen = false)} />
 
 <div class="reading-actions">
   {#if move}
@@ -107,17 +114,26 @@
       bind:this={moreButton}
       onclick={(event) => {
         event.stopPropagation();
-        menuOpen = !menuOpen && !!row;
+        if (menuOpen || performance.now() - closedAt < 150 || !row) return;
+        const rect = moreButton.getBoundingClientRect();
+        menuPos = { x: rect.right - 184, y: rect.bottom + 4 };
+        menuOpen = true;
       }}
     >
       <Icon name="dots" />
     </button>
     {#if menuOpen}
-      <div class="action-menu" role="menu">
+      <FloatingMenu x={menuPos.x} y={menuPos.y} class="email-context-menu" onclose={closeMenu}>
         {#each menu as entry (entry.label)}
-          <button role="menuitem" onclick={entry.run}>{t(entry.label)}</button>
+          <button
+            class={["email-context-item", entry.danger && "danger"]}
+            role="menuitem"
+            onclick={() => { closeMenu(); entry.run(); }}
+          >
+            <Icon name={entry.icon} /><span>{t(entry.label)}</span>
+          </button>
         {/each}
-      </div>
+      </FloatingMenu>
     {/if}
   </div>
   <button class="icon-btn" title={t("reading.close")} aria-label={t("reading.close")} onclick={() => mail.clearSelection()}>

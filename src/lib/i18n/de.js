@@ -308,6 +308,7 @@ export default {
   "settings.section.data": "Lokale Daten",
   "settings.section.groups": "Gruppen",
   "settings.behavior.notifications_help": "Zeigt eine Desktop-Benachrichtigung, wenn neue Mails ankommen.",
+  "settings.search": "Einstellungen durchsuchen",
   "settings.tab.app": "App",
   "settings.tab.behavior": "Verhalten",
   "settings.tab.appearence": "Darstellung",
