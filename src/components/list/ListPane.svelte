@@ -106,7 +106,9 @@
     }
     const row = mail.rowByKey(rowKeyAt(event.target));
     if (!row) return;
+    const onAvatar = event.target instanceof Element && event.target.closest(".avatar-slot");
     if (selection.active) selection.toggle(row.key);
+    else if (onAvatar) selection.enter(row.key);
     else mail.selectRow(row);
   }
 

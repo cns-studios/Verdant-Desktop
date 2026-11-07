@@ -43,7 +43,7 @@
 .bulk-action svg { width:14px; height:14px; }
 .bulk-action.danger:hover { background:var(--danger-bg); color:var(--danger); }
 .bulk-action.active { background:var(--green-pale); color:var(--green); }
-.bulk-bar.empty .bulk-action { opacity:.45; pointer-events:none; }
+.bulk-bar.empty .bulk-action:not(.close) { opacity:.45; pointer-events:none; }
 .bulk-action.close { margin-left:auto; }
 
 /* ---------- sync / loading ---------- */
@@ -85,7 +85,7 @@
 .sender-avatar.has-image img, .meta-avatar.has-image img, .thread-bubble-avatar.has-image img { width:18px; height:18px; margin:auto; border-radius:4px; }
 
 /* avatar and checkbox share one slot; bulk mode cross-fades them */
-.avatar-slot { position:relative; width:26px; height:26px; margin-top:1px; flex-shrink:0; }
+.avatar-slot { cursor:pointer; position:relative; width:26px; height:26px; margin-top:1px; flex-shrink:0; }
 .avatar-slot .sender-avatar { transition:opacity var(--t) var(--ease), transform var(--t) var(--ease); }
 .email-checkbox { position:absolute; inset:0; margin:auto; width:18px; height:18px; border:1.5px solid var(--text-muted); border-radius:var(--r); background:var(--white); color:var(--on-accent); display:flex; align-items:center; justify-content:center; opacity:0; transform:scale(.7); pointer-events:none; transition:opacity var(--t) var(--ease), transform var(--t) var(--ease-out), background-color var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease); }
 .email-checkbox svg { width:13px; height:13px; opacity:0; transform:scale(.6); transition:opacity var(--t-fast) var(--ease), transform var(--t-fast) var(--ease-out); }

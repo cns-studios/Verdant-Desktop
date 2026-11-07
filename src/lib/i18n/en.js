@@ -414,6 +414,7 @@ export default {
   "app.maximize_window": "Maximize window",
   "app.close_window": "Close window",
   "list.resize_label": "Resize inbox list",
+  "sidebar.resize_label": "Resize sidebar",
   "app.subject": "Subject",
   "app.date": "Date",
   "app.from": "From",

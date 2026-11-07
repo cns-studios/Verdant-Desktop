@@ -5,7 +5,7 @@
   import { t } from "../../lib/i18n/index.svelte.js";
   import { compose } from "../../state/compose.svelte.js";
   import { mail, SUBSCRIPTIONS } from "../../state/mail.svelte.js";
-  import { prefs, setSidebarCollapsed } from "../../state/prefs.svelte.js";
+  import { prefs, setSidebarCollapsed, setSidebarWidth } from "../../state/prefs.svelte.js";
   import { session } from "../../state/session.svelte.js";
   import { smart } from "../../state/smartInbox.svelte.js";
   import { ui } from "../../state/ui.svelte.js";
@@ -26,6 +26,29 @@
   let float = $state({ on: false, expanded: false, exiting: false });
   let hoverOutTimer = null;
   let stopWaitingForSlide = null;
+
+  const MIN_WIDTH = 180;
+  const MAX_WIDTH = 360;
+  const DEFAULT_WIDTH = 208;
+  const clampWidth = (width) => Math.max(MIN_WIDTH, Math.min(Math.round(width), MAX_WIDTH));
+
+  function startResize(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    const startX = event.clientX;
+    const startWidth = sidebar.getBoundingClientRect().width;
+    document.body.classList.add("resizing");
+    const move = (e) => setSidebarWidth(clampWidth(startWidth + e.clientX - startX));
+    const stop = () => {
+      document.body.classList.remove("resizing");
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", stop);
+      window.removeEventListener("pointercancel", stop);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", stop);
+    window.addEventListener("pointercancel", stop);
+  }
 
   const collapseLabel = $derived(t(prefs.sidebarCollapsed ? "sidebar.expand" : "sidebar.collapse"));
   const smartLabel = $derived(t(smart.expanded ? "smart.collapse" : "smart.expand"));
@@ -82,6 +105,7 @@
   class={["sidebar", float.on && "sidebar-float", float.expanded && "sidebar-float-expanded", float.exiting && "sidebar-float-exit"]}
   onmouseenter={slideOut}
   onmouseleave={slideBackSoon}
+  style:--sidebar-w={prefs.sidebarWidth > 0 ? `${prefs.sidebarWidth}px` : null}
 >
   <div class="sidebar-header" role="presentation" onpointerdown={startDrag} ondblclick={toggleMaximize}>
     <img class="sidebar-logo" src={logoUrl} alt="" draggable="false" />
@@ -166,4 +190,12 @@
       </div>
     </div>
   </div>
+  <div
+    class="sidebar-resizer"
+    role="separator"
+    aria-orientation="vertical"
+    aria-label={t("sidebar.resize_label")}
+    onpointerdown={startResize}
+    ondblclick={() => setSidebarWidth(DEFAULT_WIDTH)}
+  ></div>
 </aside>

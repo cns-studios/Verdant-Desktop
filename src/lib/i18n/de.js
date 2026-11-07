@@ -410,6 +410,7 @@ export default {
   "app.maximize_window": "Fenster maximieren",
   "app.close_window": "Fenster schließen",
   "list.resize_label": "Größe der Liste ändern",
+  "sidebar.resize_label": "Seitenleiste in der Größe ändern",
   "app.subject": "Betreff",
   "app.date": "Datum",
   "app.from": "Von",

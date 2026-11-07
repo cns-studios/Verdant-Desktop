@@ -22,6 +22,9 @@
 .settings-tab.active { color:var(--green); border-bottom-color:var(--green); }
 .settings-tab.active svg { color:var(--green); }
 .settings-tab:focus-visible { outline:2px solid var(--green-light); outline-offset:-4px; border-radius:var(--r); }
+.verdant-btn.busy { position:relative; }
+.verdant-btn.busy .btn-label { visibility:hidden; }
+.verdant-btn.busy .btn-spinner { position:absolute; inset:0; margin:auto; }
 .btn-spinner { width:12px; height:12px; border:2px solid var(--border); border-top-color:currentColor; border-radius:50%; animation:verdant-spin .7s linear infinite; flex-shrink:0; }
 .settings-tab-label { min-width:0; }
 

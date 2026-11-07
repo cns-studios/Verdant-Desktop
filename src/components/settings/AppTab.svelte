@@ -62,12 +62,12 @@
   >
     <span class="set-value muted">v{updates.version || t("app.version_unknown")}</span>
     <button
-      class={["verdant-btn", updates.ready && "primary"]}
+      class={["verdant-btn", updates.ready && "primary", updates.busy && "busy"]}
       disabled={updates.busy}
       onclick={() => (updates.ready ? updates.installFromSettings() : updates.checkFromSettings())}
     >
       {#if updates.busy}<span class="btn-spinner" aria-hidden="true"></span>{/if}
-      {t(updates.ready ? "settings.app.download_update" : "settings.app.check_update")}
+      <span class="btn-label">{t(updates.ready ? "settings.app.download_update" : "settings.app.check_update")}</span>
     </button>
   </SettingsItem>
 </SettingsSection>

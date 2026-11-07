@@ -11,8 +11,8 @@
   import Icon from "../ui/Icon.svelte";
   import Overlay from "../ui/Overlay.svelte";
 
-  const STAGGER_MS = 40;
-  const MAX_STAGGER_MS = 1200;
+  const STAGGER_MS = 14;
+  const MAX_STAGGER_MS = 180;
 
   let confirm = $state(null);
 

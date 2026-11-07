@@ -7,6 +7,7 @@ const APP_KEY = "verdant.appPrefs";
 const UPDATE_KEY = "verdant.updatePrefs";
 const HOTKEYS_KEY = "verdant.hotkeys";
 const SIDEBAR_KEY = "verdant.sidebarCollapsed";
+const SIDEBAR_WIDTH_KEY = "verdant.sidebarWidth";
 const LIST_WIDTH_KEY = "verdant.listPaneWidth";
 
 export const THEMES = ["light", "dark", "midnight"];
@@ -52,6 +53,7 @@ export const prefs = $state({
   update: loadUpdate(),
   hotkeys: { ...DEFAULT_HOTKEYS, ...readJson(HOTKEYS_KEY, {}) },
   sidebarCollapsed: readText(SIDEBAR_KEY) === "1",
+  sidebarWidth: Number(readText(SIDEBAR_WIDTH_KEY)) || 0,
   listPaneWidth: Number(readText(LIST_WIDTH_KEY)) || 0,
 });
 
@@ -91,6 +93,11 @@ export function setSidebarCollapsed(collapsed) {
   prefs.sidebarCollapsed = collapsed;
   writeText(SIDEBAR_KEY, collapsed ? "1" : "0");
   pushToBackend({ sidebar_collapsed: collapsed });
+}
+
+export function setSidebarWidth(width) {
+  prefs.sidebarWidth = width;
+  writeText(SIDEBAR_WIDTH_KEY, String(width));
 }
 
 export function setListPaneWidth(width) {
