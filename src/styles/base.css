@@ -92,23 +92,23 @@
 }
 
 :root.midnight {
-  --bg:          #0c0e10;
-  --surface:     #14171a;
-  --surface2:    #1f2327;
-  --surface3:    #191c1f;
-  --white:       #101214;
-  --border:      #292d32;
-  --border-soft: #1b1f23;
+  --bg:          #0d0e0f;
+  --surface:     #151718;
+  --surface2:    #202325;
+  --surface3:    #1a1c1d;
+  --white:       #111213;
+  --border:      #2a2d2f;
+  --border-soft: #1c1e20;
 
-  --text:        #e3e6e8;
-  --text-mid:    #aeb4b9;
-  --text-muted:  #788088;
+  --text:        #e4e6e7;
+  --text-mid:    #b0b4b7;
+  --text-muted:  #7b8186;
 
   --green-muted: #243126;
   --green-pale:  #17201a;
 
-  --avatar-bg:   #23282c;
-  --avatar-ink:  #aeb4b9;
+  --avatar-bg:   #25282a;
+  --avatar-ink:  #b0b4b7;
 
   --danger-bg:     #2a1513;
   --danger-border: #55241f;

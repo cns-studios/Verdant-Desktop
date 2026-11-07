@@ -32,8 +32,8 @@
 
 :root.dark .ob-root.ob-modal { background: rgba(0, 0, 0, .55); }
 :root.midnight .ob-root {
-    --bg: #0c0e10; --surface: #14171a; --surface2: #1f2327; --border: #292d32;
-    --text: #e3e6e8; --text-mid: #aeb4b9; --text-muted: #788088; --white: #101214;
+    --bg: #0d0e0f; --surface: #151718; --surface2: #202325; --border: #2a2d2f;
+    --text: #e4e6e7; --text-mid: #b0b4b7; --text-muted: #7b8186; --white: #111213;
     --green-pale: #17201a;
     --ob-panel: #0f1a15;
 }
