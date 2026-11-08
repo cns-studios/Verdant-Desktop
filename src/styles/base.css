@@ -34,8 +34,6 @@
   --text-mid:    #2f353a;
   --text-muted:  #565e65;
 
- 
-
   --avatar-bg:   #c0c7c0;
   --avatar-ink:  #3c4247;
 
@@ -111,6 +109,9 @@
     --accent-pale:   #e8efe6;
     --accent-color:  #3d5239;
     --on-accent:     #ffffff;
+
+    --accent-lightmode: #c8d5c4;
+    --accent-darkmode:  #2c372c;
 }
 :root.dark.green {
     --accent:        #608158;
@@ -130,6 +131,9 @@
     --accent-pale:   #e7edf8;
     --accent-color:  #2f487e;
     --on-accent:     #ffffff;
+
+    --accent-lightmode: #c7d3ea;
+    --accent-darkmode:  #242e42;
 }
 :root.dark.blue {
     --accent:        #5072b8;
@@ -149,6 +153,9 @@
     --accent-pale:   #f8e7e7;
     --accent-color:  #753030;
     --on-accent:     #ffffff;
+
+    --accent-lightmode: #eac7c7;
+    --accent-darkmode:  #422424;
 }
 :root.dark.red {
     --accent:        #b85050;
@@ -168,6 +175,9 @@
     --accent-pale:   #fcf3ed;
     --accent-color:  #8c4b21;
     --on-accent:     #ffffff;
+
+    --accent-lightmode: #f0dacb;
+    --accent-darkmode:  #472d1c;
 }
 :root.dark.orange {
     --accent:        #d47537;
@@ -187,6 +197,9 @@
     --accent-pale:   #fcf7eb;
     --accent-color:  #856a1b;
     --on-accent:     #ffffff;
+
+    --accent-lightmode: #f2e6cb;
+    --accent-darkmode:  #473d1c;
 }
 :root.dark.yellow {
     --accent:        #c9a22f;

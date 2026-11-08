@@ -1,10 +1,10 @@
 .ob-root {
     /* uses the app palette */
     --ob-panel: var(--accent-color);
-    --ob-panel-ink: #eef2e9;
-    --ob-panel-muted: rgba(238, 242, 233, .62);
-    --ob-stem: #c9d8bf;
-    --ob-leaf: #a9c59a;
+    --ob-panel-ink: var(--on-accent);
+    --ob-panel-muted: color-mix(in srgb, var(--on-accent) 50%, transparent);
+    --ob-stem: color-mix(in srgb, var(--accent-light) 80%, #ffffff 20%);
+    --ob-leaf: color-mix(in srgb, var(--accent-light) 70%, #ffffff 30%);
     --ob-error: var(--danger);
     --ob-error-bg: var(--danger-bg);
     --ob-link: var(--accent-mid);
