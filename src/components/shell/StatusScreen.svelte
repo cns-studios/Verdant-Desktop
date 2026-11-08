@@ -35,7 +35,7 @@
     padding: 8px 16px;
     border: none;
     border-radius: var(--r);
-    background: var(--green);
+    background: var(--accent);
     color: var(--on-accent);
     font-family: inherit;
     cursor: pointer;

@@ -172,7 +172,7 @@
 
 .whatsnew-changes li::before {
     content: "•";
-    color: var(--green);
+    color: var(--accent);
     font-weight: 600;
     display: inline-block;
     position: absolute;
@@ -192,9 +192,9 @@
 
 .whatsnew-dismiss-btn {
     padding: 7px 14px;
-    background: var(--green);
+    background: var(--accent);
     color:var(--on-accent);
-    border: 1px solid var(--green);
+    border: 1px solid var(--accent);
     border-radius: var(--r);
     font-family:var(--font);
     font-size: 12px;
@@ -215,7 +215,7 @@
 .whatsnew-blockquote {
     margin: 12px 0;
     padding: 12px 16px;
-    border-left: 3px solid var(--green);
+    border-left: 3px solid var(--accent);
     background: var(--surface2);
     border-radius: var(--r-sm);
 }
@@ -240,7 +240,7 @@
 .whatsnew-changes code,
 .whatsnew-blockquote code {
     background: var(--surface2);
-    color: var(--green);
+    color: var(--accent);
     padding: 2px 6px;
     border-radius: var(--r-sm);
     font-family: var(--font-mono);
@@ -265,5 +265,5 @@
 .whatsnew-optin { display: inline-flex; align-items: center; gap: 8px; font: 400 12.5px var(--font); color: var(--text-mid); cursor: pointer; }
 .whatsnew-optin input { appearance: none; -webkit-appearance: none; width: 16px; height: 16px; margin: 0; border: 1.5px solid var(--text-muted); border-radius: var(--r-sm); background: var(--white); display: grid; place-content: center; cursor: pointer; transition: background-color var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease); }
 .whatsnew-optin input::after { content: ""; width: 9px; height: 5px; border: solid var(--on-accent); border-width: 0 0 2px 2px; transform: rotate(-45deg) scale(0); margin-top: -2px; transition: transform var(--t-fast) var(--ease-out); }
-.whatsnew-optin input:checked { background: var(--green); border-color: var(--green); }
+.whatsnew-optin input:checked { background: var(--accent); border-color: var(--accent); }
 .whatsnew-optin input:checked::after { transform: rotate(-45deg) scale(1); }

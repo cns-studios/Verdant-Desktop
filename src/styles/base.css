@@ -34,14 +34,6 @@
   --text-mid:    #2f353a;
   --text-muted:  #565e65;
 
-  --green:       #4a5e45;
-  --green-mid:   #5c7356;
-  --green-light: #7a9470;
-  --green-muted: #c8d5c4;
-  --green-pale:  #e8efe6;
-  --accent:      #3d5239;
-  --on-accent:   #ffffff;
-
   --avatar-bg:   #c0c7c0;
   --avatar-ink:  #3c4247;
 
@@ -70,14 +62,6 @@
   --text:        #f0ebe3;
   --text-mid:    #dad2c5;
   --text-muted:  #b5ac9d;
-
-  --green:       #608158;
-  --green-mid:   #5c7356;
-  --green-light: #7a9470;
-  --green-muted: #2c372c;
-  --green-pale:  #2e362c;
-  --accent:      #6e8f65;
-  --on-accent:   #ffffff;
 
   --avatar-bg:   #413b33;
   --avatar-ink:  #dad2c5;
@@ -117,6 +101,116 @@
   --scrim:       rgba(0,0,0,.6);
 }
 
+:root.green {
+    --accent:        #4a5e45;
+    --accent-mid:    #5c7356;
+    --accent-light:  #7a9470;
+    --accent-muted:  #c8d5c4;
+    --accent-pale:   #e8efe6;
+    --accent-color:  #3d5239;
+    --on-accent:     #ffffff;
+
+    --accent-lightmode: #c8d5c4;
+    --accent-darkmode:  #2c372c;
+}
+:root.dark.green {
+    --accent:        #608158;
+    --accent-mid:    #5c7356;
+    --accent-light:  #7a9470;
+    --accent-muted:  #2c372c;
+    --accent-pale:   #2e362c;
+    --accent-color:  #6e8f65;
+    --on-accent:     #ffffff;
+}
+
+:root.blue {
+    --accent:        #3b5998;
+    --accent-mid:    #4e6cb5;
+    --accent-light:  #6d8ccb;
+    --accent-muted:  #c7d3ea;
+    --accent-pale:   #e7edf8;
+    --accent-color:  #2f487e;
+    --on-accent:     #ffffff;
+
+    --accent-lightmode: #c7d3ea;
+    --accent-darkmode:  #242e42;
+}
+:root.dark.blue {
+    --accent:        #5072b8;
+    --accent-mid:    #4e6cb5;
+    --accent-light:  #6d8ccb;
+    --accent-muted:  #242e42;
+    --accent-pale:   #273042;
+    --accent-color:  #5e81cb;
+    --on-accent:     #ffffff;
+}
+
+:root.red {
+    --accent:        #8c3b3b;
+    --accent-mid:    #a54e4e;
+    --accent-light:  #c26b6b;
+    --accent-muted:  #eac7c7;
+    --accent-pale:   #f8e7e7;
+    --accent-color:  #753030;
+    --on-accent:     #ffffff;
+
+    --accent-lightmode: #eac7c7;
+    --accent-darkmode:  #422424;
+}
+:root.dark.red {
+    --accent:        #b85050;
+    --accent-mid:    #a54e4e;
+    --accent-light:  #c26b6b;
+    --accent-muted:  #422424;
+    --accent-pale:   #422727;
+    --accent-color:  #cb5e5e;
+    --on-accent:     #ffffff;
+}
+
+:root.orange {
+    --accent:        #a85c2b;
+    --accent-mid:    #bf703a;
+    --accent-light:  #d68d59;
+    --accent-muted:  #f0dacb;
+    --accent-pale:   #fcf3ed;
+    --accent-color:  #8c4b21;
+    --on-accent:     #ffffff;
+
+    --accent-lightmode: #f0dacb;
+    --accent-darkmode:  #472d1c;
+}
+:root.dark.orange {
+    --accent:        #d47537;
+    --accent-mid:    #bf703a;
+    --accent-light:  #d68d59;
+    --accent-muted:  #472d1c;
+    --accent-pale:   #473020;
+    --accent-color:  #e68544;
+    --on-accent:     #ffffff;
+}
+
+:root.yellow {
+    --accent:        #9e8125;
+    --accent-mid:    #b3932e;
+    --accent-light:  #cca83f;
+    --accent-muted:  #f2e6cb;
+    --accent-pale:   #fcf7eb;
+    --accent-color:  #856a1b;
+    --on-accent:     #ffffff;
+
+    --accent-lightmode: #f2e6cb;
+    --accent-darkmode:  #473d1c;
+}
+:root.dark.yellow {
+    --accent:        #c9a22f;
+    --accent-mid:    #b3932e;
+    --accent-light:  #cca83f;
+    --accent-muted:  #473d1c;
+    --accent-pale:   #474020;
+    --accent-color:  #deb337;
+    --on-accent:     #1a1a1a;
+}
+
 body {
   font-family: var(--font);
   font-size: 13px;
@@ -149,7 +243,7 @@ button, input, select, textarea { font-family: inherit; }
 ::-webkit-scrollbar-thumb:hover { background-color: var(--text-muted); }
 ::-webkit-scrollbar-track { background: transparent; }
 
-:focus-visible { outline: 2px solid var(--green); outline-offset: 1px; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 .verdant-overlay { position: fixed; inset: 0; z-index: 2100; background: var(--scrim); display:flex; align-items:center; justify-content:center; opacity: 0; pointer-events: none; transition: opacity var(--t) var(--ease); }
 .verdant-overlay.open { opacity: 1; pointer-events: auto; }
@@ -163,19 +257,19 @@ button, input, select, textarea { font-family: inherit; }
 .verdant-actions { display:flex; gap:6px; justify-content:flex-end; }
 .verdant-btn { padding:7px 14px; border-radius:var(--r); border:1px solid var(--border); background: var(--surface2); color: var(--text); font: 500 12px var(--font); cursor:pointer; display:inline-flex; align-items:center; gap:6px; }
 .verdant-btn:hover { background: var(--white); }
-.verdant-btn.primary { background: var(--green); color:var(--on-accent); border-color: var(--green); }
+.verdant-btn.primary { background: var(--accent); color:var(--on-accent); border-color: var(--accent); }
 .verdant-btn.primary:hover { background: var(--accent); border-color: var(--accent); }
 
 .toast-wrap { position: fixed; top:14px; left:50%; transform: translateX(-50%); z-index:2400; display:grid; gap:8px; }
 .toast { min-width:220px; max-width:520px; padding:10px 14px; border-radius:var(--r-lg); border:1px solid var(--border); background: var(--surface); color: var(--text); font:500 12.5px var(--font); box-shadow:var(--shadow-lg); animation: toast-in var(--t) var(--ease-out) forwards; }
-.toast.info { border-color: var(--green-muted); }
+.toast.info { border-color: var(--accent-muted); }
 .toast.error { background: var(--danger-bg); border-color: var(--danger-border); color: var(--danger); }
 
 .bulk-progress { position: fixed; bottom:16px; left:50%; transform: translateX(-50%); z-index:2400; width:280px; padding:10px 12px; border-radius:var(--r); border:1px solid var(--border); background: var(--surface); color: var(--text); font:500 12px var(--font); box-shadow:var(--shadow-lg); }
 .bulk-progress-text { display:flex; justify-content:space-between; gap:12px; margin-bottom:8px; }
 .bulk-progress-count { color: var(--text-mid); font: 500 11px var(--font); font-variant-numeric:tabular-nums; }
 .bulk-progress-track { height:2px; background: var(--surface2); overflow:hidden; }
-.bulk-progress-fill { height:100%; background: var(--green); transition: width var(--t) var(--ease); }
+.bulk-progress-fill { height:100%; background: var(--accent); transition: width var(--t) var(--ease); }
 @keyframes toast-in { from { opacity:0; transform: translateY(-10px);} to { opacity:1; transform: none;} }
 @keyframes verdant-spin { to { transform: rotate(360deg); } }
 
@@ -183,18 +277,18 @@ body.reading-pane-hidden .reading-pane { display: none !important; }
 body.reading-pane-hidden .pane-resizer { display: none !important; }
 body.reading-pane-hidden .email-list-pane { flex:1 1 auto !important; width:auto !important; min-width:0 !important; max-width:none !important; border-right:0 !important; }
 html.theme-switching body { animation: theme-switch .36s var(--ease) both; }
-::selection { background-color: var(--green-muted); color: var(--text); }
+::selection { background-color: var(--accent-muted); color: var(--text); }
 
 .app-shell { display:flex; width:100%; height:100vh; position:relative; overflow:hidden; }
 .app-main { flex:1; min-width:0; display:flex; flex-direction:column; }
 .app-content { flex:1; min-height:0; display:flex; width:100%; overflow:hidden; position:relative; }
 .boot-screen { position:fixed; inset:0; z-index:99999; background:var(--bg); display:flex; align-items:center; justify-content:center; }
-.boot-spinner { width:20px; height:20px; border:2px solid var(--border); border-top-color:var(--green); border-radius:50%; animation:list-spin .7s linear infinite; }
+.boot-spinner { width:20px; height:20px; border:2px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:list-spin .7s linear infinite; }
 @keyframes list-spin { to { transform:rotate(360deg); } }
 
 /* resizer: invisible hit area, 1px line */
 .pane-resizer { width:5px; margin:0 -2px; position:relative; z-index:5; cursor:col-resize; background:linear-gradient(to right, transparent 2px, var(--border) 2px, var(--border) 3px, transparent 3px); flex-shrink:0; }
-.pane-resizer:hover { background:linear-gradient(to right, transparent 1px, var(--green) 1px, var(--green) 4px, transparent 4px); }
+.pane-resizer:hover { background:linear-gradient(to right, transparent 1px, var(--accent) 1px, var(--accent) 4px, transparent 4px); }
 body.resizing { cursor:col-resize; user-select:none; }
 
 /* native feel: controls use the arrow cursor, only real links get a hand */

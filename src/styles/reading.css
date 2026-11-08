@@ -10,8 +10,8 @@
 .attachment-download-modal { position: fixed; inset: 0; z-index: 2500; background: transparent; pointer-events:none; }
 .attachment-download-card { position:absolute; right:14px; top:14px; width:min(340px, calc(100vw - 28px)); background: var(--surface); border:1px solid var(--border); border-radius:var(--r); padding:14px; box-shadow:var(--shadow-lg); display:flex; align-items:center; gap:10px; transform: translateX(120%); opacity:0; transition: transform .24s var(--ease), opacity .24s var(--ease); }
 .attachment-download-modal.open .attachment-download-card { transform: translateX(0); opacity:1; }
-.attachment-download-icon { width:18px; height:18px; display:flex; align-items:center; justify-content:center; flex-shrink:0; color: var(--green); }
-.attachment-download-icon.is-spinning { border:2px solid var(--green-muted); border-top-color: var(--green); border-radius:50%; animation: verdant-spin .8s linear infinite; }
+.attachment-download-icon { width:18px; height:18px; display:flex; align-items:center; justify-content:center; flex-shrink:0; color: var(--accent); }
+.attachment-download-icon.is-spinning { border:2px solid var(--accent-muted); border-top-color: var(--accent); border-radius:50%; animation: verdant-spin .8s linear infinite; }
 .attachment-download-icon.is-success { border:0; animation:none; }
 .attachment-download-icon.is-success svg { width:18px; height:18px; stroke:currentColor; fill:none; stroke-width:2.4; stroke-linecap:round; stroke-linejoin:round; }
 .attachment-download-text { font:500 12px var(--font); color: var(--text); }
@@ -42,7 +42,7 @@
 .unsubscribe-panel p {
   word-break: break-word;
 }
-.icon-btn.active { color: var(--green); background: var(--green-pale); }
+.icon-btn.active { color: var(--accent); background: var(--accent-pale); }
 .icon-btn.danger:hover { background:var(--danger-bg); color:var(--danger); }
 .thread-loading {
   padding: 40px 32px;
@@ -106,8 +106,8 @@
 .thread-attachment-item { display:flex; align-items:center; justify-content:space-between; gap:10px; height:32px; padding:0 4px 0 10px; background:var(--surface); border-radius:var(--r); margin-bottom:4px; }
 .thread-attachment-item:last-child { margin-bottom:0; }
 .thread-attachment-name { font:400 12px var(--font); color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; }
-.thread-attachment-dl { height:24px; border:0; background:transparent; color:var(--green); border-radius:var(--r-sm); padding:0 8px; font:500 11.5px var(--font); cursor:pointer; flex-shrink:0; }
-.thread-attachment-dl:hover { background:var(--green-pale); }
+.thread-attachment-dl { height:24px; border:0; background:transparent; color:var(--accent); border-radius:var(--r-sm); padding:0 8px; font:500 11.5px var(--font); cursor:pointer; flex-shrink:0; }
+.thread-attachment-dl:hover { background:var(--accent-pale); }
 .thread-attachment-dl:disabled { opacity:.6; cursor:default; }
 
 /* ---------- reading pane ---------- */

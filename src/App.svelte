@@ -34,6 +34,9 @@
     document.documentElement.lang = getLang();
     document.documentElement.classList.toggle("dark", prefs.app.theme !== "light");
     document.documentElement.classList.toggle("midnight", prefs.app.theme === "midnight");
+
+    document.documentElement.classList.remove("green", "blue", "red", "orange", "yellow");
+    document.documentElement.classList.add(prefs.app.color || "green");
   });
 
   $effect(() => {

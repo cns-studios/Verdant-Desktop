@@ -6,13 +6,13 @@
 .account-list { display:grid; gap:1px; padding:0 4px 4px; max-height:280px; overflow-x:hidden; overflow-y:auto; grid-template-columns:minmax(0, 1fr); }
 .account-item { min-width:0; display:flex; align-items:center; gap:8px; padding:5px 8px; border-radius:var(--r); cursor:pointer; }
 .account-item:hover { background:var(--surface2); }
-.account-item.is-active { background:var(--green-pale); }
-.account-avatar { width:26px; height:26px; border-radius:50%; background:var(--green); display:flex; align-items:center; justify-content:center; font:600 10px var(--font); color:var(--on-accent); flex-shrink:0; }
+.account-item.is-active { background:var(--accent-pale); }
+.account-avatar { width:26px; height:26px; border-radius:50%; background:var(--accent); display:flex; align-items:center; justify-content:center; font:600 10px var(--font); color:var(--on-accent); flex-shrink:0; }
 .account-avatar.imap { background:var(--avatar-bg); color:var(--avatar-ink); }
 .account-item-info { flex:1; min-width:0; }
 .account-item-name { font:500 12.5px var(--font); color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .account-item-provider { font:400 11.5px var(--font); color:var(--text-muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.account-active-mark { display:flex; color:var(--green); flex-shrink:0; }
+.account-active-mark { display:flex; color:var(--accent); flex-shrink:0; }
 .account-remove-btn { width:24px; height:24px; border:0; background:transparent; border-radius:var(--r-sm); color:var(--text-muted); cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0; opacity:0; }
 .account-item:hover .account-remove-btn, .account-remove-btn:focus-visible { opacity:1; }
 .account-remove-btn:hover { background:var(--danger-bg); color:var(--danger); }
