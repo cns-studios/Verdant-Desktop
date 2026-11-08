@@ -1,6 +1,6 @@
 <script>
   import { t } from "../../lib/i18n/index.svelte.js";
-  import { prefs, saveAppPrefs, TEXT_SIZES, THEMES } from "../../state/prefs.svelte.js";
+  import { prefs, saveAppPrefs, TEXT_SIZES, THEMES, COLORSCHEMES } from "../../state/prefs.svelte.js";
   import SettingsItem from "./SettingsItem.svelte";
   import SettingsSection from "./SettingsSection.svelte";
 
@@ -12,6 +12,10 @@
     saveAppPrefs({ theme, useDarkMode: theme !== "light" });
     document.documentElement.classList.add("theme-switching");
     setTimeout(() => document.documentElement.classList.remove("theme-switching"), THEME_PULSE_MS);
+  }
+
+  function setColor(color) {
+    saveAppPrefs({ color });
   }
 </script>
 
@@ -35,6 +39,27 @@
       </label>
     {/each}
   </div>
+</SettingsSection>
+
+<SettingsSection>
+  <SettingsItem label={t("settings.appearance.colorscheme")}>
+      <div class="color-cards" role="radiogroup">
+        {#each COLORSCHEMES as color (color)}
+          <label class={["color-card", prefs.app.color === color && "active"]}>
+            <input
+              type="radio"
+              name="colorscheme"
+              value={color}
+              checked={prefs.app.color === color}
+              onchange={() => setColor(color)}
+            />
+            <span class="color-preview color-preview-{color}" aria-hidden="true">
+              <i class="cp"></i>
+            </span>
+          </label>
+        {/each}
+      </div>
+  </SettingsItem>
 </SettingsSection>
 
 <SettingsSection>

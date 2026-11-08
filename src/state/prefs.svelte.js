@@ -11,6 +11,7 @@ const SIDEBAR_WIDTH_KEY = "verdant.sidebarWidth";
 const LIST_WIDTH_KEY = "verdant.listPaneWidth";
 
 export const THEMES = ["light", "dark", "midnight"];
+export const COLORSCHEMES = ["green", "blue", "red", "orange", "yellow"];
 export const TEXT_SIZES = ["small", "medium", "large"];
 export const TEXT_ZOOM = { small: 1, medium: 1.1, large: 1.2 };
 
@@ -38,6 +39,7 @@ function loadApp() {
   const stored = readJson(APP_KEY, {});
   const app = { ...DEFAULT_APP, ...stored };
   if (!THEMES.includes(stored.theme)) app.theme = stored.useDarkMode === true ? "dark" : "light";
+  if (!COLORSCHEMES.includes(app.color)) app.color = "green";
   if (!TEXT_SIZES.includes(app.textSize)) app.textSize = "small";
   return app;
 }

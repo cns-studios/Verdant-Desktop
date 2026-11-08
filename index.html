@@ -11,6 +11,8 @@
     const theme = prefs.theme || (prefs.useDarkMode === true ? "dark" : "light");
     if (theme !== "light") document.documentElement.classList.add("dark");
     if (theme === "midnight") document.documentElement.classList.add("midnight");
+    const color = prefs.color || "green";
+    document.documentElement.classList.add(`${color}`);
   } catch {}
 </script>
 </head>

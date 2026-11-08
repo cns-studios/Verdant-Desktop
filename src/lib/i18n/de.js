@@ -436,4 +436,5 @@ export default {
   "settings.appearence.light": "Hell",
   "settings.appearence.dark": "Dunkel",
   "settings.appearence.midnight": "Mitternacht",
+  "settings.appearance.colorscheme": "Farbenschema",
 };

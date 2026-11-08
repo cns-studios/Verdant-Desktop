@@ -7,12 +7,12 @@
 .update-toast-close:hover { background:var(--white); color:var(--text); }
 .update-toast-actions { display:flex; gap:8px; justify-content:flex-end; }
 .update-toast-btn { padding:7px 14px; border-radius:var(--r); border:1px solid var(--border); background:var(--surface2); color:var(--text); font:500 12px var(--font); cursor:pointer; }
-.update-toast-btn.primary { background:var(--green); color:var(--on-accent); border-color:var(--green); }
+.update-toast-btn.primary { background:var(--accent); color:var(--on-accent); border-color:var(--accent); }
 .update-toast-btn:disabled { opacity:.6; cursor:default; }
 .update-progress-wrap { display:none; flex-direction:column; gap:8px; }
 .update-progress-wrap.visible { display:flex; }
 .update-progress-label { font:400 12px var(--font); color:var(--text-muted); }
 .update-progress-track { height:6px; border-radius:var(--r-sm); background:var(--surface2); overflow:hidden; }
-.update-progress-bar { height:100%; border-radius:var(--r-sm); background:var(--green); width:0%; transition:width var(--t-slow) var(--ease); }
-.update-progress-bar.indeterminate { width:100% !important; background:linear-gradient(90deg, var(--surface2) 0%, var(--green) 40%, var(--green-light) 60%, var(--surface2) 100%); background-size:200% 100%; animation:verdant-shimmer 1.4s linear infinite; }
+.update-progress-bar { height:100%; border-radius:var(--r-sm); background:var(--accent); width:0%; transition:width var(--t-slow) var(--ease); }
+.update-progress-bar.indeterminate { width:100% !important; background:linear-gradient(90deg, var(--surface2) 0%, var(--accent) 40%, var(--accent-light) 60%, var(--surface2) 100%); background-size:200% 100%; animation:verdant-shimmer 1.4s linear infinite; }
 @keyframes verdant-shimmer { 0% { background-position:200% 0; } 100% { background-position:-200% 0; } }

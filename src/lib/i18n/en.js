@@ -359,6 +359,7 @@ export default {
   "settings.appearence.light": "Light",
   "settings.appearence.dark": "Dark",
   "settings.appearence.midnight": "Midnight",
+  "settings.appearance.colorscheme": "Color scheme",
   "settings.appearance.text_size": "Text size",
   "settings.appearance.text_size_description": "Adjust the size of text throughout Verdant.",
   "settings.appearance.text_size.small": "Small",
