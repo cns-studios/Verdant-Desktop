@@ -48,6 +48,11 @@ fn find(id: &str) -> Option<&'static Variant> {
     VARIANTS.iter().find(|v| v.id == id)
 }
 
+/// 128px PNG for the given variant id (falls back to the default icon).
+pub fn png_128(id: &str) -> &'static [u8] {
+    find(id).or_else(|| find(DEFAULT_ID)).map_or(&[], |v| v.png_128)
+}
+
 pub fn normalize(raw: &str) -> String {
     find(raw.trim()).map_or(DEFAULT_ID, |v| v.id).to_string()
 }
@@ -93,6 +98,7 @@ pub async fn set_app_icon(
     {
         let mut s = state.0.lock().await;
         s.app_icon = variant.id.to_string();
+        super::app_config::sync_callback_appearance(&s);
         persist_app_config(&app, &s)?;
     }
 

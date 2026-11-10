@@ -1,4 +1,5 @@
 mod auth;
+mod callback_page;
 mod commands;
 mod crypto;
 mod db;
@@ -74,7 +75,14 @@ pub fn run() {
             });
 
             app.manage(state.clone());
-            app.manage(AppConfigState(Mutex::new(load_app_config(&app.handle().clone()))));
+            let app_config = load_app_config(&app.handle().clone());
+            callback_page::set_appearance(callback_page::Appearance {
+                theme: app_config.theme.clone(),
+                color: app_config.color.clone(),
+                lang: app_config.language.clone(),
+                icon: app_config.app_icon.clone(),
+            });
+            app.manage(AppConfigState(Mutex::new(app_config)));
 
             logger::init(app.path().app_log_dir().ok().as_deref());
 

@@ -14,6 +14,8 @@ pub struct AppConfig {
     pub notify_important_only: bool,
     pub language: String,
     pub app_icon: String,
+    pub theme: String,
+    pub color: String,
 }
 
 impl Default for AppConfig {
@@ -26,6 +28,8 @@ impl Default for AppConfig {
             notify_important_only: false,
             language: "en".to_string(),
             app_icon: "normal".to_string(),
+            theme: "light".to_string(),
+            color: "green".to_string(),
         }
     }
 }
@@ -38,6 +42,8 @@ pub struct AppConfigPatch {
     pub show_notifications: Option<bool>,
     pub notify_important_only: Option<bool>,
     pub language: Option<String>,
+    pub theme: Option<String>,
+    pub color: Option<String>,
 }
 
 fn normalize_language(raw: &str) -> String {
@@ -84,7 +90,18 @@ pub fn load_app_config(app: &tauri::AppHandle) -> AppConfig {
     config.update_channel = normalize_update_channel(&config.update_channel);
     config.language = normalize_language(&config.language);
     config.app_icon = super::app_icon::normalize(&config.app_icon);
+    config.theme = crate::callback_page::normalize_theme(&config.theme);
+    config.color = crate::callback_page::normalize_color(&config.color);
     config
+}
+
+pub(crate) fn sync_callback_appearance(config: &AppConfig) {
+    crate::callback_page::set_appearance(crate::callback_page::Appearance {
+        theme: config.theme.clone(),
+        color: config.color.clone(),
+        lang: config.language.clone(),
+        icon: config.app_icon.clone(),
+    });
 }
 
 pub struct AppConfigState(pub Mutex<AppConfig>);
@@ -114,6 +131,13 @@ pub async fn update_app_config(
     if let Some(language) = config.language {
         s.language = normalize_language(&language);
     }
+    if let Some(theme) = config.theme {
+        s.theme = crate::callback_page::normalize_theme(&theme);
+    }
+    if let Some(color) = config.color {
+        s.color = crate::callback_page::normalize_color(&color);
+    }
+    sync_callback_appearance(&s);
 
     persist_app_config(&app, &s)?;
     Ok(())

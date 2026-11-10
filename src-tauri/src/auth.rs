@@ -9,6 +9,7 @@ use std::net::{TcpListener, TcpStream};
 use std::time::{Duration, Instant};
 use url::Url;
 
+use crate::callback_page::{self, Outcome};
 use crate::db::StoredToken;
 use crate::state::now_epoch;
 
@@ -122,17 +123,6 @@ async fn request_token(mut params: Vec<(&'static str, String)>) -> Result<Stored
     })
 }
 
-fn error_page(title: &str, message: &str) -> String {
-    format!(
-        "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>Verdant - {title}</title><style>\
-         body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#f5f3ef;color:#1e2119;font-family:'DM Sans',system-ui,sans-serif;padding:24px}}\
-         .card{{width:min(480px,100%);background:#fafaf8;border:1px solid #b4afa2;border-radius:16px;padding:28px;box-shadow:0 8px 32px rgba(30,33,25,.14)}}\
-         h1{{font-size:22px;margin:0 0 10px;color:#8a3b3b}}\
-         p{{font-size:14px;line-height:1.6;color:#4a4d45;margin:0 0 14px}}\
-         </style></head><body><div class=\"card\"><h1>{title}</h1><p>{message}</p><p>You can close this tab and return to the Verdant app.</p></div></body></html>"
-    )
-}
-
 struct CallbackRequest {
     stream: TcpStream,
     target: String,
@@ -153,8 +143,8 @@ impl CallbackRequest {
         self.respond("204 No Content", "");
     }
 
-    fn respond_error(self, title: &str, message: &str) {
-        self.respond("400 Bad Request", &error_page(title, message));
+    fn respond_error(self, kind: &str, detail: &str) {
+        self.respond("400 Bad Request", &callback_page::render(Outcome::Error { kind, detail }));
     }
 }
 
@@ -196,7 +186,6 @@ fn next_request(listener: &TcpListener, deadline: Instant) -> Option<CallbackReq
 
 fn wait_for_auth_code(listener: &TcpListener, expected_state: &str) -> Result<String, String> {
     let deadline = Instant::now() + AUTH_TIMEOUT;
-    let success_page = include_str!("../assets/oauth-success.html");
 
     loop {
         let request = next_request(listener, deadline).ok_or_else(|| TIMEOUT_MESSAGE.to_string())?;
@@ -212,26 +201,26 @@ fn wait_for_auth_code(listener: &TcpListener, expected_state: &str) -> Result<St
         let query: HashMap<_, _> = url.query_pairs().into_owned().collect();
 
         if let Some(error) = query.get("error") {
-            request.respond_error("Sign-in failed", &format!("Google returned an error: {}.", error));
+            request.respond_error("denied", error);
             return Err(format!("Google sign-in failed: {}", error));
         }
 
         let Some(state) = query.get("state") else {
-            request.respond_error("Sign-in failed", "The callback was missing the state parameter.");
+            request.respond_error("state_missing", "");
             return Err("OAuth state missing in callback".to_string());
         };
 
         if state != expected_state {
-            request.respond_error("Sign-in failed", "The state parameter did not match. Please try again.");
+            request.respond_error("state_mismatch", "");
             return Err("OAuth state mismatch".to_string());
         }
 
         let Some(code) = query.get("code").cloned() else {
-            request.respond_error("Sign-in failed", "The callback was missing the authorization code.");
+            request.respond_error("code_missing", "");
             return Err("Authorization code missing in callback".to_string());
         };
 
-        request.respond("200 OK", success_page);
+        request.respond("200 OK", &callback_page::render(Outcome::Success));
 
         let drain_deadline = Instant::now() + DRAIN_GRACE;
         while let Some(extra) = next_request(listener, drain_deadline) {

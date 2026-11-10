@@ -1,0 +1,355 @@
+<!doctype html>
+<html lang="en" class="green">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Verdant</title>
+  <link rel="icon" id="favicon" type="image/png" href="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==">
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;1,9..144,400&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <script>
+    /*
+      Runtime config. The Verdant backend replaces the string below with a JSON object
+      ({ state, kind, detail, theme, color, lang, icon }). While it is still a string this file
+      was opened directly, which switches on the preview toolbar (see `pnpm oauth:preview`).
+    */
+    var CFG = "@@CONFIG@@";
+    var PREVIEW = typeof CFG === "string";
+    var ICONS = ["normal", "blue", "red", "orange", "yellow", "crt", "frutiger-aero", "sunshine-rainbows"];
+    var THEMES = ["light", "dark", "midnight"];
+    var COLORS = ["green", "blue", "red", "orange", "yellow"];
+    var STATES = ["success", "denied", "state_missing", "state_mismatch", "code_missing"];
+
+    var cfg;
+    if (PREVIEW) {
+      var q = new URLSearchParams(location.search);
+      var pick = function (key, list, fallback) { var v = q.get(key); return list.indexOf(v) > -1 ? v : fallback; };
+      var st = pick("state", STATES, "success");
+      cfg = {
+        state: st === "success" ? "success" : "error",
+        kind: st === "success" ? "" : st,
+        detail: st === "denied" ? "access_denied" : "",
+        theme: pick("theme", THEMES, "light"),
+        color: pick("color", COLORS, "green"),
+        lang: pick("lang", ["en", "de"], "en"),
+        icon: pick("icon", ICONS, "normal"),
+        iconUrl: "../icons/variants/" + pick("icon", ICONS, "normal") + "-128.png"
+      };
+    } else {
+      cfg = CFG;
+    }
+
+    var root = document.documentElement;
+    root.classList.remove("green");
+    if (cfg.theme !== "light") root.classList.add("dark");
+    if (cfg.theme === "midnight") root.classList.add("midnight");
+    root.classList.add(cfg.color || "green");
+    root.lang = cfg.lang === "de" ? "de" : "en";
+    root.dataset.state = cfg.state;
+    if (cfg.iconUrl) document.getElementById("favicon").href = cfg.iconUrl;
+  </script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    /* Tokens mirror src/styles/base.css so the page follows the app's theme + accent. */
+    :root {
+      --font:        'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+      --font-accent: 'Fraunces', Georgia, serif;
+      --font-mono:   'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+      --ease:   cubic-bezier(.4, 0, .2, 1);
+      --ease-out: cubic-bezier(.2, .8, .2, 1);
+      --r-sm: 4px;
+      --r:    6px;
+      --r-lg: 10px;
+
+      --bg:          #dde1dd;
+      --surface:     #d3d8d3;
+      --surface2:    #c2c8c2;
+      --surface3:    #cbd0cb;
+      --white:       #ffffff;
+      --border:      #a3aaa3;
+      --border-soft: #c8cec8;
+      --text:        #0f1215;
+      --text-mid:    #2f353a;
+      --text-muted:  #565e65;
+      --danger:        #b3261e;
+      --danger-bg:     #fbeceb;
+      --danger-border: #eec2be;
+      --shadow-lg:   0 4px 18px rgba(14,18,16,.10), 0 0 0 1px rgba(14,18,16,.04);
+      color-scheme: light;
+    }
+    :root.dark {
+      --bg:          #1c1916;
+      --surface:     #25221e;
+      --surface2:    #38332c;
+      --surface3:    #2e2a25;
+      --white:       #2d2924;
+      --border:      #4a453d;
+      --border-soft: #38342d;
+      --text:        #f0ebe3;
+      --text-mid:    #dad2c5;
+      --text-muted:  #b5ac9d;
+      --danger:        #f1a7a7;
+      --danger-bg:     #3a2323;
+      --danger-border: #622222;
+      --shadow-lg:   0 8px 28px rgba(0,0,0,.5), 0 0 0 1px rgba(255,255,255,.04);
+      color-scheme: dark;
+    }
+    :root.midnight {
+      --bg:          #0d0e0f;
+      --surface:     #151718;
+      --surface2:    #202325;
+      --surface3:    #1a1c1d;
+      --white:       #111213;
+      --border:      #2a2d2f;
+      --border-soft: #1c1e20;
+      --text:        #e4e6e7;
+      --text-mid:    #b0b4b7;
+      --text-muted:  #7b8186;
+      --danger-bg:     #2a1513;
+      --danger-border: #55241f;
+      --shadow-lg:   0 8px 28px rgba(0,0,0,.6), 0 0 0 1px rgba(255,255,255,.04);
+    }
+
+    :root.green  { --accent:#4a5e45; --accent-muted:#c8d5c4; --accent-pale:#e8efe6; --accent-color:#3d5239; --on-accent:#fff; }
+    :root.dark.green  { --accent:#608158; --accent-muted:#2c372c; --accent-pale:#2e362c; --accent-color:#6e8f65; --on-accent:#fff; }
+    :root.blue   { --accent:#3b5998; --accent-muted:#c7d3ea; --accent-pale:#e7edf8; --accent-color:#2f487e; --on-accent:#fff; }
+    :root.dark.blue   { --accent:#5072b8; --accent-muted:#242e42; --accent-pale:#273042; --accent-color:#5e81cb; --on-accent:#fff; }
+    :root.red    { --accent:#8c3b3b; --accent-muted:#eac7c7; --accent-pale:#f8e7e7; --accent-color:#753030; --on-accent:#fff; }
+    :root.dark.red    { --accent:#b85050; --accent-muted:#422424; --accent-pale:#422727; --accent-color:#cb5e5e; --on-accent:#fff; }
+    :root.orange { --accent:#a85c2b; --accent-muted:#f0dacb; --accent-pale:#fcf3ed; --accent-color:#8c4b21; --on-accent:#fff; }
+    :root.dark.orange { --accent:#d47537; --accent-muted:#472d1c; --accent-pale:#473020; --accent-color:#e68544; --on-accent:#fff; }
+    :root.yellow { --accent:#9e8125; --accent-muted:#f2e6cb; --accent-pale:#fcf7eb; --accent-color:#856a1b; --on-accent:#fff; }
+    :root.dark.yellow { --accent:#c9a22f; --accent-muted:#473d1c; --accent-pale:#474020; --accent-color:#deb337; --on-accent:#1a1a1a; }
+
+    html { background: var(--bg); }
+    body {
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 24px 16px;
+      font-family: var(--font);
+      font-size: 13px;
+      line-height: 1.5;
+      color: var(--text);
+      background: var(--bg);
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+    }
+    body.has-toolbar { padding-bottom: 96px; }
+
+    main {
+      position: relative;
+      width: min(460px, 100%);
+      display: flex; flex-direction: column; align-items: center;
+      text-align: center;
+      animation: rise .4s var(--ease-out) both;
+    }
+    @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+    .icon { position: relative; width: 84px; height: 84px; margin-bottom: 28px; }
+    .icon img {
+      width: 84px; height: 84px; display: block;
+      border-radius: 20px;
+      box-shadow: 0 10px 28px rgba(0,0,0,.18), 0 0 0 1px rgba(0,0,0,.06);
+    }
+    .status {
+      position: absolute; right: -8px; bottom: -8px;
+      width: 32px; height: 32px;
+      display: grid; place-items: center;
+      border-radius: 50%;
+      background: var(--accent); color: var(--on-accent);
+      border: 3px solid var(--bg);
+    }
+    .status svg { width: 16px; height: 16px; }
+    .status .i-error { display: none; }
+    [data-state="error"] .status { background: var(--danger); color: var(--bg); }
+    [data-state="error"] .status .i-ok { display: none; }
+    [data-state="error"] .status .i-error { display: block; }
+
+    h1 {
+      font-family: var(--font-accent);
+      font-weight: 400;
+      font-size: 38px;
+      line-height: 1.1;
+      letter-spacing: -.8px;
+      margin-bottom: 14px;
+      text-wrap: balance;
+    }
+    p.lead { font-size: 15px; line-height: 1.65; color: var(--text-mid); max-width: 40ch; text-wrap: pretty; }
+
+    .detail {
+      margin-top: 18px;
+      padding: 6px 10px;
+      border-radius: var(--r);
+      border: 1px solid var(--danger-border);
+      background: var(--danger-bg);
+      color: var(--danger);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      overflow-wrap: anywhere;
+    }
+    .detail[hidden] { display: none; }
+
+    .hint { margin-top: 28px; font-size: 13px; color: var(--text-muted); }
+
+    .sig {
+      position: fixed; left: 0; right: 0; bottom: 22px;
+      text-align: center;
+      font-family: var(--font-accent);
+      font-size: 15px; letter-spacing: -.2px;
+      color: var(--text-muted);
+      opacity: .8;
+    }
+    body.has-toolbar .sig { display: none; }
+
+    @media (max-width: 480px) {
+      h1 { font-size: 31px; }
+      p.lead { font-size: 14px; }
+    }
+    @media (prefers-reduced-motion: reduce) { main { animation: none; } }
+
+    /* preview toolbar (only present when the file is opened directly) */
+    .toolbar {
+      position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%);
+      display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 14px;
+      max-width: calc(100% - 24px);
+      padding: 8px 12px;
+      background: var(--surface); color: var(--text);
+      border: 1px solid var(--border); border-radius: var(--r-lg);
+      box-shadow: var(--shadow-lg);
+      font-size: 12px;
+    }
+    .toolbar label { display: flex; align-items: center; gap: 6px; color: var(--text-muted); }
+    .toolbar select {
+      font: inherit; color: var(--text);
+      background: var(--bg); border: 1px solid var(--border); border-radius: var(--r-sm);
+      height: 26px; padding: 0 6px;
+    }
+    .toolbar select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  </style>
+</head>
+<body>
+  <main aria-live="polite">
+    <div class="icon">
+      <img id="logo" alt="" width="84" height="84" hidden>
+      <div class="status" aria-hidden="true">
+        <svg class="i-ok" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+        <svg class="i-error" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </div>
+    </div>
+    <h1 id="heading"></h1>
+    <p class="lead" id="text"></p>
+    <div class="detail" id="detail" hidden></div>
+    <p class="hint" id="note"></p>
+  </main>
+  <div class="sig">Verdant</div>
+
+  <script>
+    var S = {
+      en: {
+        success: {
+          heading: "You're all set.",
+          text: "Verdant is now connected to your Gmail account. Head back to the app to start working with your latest mail.",
+          note: "You can close this tab."
+        },
+        error: {
+          note: "Close this tab, return to Verdant and try again.",
+          kinds: {
+            denied: ["Sign-in was cancelled", "Google didn't grant Verdant access to your account. Nothing was connected."],
+            state_missing: ["Sign-in couldn't be verified", "The response from Google was incomplete (missing state). Please try connecting again."],
+            state_mismatch: ["Sign-in couldn't be verified", "The response from Google didn't match this sign-in request. Please try connecting again."],
+            code_missing: ["Sign-in couldn't be completed", "Google didn't return an authorization code. Please try connecting again."],
+            other: ["Sign-in failed", "Something went wrong while connecting your account. Please try again."]
+          }
+        }
+      },
+      de: {
+        success: {
+          heading: "Alles bereit.",
+          text: "Verdant ist jetzt mit deinem Gmail-Konto verbunden. Kehre zur App zurück und arbeite mit deinen neuesten Mails.",
+          note: "Du kannst diesen Tab schließen."
+        },
+        error: {
+          note: "Schließe diesen Tab, kehre zu Verdant zurück und versuche es erneut.",
+          kinds: {
+            denied: ["Anmeldung abgebrochen", "Google hat Verdant keinen Zugriff auf dein Konto gewährt. Es wurde nichts verbunden."],
+            state_missing: ["Anmeldung nicht verifizierbar", "Die Antwort von Google war unvollständig (state fehlt). Bitte versuche die Verbindung erneut."],
+            state_mismatch: ["Anmeldung nicht verifizierbar", "Die Antwort von Google passte nicht zu dieser Anmeldeanfrage. Bitte versuche die Verbindung erneut."],
+            code_missing: ["Anmeldung nicht abgeschlossen", "Google hat keinen Autorisierungscode zurückgegeben. Bitte versuche die Verbindung erneut."],
+            other: ["Anmeldung fehlgeschlagen", "Beim Verbinden deines Kontos ist etwas schiefgelaufen. Bitte versuche es erneut."]
+          }
+        }
+      }
+    };
+
+    function render() {
+      var lang = cfg.lang === "de" ? "de" : "en";
+      var set = function (id, value) { document.getElementById(id).textContent = value; };
+      var detail = document.getElementById("detail");
+      var title, text, note;
+
+      if (cfg.state === "success") {
+        var ok = S[lang].success;
+        title = ok.heading; text = ok.text; note = ok.note;
+        detail.hidden = true;
+      } else {
+        var err = S[lang].error;
+        var k = err.kinds[cfg.kind] || err.kinds.other;
+        title = k[0]; text = k[1]; note = err.note;
+        detail.hidden = !cfg.detail;
+        detail.textContent = cfg.detail || "";
+      }
+
+      document.title = "Verdant - " + title;
+      set("heading", title); set("text", text); set("note", note);
+      root.lang = lang;
+      root.dataset.state = cfg.state;
+
+      var logo = document.getElementById("logo");
+      if (cfg.iconUrl) { logo.src = cfg.iconUrl; logo.hidden = false; }
+    }
+    render();
+
+    if (PREVIEW) {
+      document.body.classList.add("has-toolbar");
+      var fields = [
+        ["state", "State", STATES, STATES.indexOf(cfg.kind) > -1 ? cfg.kind : "success"],
+        ["theme", "Theme", THEMES, cfg.theme],
+        ["color", "Accent", COLORS, cfg.color],
+        ["icon", "Icon", ICONS, cfg.icon],
+        ["lang", "Language", ["en", "de"], cfg.lang]
+      ];
+      var bar = document.createElement("div");
+      bar.className = "toolbar";
+      fields.forEach(function (f) {
+        var label = document.createElement("label");
+        label.textContent = f[1];
+        var select = document.createElement("select");
+        f[2].forEach(function (v) {
+          var o = document.createElement("option");
+          o.value = v; o.textContent = v; o.selected = v === f[3];
+          select.appendChild(o);
+        });
+        select.addEventListener("change", function () {
+          var params = new URLSearchParams(location.search);
+          params.set(f[0], select.value);
+          location.search = params.toString();
+        });
+        label.appendChild(select);
+        bar.appendChild(label);
+      });
+      document.body.appendChild(bar);
+
+      // live reload when served by scripts/oauth-preview.mjs
+      var last = null;
+      setInterval(function () {
+        fetch("/__mtime", { cache: "no-store" }).then(function (r) { return r.text(); }).then(function (t) {
+          if (last !== null && t !== last) location.reload();
+          last = t;
+        }).catch(function () {});
+      }, 600);
+    }
+  </script>
+</body>
+</html>

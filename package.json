@@ -9,6 +9,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "oauth:preview": "node scripts/oauth-preview.mjs",
     "tauri": "tauri"
   },
   "devDependencies": {

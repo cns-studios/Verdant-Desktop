@@ -67,6 +67,8 @@ function backendConfig() {
     show_notifications: prefs.app.showNotifications !== false,
     notify_important_only: prefs.app.notificationImportance === "important",
     language: getLang(),
+    theme: prefs.app.theme,
+    color: prefs.app.color,
     update_channel: prefs.update.channel,
   };
 }
