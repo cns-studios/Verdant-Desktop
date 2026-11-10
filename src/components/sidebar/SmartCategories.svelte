@@ -72,8 +72,8 @@
       >
         <Icon name={isEditing ? "check" : "pencil"} />
       </button>
-      {#if category.unread_count}
-        <span class="nav-badge subtle">{category.unread_count}</span>
+      {#if category.message_count}
+        <span class="nav-badge subtle">{category.message_count}</span>
       {/if}
     </div>
   {/each}

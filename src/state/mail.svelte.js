@@ -167,6 +167,7 @@ class MailStore {
       this.deepResults = null;
       this.search = "";
       selection.exit();
+      this.filter = mailbox.startsWith(CATEGORY_PREFIX) ? "All" : "Important";
     }
     this.mailbox = mailbox;
     if (animate) this.#startAnimation();
