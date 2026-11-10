@@ -13,6 +13,11 @@
     if (theme === "midnight") document.documentElement.classList.add("midnight");
     const color = prefs.color || "green";
     document.documentElement.classList.add(`${color}`);
+    if (color === "custom") {
+      const vars = JSON.parse(localStorage.getItem("verdant.accentVars") || "null");
+      const set = vars && vars[theme === "light" ? "light" : "dark"];
+      if (set) for (const k in set) document.documentElement.style.setProperty(k, set[k]);
+    }
   } catch {}
 </script>
 </head>

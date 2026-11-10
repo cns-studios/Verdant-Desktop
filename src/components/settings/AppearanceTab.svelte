@@ -2,6 +2,7 @@
   import { t } from "../../lib/i18n/index.svelte.js";
   import { APP_ICONS } from "../../lib/appIcons.js";
   import { prefs, saveAppIcon, saveAppPrefs, TEXT_SIZES, THEMES, COLORSCHEMES } from "../../state/prefs.svelte.js";
+  import ColorWheel from "./ColorWheel.svelte";
   import SettingsItem from "./SettingsItem.svelte";
   import SettingsSection from "./SettingsSection.svelte";
 
@@ -54,13 +55,28 @@
               checked={prefs.app.color === color}
               onchange={() => setColor(color)}
             />
-            <span class="color-preview color-preview-{color}" aria-hidden="true">
+            <span
+              class="color-preview color-preview-{color}"
+              style:--custom={color === "custom" ? prefs.app.customColor : null}
+              aria-hidden="true"
+            >
               <i class="cp"></i>
             </span>
           </label>
         {/each}
       </div>
   </SettingsItem>
+  {#if prefs.app.color === "custom"}
+    <SettingsItem label={t("settings.appearance.custom_color")}>
+      {#snippet below()}
+        <ColorWheel
+          value={prefs.app.customColor}
+          label={t("settings.appearance.custom_color")}
+          onchange={(customColor) => saveAppPrefs({ customColor })}
+        />
+      {/snippet}
+    </SettingsItem>
+  {/if}
 </SettingsSection>
 
 <SettingsSection title={t("settings.section.app_icon")}>

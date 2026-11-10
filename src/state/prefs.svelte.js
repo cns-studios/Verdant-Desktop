@@ -1,5 +1,6 @@
 import { getAppConfig, setAppIcon, updateAppConfig } from "../lib/api.js";
 import { APP_ICONS, DEFAULT_APP_ICON } from "../lib/appIcons.js";
+import { DEFAULT_CUSTOM_COLOR, deriveAccentSet, normalizeHex } from "../lib/accent.js";
 import { DEFAULT_HOTKEYS } from "../lib/hotkeys.js";
 import { getLang } from "../lib/i18n/index.svelte.js";
 import { readJson, readText, writeJson, writeText } from "../lib/storage.js";
@@ -10,9 +11,10 @@ const HOTKEYS_KEY = "verdant.hotkeys";
 const SIDEBAR_KEY = "verdant.sidebarCollapsed";
 const SIDEBAR_WIDTH_KEY = "verdant.sidebarWidth";
 const LIST_WIDTH_KEY = "verdant.listPaneWidth";
+export const ACCENT_VARS_KEY = "verdant.accentVars";
 
 export const THEMES = ["light", "dark", "midnight"];
-export const COLORSCHEMES = ["green", "blue", "red", "orange", "yellow"];
+export const COLORSCHEMES = ["green", "blue", "red", "orange", "yellow", "custom"];
 export const TEXT_SIZES = ["small", "medium", "large"];
 export const TEXT_ZOOM = { small: 1, medium: 1.1, large: 1.2 };
 
@@ -41,6 +43,7 @@ function loadApp() {
   const app = { ...DEFAULT_APP, ...stored };
   if (!THEMES.includes(stored.theme)) app.theme = stored.useDarkMode === true ? "dark" : "light";
   if (!COLORSCHEMES.includes(app.color)) app.color = "green";
+  app.customColor = normalizeHex(app.customColor) ?? DEFAULT_CUSTOM_COLOR;
   if (!TEXT_SIZES.includes(app.textSize)) app.textSize = "small";
   if (!APP_ICONS.some((icon) => icon.id === app.appIcon)) app.appIcon = DEFAULT_APP_ICON;
   return app;
@@ -68,7 +71,7 @@ function backendConfig() {
     notify_important_only: prefs.app.notificationImportance === "important",
     language: getLang(),
     theme: prefs.app.theme,
-    color: prefs.app.color,
+    color: prefs.app.color === "custom" ? "green" : prefs.app.color,
     update_channel: prefs.update.channel,
   };
 }
@@ -77,9 +80,18 @@ function pushToBackend(config) {
   updateAppConfig(config).catch((error) => console.error("Failed to sync app config", error));
 }
 
+/** Cache the derived tokens so the pre-paint script in index.html can apply them without any maths. */
+function persistAccentVars() {
+  if (prefs.app.color === "custom") writeJson(ACCENT_VARS_KEY, deriveAccentSet(prefs.app.customColor));
+  else writeText(ACCENT_VARS_KEY, null);
+}
+
+persistAccentVars();
+
 export function saveAppPrefs(patch) {
   Object.assign(prefs.app, patch);
   writeJson(APP_KEY, prefs.app);
+  persistAccentVars();
   pushToBackend(backendConfig());
 }
 

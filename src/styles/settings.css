@@ -130,7 +130,7 @@
 .icon-card.active .icon-card-label { color:var(--text); }
 
 /* ---------- color schemes ---------- */
-.color-cards { display:grid; grid-template-columns:repeat(5, minmax(0, 1fr)); gap:10px; padding:4px 0; }
+.color-cards { display:grid; grid-template-columns:repeat(6, minmax(0, 1fr)); gap:10px; padding:4px 0; }
 .color-card { position:relative; display:grid; gap:6px; cursor:pointer; }
 .color-card input { position:absolute; opacity:0; pointer-events:none; }
 .color-preview { display:grid; width: 42px; height: 42px; border-radius:100%; overflow:hidden; transition:box-shadow .12s var(--ease); }
@@ -143,6 +143,8 @@
 .color-preview-red .cp { background:#8c3b3b; }
 .color-preview-orange .cp { background:#a85c2b; }
 .color-preview-yellow .cp { background:#9e8125; }
+.color-preview-custom .cp { background: conic-gradient(from 0deg, #d9534f, #e0a030, #8fbf4a, #3fb5a8, #4a7fb5, #9a5ad0, #d9534f); }
+.color-preview-custom .cp::after { content:""; width:20px; height:20px; margin:auto; border-radius:50%; background:var(--custom); box-shadow:0 0 0 2px var(--white); }
 
 .color-card-label { font:500 12.5px var(--font); color:var(--text-mid); padding-left:2px; }
 .color-card.active .color-card-label { color:var(--text); }

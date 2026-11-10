@@ -1,4 +1,5 @@
 <script>
+  import { ACCENT_VARS, deriveAccent } from "./lib/accent.js";
   import { onMount } from "svelte";
   import Onboarding from "./components/onboarding/Onboarding.svelte";
   import Tooltip from "./components/ui/Tooltip.svelte";
@@ -35,8 +36,20 @@
     document.documentElement.classList.toggle("dark", prefs.app.theme !== "light");
     document.documentElement.classList.toggle("midnight", prefs.app.theme === "midnight");
 
-    document.documentElement.classList.remove("green", "blue", "red", "orange", "yellow");
+    document.documentElement.classList.remove("green", "blue", "red", "orange", "yellow", "custom");
     document.documentElement.classList.add(prefs.app.color || "green");
+  });
+
+  // Custom accent: derived tokens go on <html> as inline vars (they outrank the preset classes).
+  // Reactive on color / customColor / theme, so dragging the wheel repaints instantly.
+  $effect(() => {
+    const style = document.documentElement.style;
+    if (prefs.app.color !== "custom") {
+      for (const name of ACCENT_VARS) style.removeProperty(name);
+      return;
+    }
+    const tokens = deriveAccent(prefs.app.customColor, prefs.app.theme !== "light");
+    for (const [name, value] of Object.entries(tokens)) style.setProperty(name, value);
   });
 
   $effect(() => {
