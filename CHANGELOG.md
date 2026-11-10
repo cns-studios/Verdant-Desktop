@@ -1,6 +1,10 @@
 # Changelog
 ## 2.3.0
 - Verdant got an updated look! Click around to discover it
+- More and custom accent colors for Verdant
+- Stylized App Icons you can choose from
+- A new color scheme (midnight)
+- Minor design adjustments outside of the app
 - Multiple bug fixes and performance improvements, making the app snappier
 
 ## 2.2.25
