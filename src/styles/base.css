@@ -22,6 +22,20 @@
   --r:    6px;
   --r-lg: 10px;
 
+  /* sidebar metrics: one source for the docked and the floating (peek) sidebar */
+  --sb-w:       224px;
+  --sb-pad-x:   8px;
+  --sb-pad-y:   4px;
+  --sb-gap:     9px;
+  --sb-item-h:  32px;
+  --sb-item-px: 10px;
+  --sb-btn-h:   34px;
+  --sb-btn-px:  12px;
+
+  /* shared control sizes */
+  --ctl-h:      32px;
+  --icon-btn:   28px;
+
   --bg:          #dde1dd;
   --surface:     #d3d8d3;
   --surface2:    #c2c8c2;
@@ -251,7 +265,7 @@ button, input, select, textarea { font-family: inherit; }
 .verdant-overlay.open .verdant-panel { transform: none; }
 .verdant-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom:8px; }
 .verdant-head h2 { font: 500 20px var(--font-accent); color: var(--text); letter-spacing: -.01em; }
-.verdant-close { border:0; background: transparent; border-radius:var(--r); width:26px; height:26px; cursor:pointer; color:var(--text-muted); }
+.verdant-close { border:0; background: transparent; border-radius:var(--r); width:var(--icon-btn); height:var(--icon-btn); cursor:pointer; color:var(--text-muted); }
 .verdant-close:hover { background: var(--surface2); color: var(--text); }
 .verdant-panel p { font: 400 13px/1.5 var(--font); color: var(--text-mid); margin-bottom:12px; }
 .verdant-actions { display:flex; gap:6px; justify-content:flex-end; }

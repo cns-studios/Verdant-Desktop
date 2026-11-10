@@ -17,7 +17,7 @@
 .settings-block { display:grid; gap:16px; align-content:start; }
 .settings-block[hidden], .set-group[hidden], .set-item[hidden] { display:none; }
 .settings-title { font:500 17px/1.1 var(--font-accent); letter-spacing:-.01em; color:var(--text); }
-.settings-head .verdant-close { width:26px; height:26px; display:flex; align-items:center; justify-content:center; }
+.settings-head .verdant-close { width:var(--icon-btn); height:var(--icon-btn); display:flex; align-items:center; justify-content:center; }
 .settings-tab:hover { color:var(--text); }
 .settings-tab.active { color:var(--accent); border-bottom-color:var(--accent); }
 .settings-tab.active svg { color:var(--accent); }
@@ -55,7 +55,7 @@
 .set-select { min-width:150px; padding:7px 30px 7px 14px; border:1px solid var(--border); border-radius:var(--r); background:var(--surface2) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' fill='none' stroke='%23888' stroke-width='1.5'%3E%3Cpath d='M1 1l4 4 4-4'/%3E%3C/svg%3E") no-repeat right 10px center; color:var(--text); font:500 12px var(--font); appearance:none; -webkit-appearance:none; cursor:pointer; }
 .set-select:hover { border-color:var(--text-muted); }
 
-.set-icon-btn { width:28px; height:28px; border:0; border-radius:var(--r); background:transparent; color:var(--text-muted); display:inline-flex; align-items:center; justify-content:center; cursor:pointer; }
+.set-icon-btn { width:var(--icon-btn); height:var(--icon-btn); border:0; border-radius:var(--r); background:transparent; color:var(--text-muted); display:inline-flex; align-items:center; justify-content:center; cursor:pointer; }
 .set-icon-btn:hover:not(:disabled) { background:var(--surface2); color:var(--text); }
 .set-icon-btn:disabled { opacity:.35; cursor:default; }
 
