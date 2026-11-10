@@ -1,6 +1,7 @@
 <script>
   import { t } from "../../lib/i18n/index.svelte.js";
-  import { prefs, saveAppPrefs, TEXT_SIZES, THEMES, COLORSCHEMES } from "../../state/prefs.svelte.js";
+  import { APP_ICONS } from "../../lib/appIcons.js";
+  import { prefs, saveAppIcon, saveAppPrefs, TEXT_SIZES, THEMES, COLORSCHEMES } from "../../state/prefs.svelte.js";
   import SettingsItem from "./SettingsItem.svelte";
   import SettingsSection from "./SettingsSection.svelte";
 
@@ -60,6 +61,27 @@
         {/each}
       </div>
   </SettingsItem>
+</SettingsSection>
+
+<SettingsSection title={t("settings.section.app_icon")}>
+  <p class="icon-cards-hint">{t("settings.appearance.app_icon_description")}</p>
+  <div class="icon-cards" role="radiogroup" aria-label={t("settings.section.app_icon")}>
+    {#each APP_ICONS as icon (icon.id)}
+      <label class={["icon-card", prefs.app.appIcon === icon.id && "active"]}>
+        <input
+          type="radio"
+          name="appicon"
+          value={icon.id}
+          checked={prefs.app.appIcon === icon.id}
+          onchange={() => saveAppIcon(icon.id)}
+        />
+        <span class="icon-preview" aria-hidden="true">
+          <img src={icon.url} alt="" draggable="false" />
+        </span>
+        <span class="icon-card-label">{t(`settings.appearance.app_icon.${icon.id}`)}</span>
+      </label>
+    {/each}
+  </div>
 </SettingsSection>
 
 <SettingsSection>

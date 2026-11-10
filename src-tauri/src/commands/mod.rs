@@ -9,5 +9,6 @@ pub mod subscriptions;
 pub mod unsubscribe;
 pub mod updater;
 pub mod app_config;
+pub mod app_icon;
 pub mod shell;
 pub mod window;

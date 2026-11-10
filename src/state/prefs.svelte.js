@@ -1,4 +1,5 @@
-import { getAppConfig, updateAppConfig } from "../lib/api.js";
+import { getAppConfig, setAppIcon, updateAppConfig } from "../lib/api.js";
+import { APP_ICONS, DEFAULT_APP_ICON } from "../lib/appIcons.js";
 import { DEFAULT_HOTKEYS } from "../lib/hotkeys.js";
 import { getLang } from "../lib/i18n/index.svelte.js";
 import { readJson, readText, writeJson, writeText } from "../lib/storage.js";
@@ -41,6 +42,7 @@ function loadApp() {
   if (!THEMES.includes(stored.theme)) app.theme = stored.useDarkMode === true ? "dark" : "light";
   if (!COLORSCHEMES.includes(app.color)) app.color = "green";
   if (!TEXT_SIZES.includes(app.textSize)) app.textSize = "small";
+  if (!APP_ICONS.some((icon) => icon.id === app.appIcon)) app.appIcon = DEFAULT_APP_ICON;
   return app;
 }
 
@@ -79,6 +81,18 @@ export function saveAppPrefs(patch) {
   pushToBackend(backendConfig());
 }
 
+export function saveAppIcon(id) {
+  if (!APP_ICONS.some((icon) => icon.id === id) || id === prefs.app.appIcon) return;
+  const previous = prefs.app.appIcon;
+  Object.assign(prefs.app, { appIcon: id });
+  writeJson(APP_KEY, prefs.app);
+  setAppIcon(id).catch((error) => {
+    console.error("Failed to set app icon", error);
+    Object.assign(prefs.app, { appIcon: previous });
+    writeJson(APP_KEY, prefs.app);
+  });
+}
+
 export function saveUpdatePrefs(patch) {
   Object.assign(prefs.update, patch);
   prefs.update.channel = normalizeChannel(prefs.update.channel);
@@ -112,6 +126,10 @@ export async function syncPrefsWithBackend() {
     const config = await getAppConfig();
     if (typeof config?.run_in_background === "boolean") {
       prefs.app.runInBackground = config.run_in_background;
+      writeJson(APP_KEY, prefs.app);
+    }
+    if (APP_ICONS.some((icon) => icon.id === config?.app_icon)) {
+      prefs.app.appIcon = config.app_icon;
       writeJson(APP_KEY, prefs.app);
     }
     if (typeof config?.update_channel === "string") {

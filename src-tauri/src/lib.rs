@@ -91,7 +91,7 @@ pub fn run() {
                 .item(&quit_i)
                 .build()?;
 
-            let _tray = TrayIconBuilder::new()
+            let _tray = TrayIconBuilder::with_id(commands::app_icon::TRAY_ID)
                 .icon(app.default_window_icon().unwrap().clone())
                 .menu(&menu)
                 .on_menu_event(|app: &tauri::AppHandle, event| {
@@ -111,6 +111,8 @@ pub fn run() {
                     }
                 })
                 .build(app)?;
+
+            commands::app_icon::apply_saved(&app.handle().clone());
 
             #[cfg(debug_assertions)]
             {
@@ -138,6 +140,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             update_app_config,
             get_app_config,
+            commands::app_icon::set_app_icon,
 
             commands::discord::discord_set_activity,
             commands::discord::discord_clear_activity,

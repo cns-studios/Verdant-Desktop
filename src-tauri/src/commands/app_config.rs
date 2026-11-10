@@ -13,6 +13,7 @@ pub struct AppConfig {
     pub show_notifications: bool,
     pub notify_important_only: bool,
     pub language: String,
+    pub app_icon: String,
 }
 
 impl Default for AppConfig {
@@ -24,6 +25,7 @@ impl Default for AppConfig {
             show_notifications: true,
             notify_important_only: false,
             language: "en".to_string(),
+            app_icon: "normal".to_string(),
         }
     }
 }
@@ -61,7 +63,7 @@ fn app_config_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     Ok(data_dir.join("app-config.json"))
 }
 
-fn persist_app_config(app: &tauri::AppHandle, config: &AppConfig) -> Result<(), String> {
+pub(crate) fn persist_app_config(app: &tauri::AppHandle, config: &AppConfig) -> Result<(), String> {
     let path = app_config_path(app)?;
     let json = serde_json::to_string_pretty(config)
         .map_err(|e| format!("Failed to serialize app config: {e}"))?;
@@ -81,6 +83,7 @@ pub fn load_app_config(app: &tauri::AppHandle) -> AppConfig {
     let mut config = loaded.unwrap_or_default();
     config.update_channel = normalize_update_channel(&config.update_channel);
     config.language = normalize_language(&config.language);
+    config.app_icon = super::app_icon::normalize(&config.app_icon);
     config
 }
 

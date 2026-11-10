@@ -56,6 +56,7 @@ export const getCategoryThreads = (slug) => invoke("get_category_threads", { slu
 export const moveEmailsToCategory = (emailIds, slug) => invoke("move_emails_to_category", { emailIds, slug });
 
 export const getAppConfig = () => invoke("get_app_config");
+export const setAppIcon = (id) => invoke("set_app_icon", { id });
 export const updateAppConfig = (config) => invoke("update_app_config", { config });
 export const discordSetActivity = (details, state, startedAt) =>
   invoke("discord_set_activity", { details, state, startedAt });

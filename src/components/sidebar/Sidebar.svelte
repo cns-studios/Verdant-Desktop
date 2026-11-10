@@ -1,7 +1,7 @@
 <script>
   import { tick } from "svelte";
   import { mailboxTitle } from "../../lib/format.js";
-  import logoUrl from "../../assets/logo.png";
+  import { appIconUrl } from "../../lib/appIcons.js";
   import { startDrag, toggleMaximize } from "../../lib/windowDrag.js";
   import { t } from "../../lib/i18n/index.svelte.js";
   import { compose } from "../../state/compose.svelte.js";
@@ -112,7 +112,7 @@
   style:--sidebar-w={prefs.sidebarWidth > 0 ? `${prefs.sidebarWidth}px` : null}
 >
   <div class="sidebar-header" role="presentation" onpointerdown={startDrag} ondblclick={toggleMaximize}>
-    <img class="sidebar-logo" src={logoUrl} alt="" draggable="false" />
+    <img class="sidebar-logo" src={appIconUrl(prefs.app.appIcon)} alt="" draggable="false" />
     <div class="sidebar-menu-label">{title}</div>
     <button class="sidebar-collapse-btn" title={collapseLabel} aria-label={collapseLabel} onclick={toggleCollapsed}>
       <Icon name={prefs.sidebarCollapsed ? "sidebar-expand" : "sidebar-collapse"} />

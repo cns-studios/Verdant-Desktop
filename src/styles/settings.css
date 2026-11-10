@@ -115,6 +115,20 @@
   100% { filter: saturate(1); }
 }
 
+/* ---------- app icons ---------- */
+.icon-cards-hint { margin:0 0 6px; font:400 12.5px var(--font); color:var(--text-muted); }
+.icon-cards { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:10px; padding:4px 0; }
+.icon-card { position:relative; display:grid; justify-items:center; gap:8px; padding:12px 6px 9px; border-radius:var(--r); cursor:pointer; box-shadow:0 0 0 1px var(--border); transition:box-shadow .12s var(--ease), background .12s var(--ease); }
+.icon-card input { position:absolute; opacity:0; pointer-events:none; }
+.icon-card:hover { box-shadow:0 0 0 1px var(--text-muted); }
+.icon-card.active { box-shadow:0 0 0 2px var(--accent); }
+.icon-card:has(input:focus-visible) { outline:2px solid var(--accent-light); outline-offset:3px; }
+.icon-preview { display:grid; place-items:center; width:56px; height:56px; }
+.icon-preview img { width:100%; height:100%; object-fit:contain; display:block; transition:transform .16s var(--ease); }
+.icon-card:hover .icon-preview img { transform:scale(1.06); }
+.icon-card-label { font:500 12.5px var(--font); color:var(--text-mid); text-align:center; }
+.icon-card.active .icon-card-label { color:var(--text); }
+
 /* ---------- color schemes ---------- */
 .color-cards { display:grid; grid-template-columns:repeat(5, minmax(0, 1fr)); gap:10px; padding:4px 0; }
 .color-card { position:relative; display:grid; gap:6px; cursor:pointer; }
