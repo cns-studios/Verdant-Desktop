@@ -133,3 +133,23 @@
 .email-body-text p:last-child { margin-bottom:0; }
 .action-menu-anchor { position:relative; margin-left:auto; display:flex; }
 
+
+.cleanup-panel { width: min(360px, 94vw); }
+.cleanup-panel .verdant-head h2 { font-size: 17px; line-height: 1.3; }
+.cleanup-panel p { margin-bottom: 0; }
+.cleanup-sender { padding-bottom: 12px; border-bottom: 1px solid var(--border); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cleanup-intro { padding: 12px 0 8px; font-size: 12px; color: var(--text-muted); }
+.cleanup-group { display: grid; gap: 2px; padding: 4px 0; }
+.cleanup-group + .cleanup-group { border-top: 1px solid var(--border); margin-top: 4px; padding-top: 8px; }
+.cleanup-option { display: flex; align-items: flex-start; gap: 10px; padding: 6px 0; cursor: pointer; position: relative; font: 400 13px/1.4 var(--font); color: var(--text); }
+.cleanup-option.disabled { opacity: .5; cursor: default; }
+.cleanup-option input { position: absolute; opacity: 0; pointer-events: none; }
+.cleanup-box { flex-shrink: 0; width: 18px; height: 18px; margin-top: 1px; border: 1.5px solid var(--text-muted); border-radius: var(--r); background: var(--white); color: var(--on-accent); display: flex; align-items: center; justify-content: center; transition: background-color var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease); }
+.cleanup-box svg { opacity: 0; transform: scale(.6); transition: opacity var(--t-fast) var(--ease), transform var(--t-fast) var(--ease-out); }
+.cleanup-option input:checked + .cleanup-box { background: var(--accent); border-color: var(--accent); }
+.cleanup-option input:checked + .cleanup-box svg { opacity: 1; transform: none; }
+.cleanup-option input:focus-visible + .cleanup-box { outline: 2px solid var(--accent); outline-offset: 2px; }
+.cleanup-hint { display: block; font: 400 11.5px var(--font); color: var(--text-muted); }
+.cleanup-actions { display: grid; gap: 8px; margin-top: 16px; }
+.cleanup-actions .verdant-btn { justify-content: center; padding: 10px 14px; font-size: 13px; }
+.cleanup-actions .verdant-btn:disabled { opacity: .55; cursor: default; }

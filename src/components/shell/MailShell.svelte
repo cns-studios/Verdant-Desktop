@@ -28,6 +28,7 @@
       ui.contextMenu = null;
       ui.categoryPopup = null;
     } else if (ui.whatsNew) updates.closeWhatsNew(false);
+    else if (ui.senderCleanup) ui.senderCleanup = null;
     else if (ui.unsubscribe) ui.unsubscribe = null;
     else if (ui.smartSetup) {
       if (!ui.smartSetup.locked) ui.smartSetup = null;

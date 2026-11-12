@@ -395,10 +395,34 @@ class MailStore {
       await api.unsubscribeFromList(email.id);
       email.unsubscribed = true;
       showToast(t("toast.unsubscribed"));
+      return true;
     } catch (error) {
       console.error("Unsubscribe failed", error);
-      showToast(t("toast.unsubscribe_failed"), "error");
+      return false;
     }
+  }
+
+  /** Applies the "can't unsubscribe" choices to a sender's existing and future mail. */
+  async cleanUpSender(email, options) {
+    let result;
+    try {
+      result = await api.cleanUpSender(email.id, options);
+    } catch (error) {
+      console.error("Sender cleanup failed", error);
+      showToast(t("toast.sender_cleanup_failed"), "error");
+      return false;
+    }
+    if (options.blockSender || options.applyToFuture) email.unsubscribed = true;
+    const moved = options.trashExisting || (options.archiveExisting && this.mailbox !== "ARCHIVE");
+    if (moved) this.clearSelection();
+    showToast(
+      result.failed
+        ? t("toast.sender_cleanup_partial", { failed: result.failed })
+        : t("toast.sender_cleanup_done"),
+      result.failed ? "error" : "info",
+    );
+    await this.#changed();
+    return true;
   }
 
   dropCachedViews() {

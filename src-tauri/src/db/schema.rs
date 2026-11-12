@@ -143,6 +143,9 @@ pub fn init_db(conn: &Connection) -> Result<()> {
             }
         }
     }
+    // What to do with future mail from the sender: 'archive' | 'trash' | 'none', optionally marking it read.
+    let _ = conn.execute("ALTER TABLE unsubscribed_senders ADD COLUMN action TEXT NOT NULL DEFAULT 'archive'", []);
+    let _ = conn.execute("ALTER TABLE unsubscribed_senders ADD COLUMN mark_read INTEGER NOT NULL DEFAULT 1", []);
     let _ = conn.execute("ALTER TABLE inbox_categories ADD COLUMN color TEXT NOT NULL DEFAULT '#6c7065'", []);
     let _ = conn.execute("ALTER TABLE inbox_categories ADD COLUMN account_id INTEGER", []);
     let _ = conn.execute("ALTER TABLE inbox_smart_state ADD COLUMN enabled INTEGER NOT NULL DEFAULT 1", []);

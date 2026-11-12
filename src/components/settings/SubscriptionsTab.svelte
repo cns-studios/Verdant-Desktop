@@ -41,6 +41,11 @@
     }
   }
 
+  const ruleLabel = (sender) =>
+    [t(`settings.subs.action_${sender.action}`), sender.mark_read ? t("settings.subs.mark_read") : ""]
+      .filter(Boolean)
+      .join(", ");
+
   const since = (seconds) => (seconds ? new Date(seconds * 1000).toLocaleDateString() : "");
 </script>
 
@@ -59,7 +64,9 @@
           <span class="sis-row-name" title={sender.sender_key}>
             {sender.name}{#if sender.name !== sender.sender_key}<span class="subs-addr"> {sender.sender_key}</span>{/if}
           </span>
-          <span class="sis-row-meta">{since(sender.created_at) ? t("settings.subs.since", { date: since(sender.created_at) }) : ""}</span>
+          <span class="sis-row-meta">
+            {ruleLabel(sender)}{since(sender.created_at) ? ` · ${t("settings.subs.since", { date: since(sender.created_at) })}` : ""}
+          </span>
           <button
             class="sis-icon-btn"
             aria-label={t("settings.subs.stop")}

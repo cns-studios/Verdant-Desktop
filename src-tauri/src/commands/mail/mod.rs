@@ -1,4 +1,4 @@
-mod flags;
+pub(crate) mod flags;
 pub(crate) mod moves;
 mod query;
 mod search;

@@ -11,8 +11,9 @@
 
   async function confirmUnsubscribe() {
     busy = true;
-    await mail.unsubscribe(email);
+    const ok = await mail.unsubscribe(email);
     close();
+    if (!ok) ui.senderCleanup = email;
   }
 </script>
 

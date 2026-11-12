@@ -216,6 +216,7 @@ pub fn run() {
             commands::shell::open_external_url,
             commands::shell::fetch_remote_image,
             commands::unsubscribe::unsubscribe_from_list,
+            commands::sender_cleanup::clean_up_sender,
             commands::subscriptions::get_subscriptions,
             commands::subscriptions::get_sender_emails,
             commands::subscriptions::unsubscribe_sender,

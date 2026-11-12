@@ -35,6 +35,7 @@ export const ui = $state({
   smartSetup: null,
   whatsNew: null,
   unsubscribe: null,
+  senderCleanup: null,
   contextMenu: null,
   categoryPopup: null,
   attachmentDownload: null,

@@ -14,6 +14,7 @@
   import Icon from "../ui/Icon.svelte";
   import CategoryPopup from "./CategoryPopup.svelte";
   import ContextMenu from "./ContextMenu.svelte";
+  import SenderCleanupDialog from "./SenderCleanupDialog.svelte";
   import UnsubscribeDialog from "./UnsubscribeDialog.svelte";
   import UpdateToast from "./UpdateToast.svelte";
   import WhatsNew from "./WhatsNew.svelte";
@@ -36,6 +37,9 @@
   {/if}
   {#if ui.smartSetup}
     <SmartInboxSetup resort={ui.smartSetup.resort} />
+  {/if}
+  {#if ui.senderCleanup}
+    <SenderCleanupDialog email={ui.senderCleanup} />
   {/if}
   {#if ui.unsubscribe}
     <UnsubscribeDialog email={ui.unsubscribe} />

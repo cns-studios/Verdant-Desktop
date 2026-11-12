@@ -5,6 +5,7 @@ pub mod autostart;
 pub mod compose;
 pub mod discord;
 pub mod mail;
+pub mod sender_cleanup;
 pub mod subscriptions;
 pub mod unsubscribe;
 pub mod updater;

@@ -1,10 +1,12 @@
-//! Local rule for senders the user has unsubscribed from: whatever they still
-//! send afterwards is archived automatically instead of landing in the inbox,
-//! because many senders ignore or only slowly honor unsubscribe requests.
+//! Local rule for senders the user has unsubscribed from or blocked: whatever
+//! they still send afterwards is archived (or trashed) automatically instead of
+//! landing in the inbox, because many senders ignore or only slowly honor
+//! unsubscribe requests. The rule can also just mark their mail as read.
 
 use rusqlite::{params, Connection};
 
-use crate::commands::mail::moves::archive_email_for;
+use crate::commands::mail::flags::push_read_status;
+use crate::commands::mail::moves::{archive_email_for, trash_email_for};
 use crate::commands::subscriptions::{sender_address, sender_name};
 use crate::state::DbState;
 
@@ -49,19 +51,70 @@ pub fn block_sender_of(conn: &Connection, account_id: i64, email_id: &str) -> ru
     Ok(())
 }
 
+/// What happens to future mail from a sender with a rule.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum RuleAction {
+    Archive,
+    Trash,
+    /// Leave it in the inbox (only `mark_read` applies).
+    Keep,
+}
+
+impl RuleAction {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            RuleAction::Archive => "archive",
+            RuleAction::Trash => "trash",
+            RuleAction::Keep => "none",
+        }
+    }
+
+    fn parse(value: &str) -> Self {
+        match value {
+            "trash" => RuleAction::Trash,
+            "none" => RuleAction::Keep,
+            _ => RuleAction::Archive,
+        }
+    }
+}
+
+/// Creates or replaces the rule for the sender of `email_id`, and flags the
+/// mail we already have from them so the rule only affects mail that arrives later.
+pub fn set_sender_rule(
+    conn: &Connection,
+    account_id: i64,
+    email_id: &str,
+    action: RuleAction,
+    mark_read: bool,
+) -> rusqlite::Result<()> {
+    block_sender_of(conn, account_id, email_id)?;
+    let sender: String = conn.query_row(
+        "SELECT sender FROM emails WHERE id=?1 AND account_id=?2",
+        params![email_id, account_id],
+        |r| r.get(0),
+    )?;
+    conn.execute(
+        "UPDATE unsubscribed_senders SET action=?1, mark_read=?2 WHERE account_id=?3 AND sender_key=?4",
+        params![action.as_str(), mark_read as i32, account_id, sender_address(&sender)],
+    )?;
+    Ok(())
+}
+
 #[derive(Debug, serde::Serialize, PartialEq)]
 pub struct BlockedSender {
     pub sender_key: String,
     pub name: String,
     pub created_at: i64,
+    pub action: String,
+    pub mark_read: bool,
 }
 
 pub fn list_blocked(conn: &Connection, account_id: i64) -> rusqlite::Result<Vec<BlockedSender>> {
     let mut stmt = conn.prepare(
-        "SELECT sender_key, created_at FROM unsubscribed_senders WHERE account_id=?1 ORDER BY created_at DESC, sender_key",
+        "SELECT sender_key, created_at, action, mark_read FROM unsubscribed_senders WHERE account_id=?1 ORDER BY created_at DESC, sender_key",
     )?;
-    let keys: Vec<(String, i64)> = stmt
-        .query_map(params![account_id], |r| Ok((r.get(0)?, r.get(1)?)))?
+    let keys: Vec<(String, i64, String, bool)> = stmt
+        .query_map(params![account_id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get::<_, i32>(3)? != 0)))?
         .filter_map(Result::ok)
         .collect();
     let mut names: std::collections::HashMap<String, String> = std::collections::HashMap::new();
@@ -71,9 +124,9 @@ pub fn list_blocked(conn: &Connection, account_id: i64) -> rusqlite::Result<Vec<
     }
     Ok(keys
         .into_iter()
-        .map(|(key, created_at)| {
+        .map(|(key, created_at, action, mark_read)| {
             let name = names.get(&key).map(|s| sender_name(s, &key)).unwrap_or_else(|| key.clone());
-            BlockedSender { sender_key: key, name, created_at }
+            BlockedSender { sender_key: key, name, created_at, action, mark_read }
         })
         .collect())
 }
@@ -100,16 +153,19 @@ pub fn unblock(conn: &Connection, account_id: i64, sender_key: &str) -> rusqlite
     Ok(())
 }
 
-/// Inbox mail not yet handled (`unsubscribed=0`) from a blocked sender.
-/// Mail the user later moves back to the inbox keeps `unsubscribed=1`, so it
-/// is not archived a second time.
-fn pending_ids(conn: &Connection, account_id: i64) -> rusqlite::Result<Vec<String>> {
-    let blocked: std::collections::HashSet<String> = {
-        let mut stmt = conn.prepare("SELECT sender_key FROM unsubscribed_senders WHERE account_id=?1")?;
-        let rows = stmt.query_map(params![account_id], |r| r.get::<_, String>(0))?;
-        rows.filter_map(Result::ok).collect()
+/// Inbox mail not yet handled (`unsubscribed=0`) from a sender with a rule,
+/// together with that rule. Mail the user later moves back to the inbox keeps
+/// `unsubscribed=1`, so it is not handled a second time.
+fn pending(conn: &Connection, account_id: i64) -> rusqlite::Result<Vec<(String, RuleAction, bool)>> {
+    let rules: std::collections::HashMap<String, (RuleAction, bool)> = {
+        let mut stmt =
+            conn.prepare("SELECT sender_key, action, mark_read FROM unsubscribed_senders WHERE account_id=?1")?;
+        let rows = stmt.query_map(params![account_id], |r| {
+            Ok((r.get::<_, String>(0)?, RuleAction::parse(&r.get::<_, String>(1)?), r.get::<_, i32>(2)? != 0))
+        })?;
+        rows.filter_map(Result::ok).map(|(key, action, read)| (key, (action, read))).collect()
     };
-    if blocked.is_empty() {
+    if rules.is_empty() {
         return Ok(Vec::new());
     }
     let mut stmt = conn.prepare(
@@ -118,33 +174,52 @@ fn pending_ids(conn: &Connection, account_id: i64) -> rusqlite::Result<Vec<Strin
     let rows = stmt.query_map(params![account_id], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?;
     Ok(rows
         .filter_map(Result::ok)
-        .filter(|(_, s)| blocked.contains(&sender_address(s)))
-        .map(|(id, _)| id)
+        .filter_map(|(id, sender)| rules.get(&sender_address(&sender)).map(|&(action, read)| (id, action, read)))
         .collect())
 }
 
 pub async fn suppress_unsubscribed(state: &DbState, account_id: i64) {
-    let ids = {
+    let todo = {
         let conn = state.conn.lock().await;
-        match pending_ids(&conn, account_id) {
-            Ok(ids) => ids,
+        match pending(&conn, account_id) {
+            Ok(todo) => todo,
             Err(e) => {
                 log::error!("Unsubscribed-sender lookup failed account={}: {}", account_id, e);
                 return;
             }
         }
     };
-    for id in ids {
-        match archive_email_for(state, account_id, &id).await {
+    for (id, action, mark_read) in todo {
+        if mark_read {
+            let already = {
+                let conn = state.conn.lock().await;
+                conn.query_row(
+                    "SELECT is_read FROM emails WHERE id=?1 AND account_id=?2",
+                    params![id, account_id],
+                    |r| r.get::<_, i32>(0),
+                )
+                .map(|v| v != 0)
+                .unwrap_or(true)
+            };
+            if !already {
+                push_read_status(state, account_id, &id, true).await;
+            }
+        }
+        let moved = match action {
+            RuleAction::Archive => archive_email_for(state, account_id, &id).await,
+            RuleAction::Trash => trash_email_for(state, account_id, &id).await,
+            RuleAction::Keep => Ok(()),
+        };
+        match moved {
             Ok(()) => {
                 let conn = state.conn.lock().await;
                 let _ = conn.execute(
-                    "UPDATE emails SET unsubscribed=1, is_read=1 WHERE id=?1 AND account_id=?2",
-                    params![id, account_id],
+                    "UPDATE emails SET unsubscribed=1, is_read=is_read OR ?3 WHERE id=?1 AND account_id=?2",
+                    params![id, account_id, mark_read as i32],
                 );
             }
             // Leave unsubscribed=0 so the next sync retries (e.g. offline / rate limit).
-            Err(e) => log::warn!("Auto-archive of unsubscribed mail {} failed: {}", id, e),
+            Err(e) => log::warn!("Applying sender rule to {} failed: {}", id, e),
         }
     }
 }
@@ -157,7 +232,7 @@ mod tests {
         let conn = Connection::open_in_memory().unwrap();
         conn.execute_batch(
             "CREATE TABLE emails (id TEXT, account_id INTEGER, sender TEXT, mailbox TEXT, internal_ts INTEGER DEFAULT 0, unsubscribed INTEGER DEFAULT 0);
-             CREATE TABLE unsubscribed_senders (account_id INTEGER NOT NULL, sender_key TEXT NOT NULL, created_at INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (account_id, sender_key));",
+             CREATE TABLE unsubscribed_senders (account_id INTEGER NOT NULL, sender_key TEXT NOT NULL, created_at INTEGER NOT NULL DEFAULT 0, action TEXT NOT NULL DEFAULT 'archive', mark_read INTEGER NOT NULL DEFAULT 1, PRIMARY KEY (account_id, sender_key));",
         ).unwrap();
         conn
     }
@@ -172,11 +247,11 @@ mod tests {
         add(&conn, "old", "News <n@x.com>", "INBOX");
         add(&conn, "other", "Friend <f@y.com>", "INBOX");
         block_sender_of(&conn, 1, "old").unwrap();
-        assert!(pending_ids(&conn, 1).unwrap().is_empty());
+        assert!(pending(&conn, 1).unwrap().is_empty());
 
         add(&conn, "new", "\"News\" <N@X.com>", "INBOX");
         add(&conn, "new-archived", "n@x.com", "ARCHIVE");
-        assert_eq!(pending_ids(&conn, 1).unwrap(), vec!["new".to_string()]);
+        assert_eq!(pending(&conn, 1).unwrap(), vec![("new".to_string(), RuleAction::Archive, true)]);
     }
 
     #[test]
@@ -192,8 +267,36 @@ mod tests {
         unblock(&conn, 1, "N@x.com").unwrap();
         assert!(list_blocked(&conn, 1).unwrap().is_empty());
         add(&conn, "new", "News <n@x.com>", "INBOX");
-        assert!(pending_ids(&conn, 1).unwrap().is_empty());
+        assert!(pending(&conn, 1).unwrap().is_empty());
         let flagged: i64 = conn.query_row("SELECT COUNT(*) FROM emails WHERE unsubscribed=1", [], |r| r.get(0)).unwrap();
         assert_eq!(flagged, 0);
+    }
+
+    #[test]
+    fn rule_action_and_read_flag_are_stored_per_sender() {
+        let conn = setup();
+        add(&conn, "a", "News <n@x.com>", "INBOX");
+        add(&conn, "b", "Promo <p@y.com>", "INBOX");
+        set_sender_rule(&conn, 1, "a", RuleAction::Trash, false).unwrap();
+        set_sender_rule(&conn, 1, "b", RuleAction::Keep, true).unwrap();
+
+        add(&conn, "a2", "n@x.com", "INBOX");
+        add(&conn, "b2", "p@y.com", "INBOX");
+        let mut todo = pending(&conn, 1).unwrap();
+        todo.sort();
+        assert_eq!(
+            todo,
+            vec![
+                ("a2".to_string(), RuleAction::Trash, false),
+                ("b2".to_string(), RuleAction::Keep, true),
+            ]
+        );
+
+        // Changing the rule replaces it rather than adding a second one.
+        set_sender_rule(&conn, 1, "a", RuleAction::Archive, true).unwrap();
+        let listed = list_blocked(&conn, 1).unwrap();
+        assert_eq!(listed.len(), 2);
+        let a = listed.iter().find(|s| s.sender_key == "n@x.com").unwrap();
+        assert_eq!((a.action.as_str(), a.mark_read), ("archive", true));
     }
 }

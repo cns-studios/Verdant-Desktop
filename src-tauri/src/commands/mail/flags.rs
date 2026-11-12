@@ -3,7 +3,7 @@ use std::sync::Arc;
 use serde_json::json;
 use tauri::State;
 
-use crate::state::{ensure_token, get_active_id, DbState};
+use crate::state::{ensure_token, ensure_token_for, get_active_id, DbState};
 
 pub(crate) fn log_imap_outcome(outcome: Result<Result<(), String>, tokio::task::JoinError>) {
     match outcome {
@@ -30,7 +30,7 @@ pub async fn set_email_read_status(
     Ok(())
 }
 
-pub(crate) async fn push_read_status(state: &State<'_, Arc<DbState>>, account_id: i64, email_id: &str, is_read: bool) {
+pub(crate) async fn push_read_status(state: &DbState, account_id: i64, email_id: &str, is_read: bool) {
     let account = {
         let conn = state.conn.lock().await;
         crate::db::get_account_by_id(&conn, account_id).ok().flatten()
@@ -39,7 +39,7 @@ pub(crate) async fn push_read_status(state: &State<'_, Arc<DbState>>, account_id
 
     if acc.provider == "gmail" {
         let gmail_id = email_id.splitn(2, ':').nth(1).unwrap_or(email_id).to_string();
-        if let Ok(token_info) = ensure_token(state).await {
+        if let Ok(token_info) = ensure_token_for(state, account_id).await {
             let client = reqwest::Client::new();
             let url = format!("https://gmail.googleapis.com/gmail/v1/users/me/messages/{}/modify", gmail_id);
             let body = if is_read {

@@ -34,6 +34,7 @@ export const permanentDeleteEmail = (emailId) => invoke("permanent_delete_email"
 export const restoreFromTrash = (emailId) => invoke("restore_from_trash", { emailId });
 export const moveToInbox = (emailId) => invoke("move_to_inbox", { emailId });
 export const unsubscribeFromList = (emailId) => invoke("unsubscribe_from_list", { emailId });
+export const cleanUpSender = (emailId, options) => invoke("clean_up_sender", { emailId, options });
 export const getSubscriptions = () => invoke("get_subscriptions");
 export const getSenderEmails = (senderKey) => invoke("get_sender_emails", { senderKey });
 export const unsubscribeSender = (senderKey) => invoke("unsubscribe_sender", { senderKey });

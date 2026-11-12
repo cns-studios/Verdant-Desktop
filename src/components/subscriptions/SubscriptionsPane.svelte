@@ -5,7 +5,7 @@
   import { mail } from "../../state/mail.svelte.js";
   import { prefs } from "../../state/prefs.svelte.js";
   import { subscriptions as subs } from "../../state/subscriptions.svelte.js";
-  import { showToast } from "../../state/ui.svelte.js";
+  import { showToast, ui } from "../../state/ui.svelte.js";
   import Avatar from "../ui/Avatar.svelte";
   import EmptyState from "../ui/EmptyState.svelte";
   import Icon from "../ui/Icon.svelte";
@@ -32,9 +32,17 @@
     mail.dropCachedViews();
     mail.refreshCounts();
     if (keys.length === 1 && ok === 1) showToast(t("toast.unsubscribed"));
-    else if (keys.length === 1) showToast(t("toast.unsubscribe_failed"), "error", 4000);
+    else if (keys.length === 1) offerCleanup(keys[0]);
     else if (failed) showToast(t("subs.bulk_result", { ok, failed }), "error", 4000);
     else showToast(t("subs.bulk_ok", { ok }));
+  }
+
+  // A sender we couldn't unsubscribe from: let the user deal with their mail instead.
+  function offerCleanup(key) {
+    const item = subs.items.find((entry) => entry.sender_key === key);
+    const latest = item?.messages[0];
+    if (latest) ui.senderCleanup = { id: latest.id, sender: item.sender };
+    else showToast(t("toast.sender_cleanup_failed"), "error", 4000);
   }
 
   async function openMessage(message) {

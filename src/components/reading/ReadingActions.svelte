@@ -28,6 +28,10 @@
     !!unsubscribeTarget?.list_unsubscribe?.trim() && !isDraft && !isSent && !isTrash,
   );
 
+  const canStopSender = $derived(
+    !canUnsubscribe && !!unsubscribeTarget?.sender && !isDraft && !isSent && !isTrash,
+  );
+
   const move = $derived.by(() => {
     if (isTrash) return { icon: "rotate", label: "reading.restore", run: () => mail.restore([row]) };
     if (isArchive) return { icon: "inbox", label: "reading.move_to_inbox", run: () => mail.moveToInbox([row]) };
@@ -43,6 +47,9 @@
       { icon: "mail", label: "reading.mark_unread_action", run: () => mail.markRead([row], false) },
       { icon: "star", label: "reading.toggle_star", run: () => mail.toggleStar([row]) },
     );
+    if (canStopSender) {
+      entries.push({ icon: "x", label: "reading.stop_sender", run: () => (ui.senderCleanup = unsubscribeTarget) });
+    }
     if (isDraft) {
       entries.push(
         { icon: "pencil", label: "reading.edit_draft", run: () => compose.openDraft(email) },

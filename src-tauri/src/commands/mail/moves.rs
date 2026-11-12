@@ -86,6 +86,11 @@ pub(crate) async fn archive_email_for(state: &DbState, account_id: i64, email_id
 #[tauri::command]
 pub async fn trash_email(state: State<'_, Arc<DbState>>, email_id: String) -> Result<(), String> {
     let account_id = get_active_id(&state).await;
+    trash_email_for(&state, account_id, &email_id).await
+}
+
+pub(crate) async fn trash_email_for(state: &DbState, account_id: i64, email_id: &str) -> Result<(), String> {
+    let email_id = email_id.to_string();
 
     let account = {
         let conn = state.conn.lock().await;
@@ -95,7 +100,7 @@ pub async fn trash_email(state: State<'_, Arc<DbState>>, email_id: String) -> Re
     if let Some(ref acc) = account {
         if acc.provider == "gmail" {
             let gmail_id = email_id.splitn(2, ':').nth(1).unwrap_or(&email_id).to_string();
-            let token = ensure_token(&state).await.map_err(|e| {
+            let token = ensure_token_for(state, account_id).await.map_err(|e| {
                 e
             })?.access_token;
             let client = reqwest::Client::new();
