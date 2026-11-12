@@ -9,7 +9,7 @@ use std::path::PathBuf;
 
 use serde_json::Value;
 
-use install::{downloads_dir, install_update_sync};
+use install::{downloads_dir, install_update_sync, spawn_relaunch};
 use release::{fetch_release_for_channel, normalize_version, parse_update_channel, select_best_asset, version_is_newer, UpdateChannel};
 
 pub use changelog::*;
@@ -130,7 +130,10 @@ pub async fn download_latest_update(channel: Option<String>) -> Result<UpdateDow
 pub async fn install_and_relaunch(file_path: String) -> Result<(), String> {
     let name = std::path::Path::new(&file_path)
         .file_name().and_then(|n| n.to_str()).unwrap_or("").to_ascii_lowercase();
-    install_update_sync(&file_path, &name)
+    install_update_sync(&file_path, &name)?;
+    // Best effort: the update is installed, so a failed relaunch must not report failure.
+    if let Err(e) = spawn_relaunch() { eprintln!("{e}"); }
+    Ok(())
 }
 
 pub async fn handle_cli_update() {
@@ -147,7 +150,8 @@ pub async fn handle_cli_update() {
             match download_latest_update(Some(channel_str)).await {
                 Ok(result) => {
                     println!("Download complete. Installing...");
-                    if let Err(e) = install_and_relaunch(result.file_path).await {
+                    let name = result.file_name.to_ascii_lowercase();
+                    if let Err(e) = install_update_sync(&result.file_path, &name) {
                         eprintln!("Error during installation: {}", e);
                     } else {
                         println!("Installation successful.");
