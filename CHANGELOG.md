@@ -1,4 +1,11 @@
 # Changelog
+
+## 2.3.1
+- New options if unsubscribing a sender fails, so you could block or archive them instead
+- Improved updating capabilities & improved stability
+- Improved reliability of the unsubscribing feature
+- platform & performance tweaks
+
 ## 2.3.0
 - Verdant got an updated look! Click around to discover it
 - More and custom accent colors for Verdant
