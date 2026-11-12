@@ -219,6 +219,8 @@ pub fn run() {
             commands::subscriptions::get_subscriptions,
             commands::subscriptions::get_sender_emails,
             commands::subscriptions::unsubscribe_sender,
+            commands::subscriptions::get_blocked_senders,
+            commands::subscriptions::unblock_sender,
 
             commands::window::get_startup_flags,
             commands::window::hide_main_window,

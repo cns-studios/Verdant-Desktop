@@ -37,6 +37,8 @@ export const unsubscribeFromList = (emailId) => invoke("unsubscribe_from_list", 
 export const getSubscriptions = () => invoke("get_subscriptions");
 export const getSenderEmails = (senderKey) => invoke("get_sender_emails", { senderKey });
 export const unsubscribeSender = (senderKey) => invoke("unsubscribe_sender", { senderKey });
+export const getBlockedSenders = () => invoke("get_blocked_senders");
+export const unblockSender = (senderKey) => invoke("unblock_sender", { senderKey });
 
 export const sendEmail = (payload) => invoke("send_email", payload);
 export const saveDraft = (payload) => invoke("save_draft", payload);

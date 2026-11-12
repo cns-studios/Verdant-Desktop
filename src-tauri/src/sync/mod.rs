@@ -3,6 +3,7 @@ mod gmail_loop;
 mod imap_loop;
 mod notify;
 mod store;
+mod unsub_rules;
 
 use std::sync::Arc;
 
@@ -15,6 +16,7 @@ use imap_loop::run_imap_sync_loop;
 
 pub use dispatch::*;
 pub use store::*;
+pub use unsub_rules::*;
 
 pub async fn start_all_sync_tasks(app: tauri::AppHandle, state: Arc<DbState>) {
     let accounts = {

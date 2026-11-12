@@ -10,12 +10,14 @@
   import BehaviorTab from "./BehaviorTab.svelte";
   import ShortcutsTab from "./ShortcutsTab.svelte";
   import SmartInboxTab from "./SmartInboxTab.svelte";
+  import SubscriptionsTab from "./SubscriptionsTab.svelte";
 
   const TABS = [
     { id: "app", icon: "settings-app", label: "settings.tab.app", component: AppTab },
     { id: "behavior", icon: "settings-behavior", label: "settings.tab.behavior", component: BehaviorTab },
     { id: "appearence", icon: "settings-appearance", label: "settings.tab.appearence", component: AppearanceTab },
     { id: "smart", icon: "sparkles", label: "settings.tab.smart", component: SmartInboxTab },
+    { id: "subscriptions", icon: "subscriptions", label: "settings.tab.subscriptions", component: SubscriptionsTab },
     { id: "shortcuts", icon: "settings-shortcuts", label: "settings.tab.shortcuts", component: ShortcutsTab },
     { id: "advanced", icon: "settings-advanced", label: "settings.tab.advanced", component: AdvancedTab },
   ];

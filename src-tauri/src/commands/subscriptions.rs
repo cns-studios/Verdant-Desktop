@@ -51,7 +51,7 @@ pub(crate) fn sender_address(sender: &str) -> String {
     address.trim().trim_matches('"').to_lowercase()
 }
 
-fn sender_name(sender: &str, address: &str) -> String {
+pub(crate) fn sender_name(sender: &str, address: &str) -> String {
     let name = match sender.find('<') {
         Some(open) => &sender[..open],
         None => "",
@@ -190,6 +190,20 @@ pub async fn unsubscribe_sender(
         }
     }
     Err(last_error)
+}
+
+#[tauri::command]
+pub async fn get_blocked_senders(state: State<'_, Arc<DbState>>) -> Result<Vec<crate::sync::BlockedSender>, String> {
+    let account_id = get_active_id(&state).await;
+    let conn = state.conn.lock().await;
+    crate::sync::list_blocked(&conn, account_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn unblock_sender(state: State<'_, Arc<DbState>>, sender_key: String) -> Result<(), String> {
+    let account_id = get_active_id(&state).await;
+    let conn = state.conn.lock().await;
+    crate::sync::unblock(&conn, account_id, &sender_key).map_err(|e| e.to_string())
 }
 
 #[cfg(test)]

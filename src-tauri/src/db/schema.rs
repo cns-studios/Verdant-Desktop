@@ -115,12 +115,34 @@ pub fn init_db(conn: &Connection) -> Result<()> {
             sort_order INTEGER NOT NULL DEFAULT 0,
             is_fixed INTEGER NOT NULL DEFAULT 1
         );
+        CREATE TABLE IF NOT EXISTS unsubscribed_senders (
+            account_id INTEGER NOT NULL,
+            sender_key TEXT NOT NULL,
+            created_at INTEGER NOT NULL DEFAULT 0,
+            PRIMARY KEY (account_id, sender_key)
+        );
         CREATE TABLE IF NOT EXISTS inbox_smart_state (
             account_id INTEGER PRIMARY KEY,
             initialized INTEGER NOT NULL DEFAULT 0,
             enabled INTEGER NOT NULL DEFAULT 1
         );
     ")?;
+    // Senders unsubscribed before the auto-archive rule existed.
+    if let Ok(mut stmt) = conn.prepare("SELECT DISTINCT account_id, sender FROM emails WHERE unsubscribed=1") {
+        let rows: Vec<(i64, String)> = stmt
+            .query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?)))
+            .map(|it| it.filter_map(Result::ok).collect())
+            .unwrap_or_default();
+        for (account_id, sender) in rows {
+            let key = crate::commands::subscriptions::sender_address(&sender);
+            if !key.is_empty() {
+                let _ = conn.execute(
+                    "INSERT OR IGNORE INTO unsubscribed_senders (account_id, sender_key) VALUES (?1, ?2)",
+                    params![account_id, key],
+                );
+            }
+        }
+    }
     let _ = conn.execute("ALTER TABLE inbox_categories ADD COLUMN color TEXT NOT NULL DEFAULT '#6c7065'", []);
     let _ = conn.execute("ALTER TABLE inbox_categories ADD COLUMN account_id INTEGER", []);
     let _ = conn.execute("ALTER TABLE inbox_smart_state ADD COLUMN enabled INTEGER NOT NULL DEFAULT 1", []);

@@ -1,5 +1,5 @@
 mod flags;
-mod moves;
+pub(crate) mod moves;
 mod query;
 mod search;
 mod sync;

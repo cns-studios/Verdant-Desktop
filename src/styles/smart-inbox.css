@@ -272,3 +272,6 @@
 @media (prefers-reduced-motion: reduce) {
     .sis-overlay, .sis-dialog, .sis-bar i { transition: none; }
 }
+
+.subs-row { grid-template-columns: 1fr auto 28px; }
+.subs-addr { color: var(--text-muted); margin-left: 6px; font-size: 12px; }

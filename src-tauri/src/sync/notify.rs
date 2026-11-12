@@ -4,6 +4,7 @@ use crate::state::DbState;
 pub(crate) async fn notify_new_mail(app: &tauri::AppHandle, state: &DbState, account: &Account) {
     use tauri::Manager;
     let account_id = account.id;
+    super::unsub_rules::suppress_unsubscribed(state, account_id).await;
     let (show, important_only, language) = match app.try_state::<crate::commands::app_config::AppConfigState>() {
         Some(config) => {
             let config = config.0.lock().await;

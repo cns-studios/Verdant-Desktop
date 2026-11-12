@@ -2,7 +2,7 @@ use std::sync::Arc;
 use tauri::State;
 use serde_json::Value;
 use mailparse::{MailHeaderMap, ParsedMail};
-use crate::state::{DbState, get_active_id, ensure_token};
+use crate::state::{DbState, get_active_id, ensure_token_for};
 
 #[tauri::command]
 pub async fn unsubscribe_from_list(
@@ -53,7 +53,7 @@ pub(crate) async fn unsubscribe_email(
     };
 
     let raw_bytes: Vec<u8> = if provider == "gmail" {
-        let token = ensure_token(state).await.map_err(|e| {
+        let token = ensure_token_for(state, account_id).await.map_err(|e| {
             log::error!("Failed to get Gmail token: {}", e);
             e.to_string()
         })?;
@@ -186,14 +186,15 @@ fn short(body: &str) -> String {
     body.chars().take(200).collect()
 }
 
-/// Many senders only accept the RFC 8058 one-click form (POST with
-/// `List-Unsubscribe=One-Click`) and answer a plain GET with 403/404/405.
-/// We don't store the `List-Unsubscribe-Post` header, so try GET first and
-/// fall back to the one-click POST when the GET is rejected.
+/// RFC 8058 one-click: a POST with `List-Unsubscribe=One-Click` actually
+/// unsubscribes, whereas a GET on the same URL usually just returns a landing
+/// page with 200 and changes nothing. We don't store `List-Unsubscribe-Post`,
+/// so try the POST first and fall back to GET (for plain link-style senders)
+/// when the POST is rejected.
 async fn send_unsubscribe_request(url: &str) -> Result<(), String> {
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(15))
-        .user_agent("Verdant-Desktop/2.2.18")
+        .user_agent("Verdant-Desktop/2.3.1")
         .build()
         .map_err(|e| {
             let msg = format!("Failed to build HTTP client: {}", e);
@@ -201,37 +202,33 @@ async fn send_unsubscribe_request(url: &str) -> Result<(), String> {
             msg
         })?;
 
-    log::info!("Sending unsubscribe GET to: {}", url);
+    log::info!("Sending one-click unsubscribe POST to: {}", url);
+    let post_status = match client
+        .post(url)
+        .header("Content-Type", "application/x-www-form-urlencoded")
+        .body("List-Unsubscribe=One-Click")
+        .send()
+        .await
+    {
+        Ok(resp) if resp.status().is_success() => return Ok(()),
+        Ok(resp) => resp.status().to_string(),
+        Err(e) => format!("error: {}", e),
+    };
+    log::warn!("Unsubscribe POST gave {} for {}; retrying as GET", post_status, url);
+
     let resp = client.get(url).send().await.map_err(|e| {
-        let msg = format!("Unsubscribe request failed for {}: {}", url, e);
+        let msg = format!("Unsubscribe request failed for {} (POST gave {}): {}", url, post_status, e);
         log::error!("{}", msg);
         msg
     })?;
     if resp.status().is_success() {
         return Ok(());
     }
-    let get_status = resp.status();
-    log::warn!("Unsubscribe GET returned {} for {}; retrying as one-click POST", get_status, url);
-
-    let resp = client
-        .post(url)
-        .header("Content-Type", "application/x-www-form-urlencoded")
-        .body("List-Unsubscribe=One-Click")
-        .send()
-        .await
-        .map_err(|e| {
-            let msg = format!("Unsubscribe POST failed for {} (GET gave {}): {}", url, get_status, e);
-            log::error!("{}", msg);
-            msg
-        })?;
-    if resp.status().is_success() {
-        return Ok(());
-    }
     let status = resp.status();
     let body = resp.text().await.unwrap_or_default();
     let msg = format!(
-        "Unsubscribe rejected (GET {}, POST {}) for {}: {}",
-        get_status, status, url, short(&body)
+        "Unsubscribe rejected (POST {}, GET {}) for {}: {}",
+        post_status, status, url, short(&body)
     );
     log::error!("{}", msg);
     Err(msg)
@@ -243,6 +240,9 @@ async fn mark_unsubscribed(state: &DbState, email_id: &str, account_id: i64) {
         "UPDATE emails SET unsubscribed=1 WHERE id=?1 AND account_id=?2",
         rusqlite::params![email_id, account_id],
     );
+    if let Err(e) = crate::sync::block_sender_of(&conn, account_id, email_id) {
+        log::error!("Recording unsubscribed sender failed for {}: {}", email_id, e);
+    }
     log::info!("Successfully unsubscribed email {}", email_id);
 }
 
@@ -338,8 +338,8 @@ mod tests {
     use std::io::{Read, Write};
     use std::net::TcpListener;
 
-    /// Serves `n` requests: GET -> 403, POST -> 200 only with the one-click body.
-    fn one_click_only_server(n: usize) -> (String, std::thread::JoinHandle<Vec<String>>) {
+    /// Serves `n` requests; POST with one-click body -> `post_status`, GET -> 200.
+    fn server(n: usize, post_status: &'static str) -> (String, std::thread::JoinHandle<Vec<String>>) {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let url = format!("http://{}/unsub", listener.local_addr().unwrap());
         let handle = std::thread::spawn(move || {
@@ -349,10 +349,9 @@ mod tests {
                 let mut buf = [0u8; 4096];
                 let len = sock.read(&mut buf).unwrap();
                 let req = String::from_utf8_lossy(&buf[..len]).to_string();
-                let ok = req.starts_with("POST") && req.contains("List-Unsubscribe=One-Click");
                 seen.push(req.lines().next().unwrap_or("").to_string());
-                let (status, body) = if ok { ("200 OK", "ok") } else { ("403 Forbidden", "nope") };
-                let _ = write!(sock, "HTTP/1.1 {}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", status, body.len(), body);
+                let status = if req.starts_with("POST") && req.contains("List-Unsubscribe=One-Click") { post_status } else { "200 OK" };
+                let _ = write!(sock, "HTTP/1.1 {}\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok", status);
             }
             seen
         });
@@ -360,11 +359,20 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn falls_back_to_one_click_post() {
-        let (url, server) = one_click_only_server(2);
-        send_unsubscribe_request(&url).await.expect("POST fallback should succeed");
-        let seen = server.join().unwrap();
-        assert!(seen[0].starts_with("GET"));
-        assert!(seen[1].starts_with("POST"));
+    async fn posts_one_click_first() {
+        let (url, srv) = server(1, "200 OK");
+        send_unsubscribe_request(&url).await.unwrap();
+        let seen = srv.join().unwrap();
+        assert_eq!(seen.len(), 1);
+        assert!(seen[0].starts_with("POST"));
+    }
+
+    #[tokio::test]
+    async fn falls_back_to_get() {
+        let (url, srv) = server(2, "405 Method Not Allowed");
+        send_unsubscribe_request(&url).await.unwrap();
+        let seen = srv.join().unwrap();
+        assert!(seen[0].starts_with("POST"));
+        assert!(seen[1].starts_with("GET"));
     }
 }

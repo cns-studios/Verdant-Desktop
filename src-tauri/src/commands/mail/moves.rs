@@ -5,11 +5,16 @@ use tauri::State;
 
 use super::flags::log_imap_outcome;
 use crate::db::clear_account_emails;
-use crate::state::{ensure_token, get_active_id, DbState};
+use crate::state::{ensure_token, ensure_token_for, get_active_id, DbState};
 
 #[tauri::command]
 pub async fn archive_email(state: State<'_, Arc<DbState>>, email_id: String) -> Result<(), String> {
     let account_id = get_active_id(&state).await;
+    archive_email_for(&state, account_id, &email_id).await
+}
+
+pub(crate) async fn archive_email_for(state: &DbState, account_id: i64, email_id: &str) -> Result<(), String> {
+    let email_id = email_id.to_string();
 
     log::info!("[DEBUG] Archiving email {} (account {})", email_id, account_id);
 
@@ -21,7 +26,7 @@ pub async fn archive_email(state: State<'_, Arc<DbState>>, email_id: String) -> 
 
     if is_gmail {
         let gmail_id = email_id.splitn(2, ':').nth(1).unwrap_or(&email_id).to_string();
-        let token = ensure_token(&state).await.map_err(|e| {
+        let token = ensure_token_for(state, account_id).await.map_err(|e| {
             e
         })?.access_token;
         let client = reqwest::Client::new();
